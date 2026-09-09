@@ -93,7 +93,23 @@ uvicorn app.main:app --reload --port 8000
 
 Kiem tra: `GET /health` -> `{"status": "ok"}`; docs: `http://localhost:8000/docs`.
 
-## 5. Git (RULE.md)
+## 5. Persistence (nen tang ORM)
+
+- `app/infrastructure/orm.py`: `Base` (SQLAlchemy `DeclarativeBase`, chua co
+  model) + `create_session_factory(engine)`.
+- `app/infrastructure/database.py`: tao engine + `check_database`.
+- `ServiceContainer` giu `engine` + `session_factory`; route can session
+  thi `Depends(get_session)` (mo -> yield -> dong, moi request 1 session).
+- Them model: tao entity domain truoc, roi map thanh model duoi
+  `app/infrastructure/persistence/` (tao thu muc khi co model dau tien),
+  Doi cot co san (ALTER) thi create_all khong lo duoc - toi do dung migration.
+- ORM tu tao/cap nhat bang: `build_services()` goi `Base.metadata.create_all(engine)` moi lan boot.
+  Model song o `app/infrastructure/persistence/models/` (map 1-1 tu `schema.sql`,
+  giu nguyen ten bang/cot/enum PG). Them bang = them model + restart api.
+- `schema.sql` + ERD giu lam tai lieu goc, khong nap tay nua.
+- Pytest can Postgres chay: `docker compose up -d db` truoc khi `pytest -q`.
+
+## 6. Git (RULE.md)
 
 Moi nguoi chi code tren worktree + branch cua minh, khong dong vao `main`
 truc tiep, code len `main` chi qua PR review. Cau hinh identity theo branch
@@ -101,4 +117,6 @@ truoc khi commit. Day du 5 worktree BE:
 
 - `BE` <-> `nhatle08052004n`
 - `BE-vule556677`, `BE-lhieu20231`, `BE-xeniellq1`, `BE-thanhson240624`
+
+
 
