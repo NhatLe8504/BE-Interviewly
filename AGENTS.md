@@ -63,7 +63,25 @@ bootstrap.py wires moi concrete object
 6. Test: unit (invariant + service voi fake port), acceptance (status, JSON,
    `404`/`422`), khong commit code khong chay.
 
-## 4. Chay BE (moi worktree lam 1 lan)
+## 4. Chay BE
+
+### Docker (khuyen dung, co san Postgres)
+
+```powershell
+Copy-Item .env.example .env   # sua password neu can, file .env khong commit
+docker compose up -d --build
+docker compose ps
+docker compose logs -f api
+```
+
+- API: `http://localhost:8000` (docs: `/docs`, health: `/health`).
+- Postgres 16: `localhost:5432` (user/pass/db mac dinh `interviewly`,
+  volume `pgdata` giu data). Tat: `docker compose down` (them `-v` de xoa data).
+- Bien moi truong: xem `.env.example` (`POSTGRES_*`, `API_PORT`).
+  Container api doc `DATABASE_URL` tro ve service `db`, cho doi db healthy
+  roi moi start. Bien nay cung la diem cam cho unit persistence sau nay.
+
+### Venv local (moi worktree lam 1 lan)
 
 ```powershell
 cd reference_app
@@ -83,3 +101,4 @@ truoc khi commit. Day du 5 worktree BE:
 
 - `BE` <-> `nhatle08052004n`
 - `BE-vule556677`, `BE-lhieu20231`, `BE-xeniellq1`, `BE-thanhson240624`
+
