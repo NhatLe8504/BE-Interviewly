@@ -12,3 +12,4 @@ class ServiceContainer:
     clock: ClockPort
     settings: Settings
     engine: Any
+    session_factory: Any
