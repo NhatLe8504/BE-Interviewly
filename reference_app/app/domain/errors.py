@@ -11,3 +11,11 @@ class NotFoundError(DomainError):
 
 class DomainValidationError(DomainError):
     pass
+
+
+class AuthError(DomainError):
+    pass
+
+
+class ConflictError(DomainError):
+    pass
