@@ -72,7 +72,16 @@ git push -u origin <branch-name>
 gh pr create --base main --head <branch-name> --title "<title>" --body "<description>"
 ```
 
-9. STOP after creating the PR. Do NOT merge the PR unless explicitly instructed.
+9. After creating the PR, check whether it has merge conflicts:
+
+```bash
+gh pr view <pr-number> --json number,title,mergeable,mergeStateStatus
+gh pr checks <pr-number>
+```
+
+Report the result to the user and ask for a decision. If there are
+conflicts, resolve them inside YOUR branch/worktree first (never in `main`).
+Merge the PR only after the user explicitly approves.
 
 10. After another PR is merged into main, update your branch before starting new work (run inside YOUR worktree, on YOUR branch):
 
