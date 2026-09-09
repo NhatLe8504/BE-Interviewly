@@ -3,6 +3,10 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+API_TITLE = "BE-Interviewly"
+API_VERSION = "0.1.0"
+API_DESCRIPTION = "BE Interview Coach API."
+
 DEFAULT_DATABASE_URL = (
     "postgresql+psycopg://interviewly:interviewly@localhost:5432/interviewly"
 )
