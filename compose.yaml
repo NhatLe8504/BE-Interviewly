@@ -1,0 +1,32 @@
+name: be-interviewly
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-interviewly}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-interviewly}
+      POSTGRES_DB: ${POSTGRES_DB:-interviewly}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-interviewly} -d $${POSTGRES_DB:-interviewly}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ./reference_app
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-interviewly}:${POSTGRES_PASSWORD:-interviewly}@db:5432/${POSTGRES_DB:-interviewly}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
