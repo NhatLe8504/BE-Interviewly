@@ -6,6 +6,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
+from fastapi.middleware.cors import CORSMiddleware
 
 from .application.container import ServiceContainer
 from .bootstrap import build_services
@@ -37,6 +38,13 @@ def create_app(services: ServiceContainer | None = None) -> FastAPI:
         version=API_VERSION,
         description=API_DESCRIPTION,
         lifespan=lifespan,
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
     app.state.services = services or build_services()
 
