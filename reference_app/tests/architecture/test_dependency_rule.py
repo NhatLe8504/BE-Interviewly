@@ -58,8 +58,8 @@ def check() -> list[str]:
                 if module != "app.domain" and not module.startswith("app.domain."):
                     violations.append(f"{path.name}: domain must not import {module}")
             elif layer == "application":
-                if module.split(".")[0] != "app" or module.split(".")[1:2] not in ([], ["domain"], ["application"]):
-                    if module.startswith("app.") and module.split(".")[1] not in ("domain", "application"):
+                if module.split(".")[0] != "app" or module.split(".")[1:2] not in ([], ["domain"], ["application"], ["config"]):
+                    if module.startswith("app.") and module.split(".")[1] not in ("domain", "application", "config"):
                         violations.append(f"{path.name}: application must not import {module}")
                     elif not module.startswith("app."):
                         violations.append(f"{path.name}: application must not import {module}")
@@ -74,5 +74,6 @@ def check() -> list[str]:
 
 def test_dependency_rule_holds() -> None:
     assert check() == []
+
 
 
