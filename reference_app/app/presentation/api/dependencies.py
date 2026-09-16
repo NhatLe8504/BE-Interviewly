@@ -54,3 +54,7 @@ def get_current_user(
         raise AuthError("missing bearer token")
     user_id = container.auth_service.tokens.parse(credentials.credentials)
     return container.auth_service.get_user(session, user_id)
+
+
+def get_storage(container: ServiceContainer = Depends(get_container)) -> Any:
+    return container.storage_service
