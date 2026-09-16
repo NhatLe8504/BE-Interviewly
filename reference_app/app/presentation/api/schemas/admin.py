@@ -62,3 +62,29 @@ class AuditLogPageOut(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class ModerationItemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    log_id: int
+    admin_id: int
+    target_type: str
+    target_id: int | None = None
+    action: str
+    reason: str | None = None
+    created_at: datetime | None = None
+
+
+class ModerationCreateIn(BaseModel):
+    target_type: str = Field(..., pattern="^(question|answer|user|session|comment)$")
+    action: str = Field(..., pattern="^(flag|approve|reject|remove|warn)$")
+    target_id: int | None = None
+    reason: str | None = Field(None, max_length=1000)
+
+
+class ModerationPageOut(BaseModel):
+    items: list[ModerationItemOut]
+    total: int
+    limit: int
+    offset: int

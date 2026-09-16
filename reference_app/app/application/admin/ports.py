@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from ...domain.admin import AuditLogEntry, SystemStats, UserAdminSummary
+from ...domain.admin import (
+    AuditLogEntry,
+    ModerationItem,
+    SystemStats,
+    UserAdminSummary,
+)
 
 
 class AdminRepositoryPort(Protocol):
@@ -69,4 +74,34 @@ class AdminRepositoryPort(Protocol):
         old_value: dict | None = None,
         new_value: dict | None = None,
     ) -> None:
+        ...
+
+    def list_moderation_logs(
+        self,
+        session: Any,
+        *,
+        target_type: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[ModerationItem]:
+        ...
+
+    def count_moderation_logs(
+        self,
+        session: Any,
+        *,
+        target_type: str | None = None,
+    ) -> int:
+        ...
+
+    def add_moderation_log(
+        self,
+        session: Any,
+        *,
+        admin_id: int,
+        target_type: str,
+        action: str,
+        target_id: int | None = None,
+        reason: str | None = None,
+    ) -> ModerationItem:
         ...

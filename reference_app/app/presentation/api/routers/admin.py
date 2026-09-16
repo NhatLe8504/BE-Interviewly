@@ -4,6 +4,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 
+from ....application.admin.commands import CreateModerationCommand
 from ....application.catalog.commands import (
     CreateDomainCommand,
     CreateQuestionCommand,
@@ -16,6 +17,9 @@ from ..dependencies import get_container, get_session, require_admin
 from ..schemas.admin import (
     AuditLogOut,
     AuditLogPageOut,
+    ModerationCreateIn,
+    ModerationItemOut,
+    ModerationPageOut,
     SystemStatsOut,
     UserAdminOut,
     UserListPageOut,
@@ -111,6 +115,46 @@ def list_audit_logs(
         limit=limit,
         offset=offset,
     )
+
+
+@router.get("/moderation", response_model=ModerationPageOut)
+def list_moderation_logs(
+    target_type: str | None = Query(None, pattern="^(question|answer|user|session|comment)$"),
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> ModerationPageOut:
+    items, total = container.admin_service.get_moderation_logs(
+        session, target_type=target_type, limit=limit, offset=offset,
+    )
+    return ModerationPageOut(
+        items=[ModerationItemOut.model_validate(m) for m in items],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.post("/moderation", response_model=ModerationItemOut, status_code=201)
+def create_moderation_action(
+    data: ModerationCreateIn,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> ModerationItemOut:
+    item = container.admin_service.create_moderation_action(
+        session,
+        admin_id,
+        CreateModerationCommand(
+            target_type=data.target_type,
+            action=data.action,
+            target_id=data.target_id,
+            reason=data.reason,
+        ),
+    )
+    return ModerationItemOut.model_validate(item)
 
 
 # --- Catalog Management Endpoints ---

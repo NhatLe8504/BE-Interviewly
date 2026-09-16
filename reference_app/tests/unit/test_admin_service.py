@@ -2,8 +2,14 @@ from __future__ import annotations
 
 import pytest
 
+from app.application.admin.commands import CreateModerationCommand
 from app.application.admin.service import AdminService
-from app.domain.admin import AuditLogEntry, SystemStats, UserAdminSummary
+from app.domain.admin import (
+    AuditLogEntry,
+    ModerationItem,
+    SystemStats,
+    UserAdminSummary,
+)
 from app.domain.errors import DomainValidationError, NotFoundError
 
 
@@ -11,7 +17,9 @@ class FakeAdminRepo:
     def __init__(self) -> None:
         self.users: dict[int, UserAdminSummary] = {}
         self.audits: list[AuditLogEntry] = []
+        self.moderations: list[ModerationItem] = []
         self.next_audit_id = 1
+        self.next_mod_id = 1
 
     def list_users(self, session, *, search=None, role=None, status=None, limit=50, offset=0):
         items = list(self.users.values())
@@ -91,6 +99,29 @@ class FakeAdminRepo:
         self.audits.insert(0, entry)
         self.next_audit_id += 1
 
+    def list_moderation_logs(self, session, *, target_type=None, limit=50, offset=0):
+        items = self.moderations
+        if target_type:
+            items = [m for m in items if m.target_type == target_type]
+        return items[offset:offset + limit]
+
+    def count_moderation_logs(self, session, *, target_type=None):
+        return len(self.list_moderation_logs(session, target_type=target_type, limit=1000, offset=0))
+
+    def add_moderation_log(self, session, *, admin_id, target_type, action, target_id=None, reason=None):
+        item = ModerationItem(
+            log_id=self.next_mod_id,
+            admin_id=admin_id,
+            target_type=target_type,
+            target_id=target_id,
+            action=action,
+            reason=reason,
+            created_at=None,
+        )
+        self.moderations.insert(0, item)
+        self.next_mod_id += 1
+        return item
+
 
 @pytest.fixture
 def admin_env():
@@ -125,7 +156,6 @@ def test_update_user_status_with_audit(admin_env):
     updated = service.update_user_status(None, admin_id, user_id, "suspended")
     assert updated.status == "suspended"
 
-    # Verify audit log was recorded
     assert len(repo.audits) == 1
     log = repo.audits[0]
     assert log.table_name == "users"
@@ -146,3 +176,24 @@ def test_get_system_stats(admin_env):
     assert stats.total_users == 1
     assert stats.total_sessions == 10
     assert stats.total_revenue == 150.0
+
+
+def test_moderation_actions_and_listing(admin_env):
+    service, _, _, admin_id = admin_env
+    item = service.create_moderation_action(
+        None,
+        admin_id,
+        CreateModerationCommand(
+            target_type="question",
+            action="flag",
+            target_id=10,
+            reason="Contains offensive wording",
+        ),
+    )
+    assert item.target_type == "question"
+    assert item.action == "flag"
+    assert item.reason == "Contains offensive wording"
+
+    logs, total = service.get_moderation_logs(None, target_type="question")
+    assert total == 1
+    assert logs[0].log_id == item.log_id

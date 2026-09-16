@@ -4,12 +4,16 @@ from typing import Any
 
 from ...domain.admin import (
     AuditLogEntry,
+    ModerationItem,
     SystemStats,
     UserAdminSummary,
+    validate_moderation_action,
+    validate_target_type,
     validate_user_role,
     validate_user_status,
 )
 from ...domain.errors import NotFoundError
+from .commands import CreateModerationCommand
 from .ports import AdminRepositoryPort
 
 
@@ -94,3 +98,36 @@ class AdminService:
         )
         total = self.repo.count_audit_logs(session, table_name=table_name)
         return items, total
+
+    def get_moderation_logs(
+        self,
+        session: Any,
+        *,
+        target_type: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[ModerationItem], int]:
+        if target_type is not None:
+            validate_target_type(target_type)
+        items = self.repo.list_moderation_logs(
+            session, target_type=target_type, limit=limit, offset=offset,
+        )
+        total = self.repo.count_moderation_logs(session, target_type=target_type)
+        return items, total
+
+    def create_moderation_action(
+        self,
+        session: Any,
+        admin_id: int,
+        cmd: CreateModerationCommand,
+    ) -> ModerationItem:
+        validate_target_type(cmd.target_type)
+        validate_moderation_action(cmd.action)
+        return self.repo.add_moderation_log(
+            session,
+            admin_id=admin_id,
+            target_type=cmd.target_type,
+            action=cmd.action,
+            target_id=cmd.target_id,
+            reason=cmd.reason,
+        )

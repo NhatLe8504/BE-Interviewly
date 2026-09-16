@@ -7,6 +7,8 @@ from .errors import DomainValidationError
 
 VALID_USER_STATUSES = frozenset({"active", "suspended", "deleted"})
 VALID_USER_ROLES = frozenset({"candidate", "admin"})
+VALID_TARGET_TYPES = frozenset({"question", "answer", "user", "session", "comment"})
+VALID_MODERATION_ACTIONS = frozenset({"flag", "approve", "reject", "remove", "warn"})
 
 
 def validate_user_status(status: str) -> str:
@@ -22,6 +24,22 @@ def validate_user_role(role: str) -> str:
     if cleaned not in VALID_USER_ROLES:
         allowed = ", ".join(sorted(VALID_USER_ROLES))
         raise DomainValidationError(f"invalid user role: {role}. Allowed: {allowed}")
+    return cleaned
+
+
+def validate_target_type(target_type: str) -> str:
+    cleaned = target_type.strip().lower()
+    if cleaned not in VALID_TARGET_TYPES:
+        allowed = ", ".join(sorted(VALID_TARGET_TYPES))
+        raise DomainValidationError(f"invalid target_type: {target_type}. Allowed: {allowed}")
+    return cleaned
+
+
+def validate_moderation_action(action: str) -> str:
+    cleaned = action.strip().lower()
+    if cleaned not in VALID_MODERATION_ACTIONS:
+        allowed = ", ".join(sorted(VALID_MODERATION_ACTIONS))
+        raise DomainValidationError(f"invalid moderation action: {action}. Allowed: {allowed}")
     return cleaned
 
 
@@ -58,3 +76,18 @@ class AuditLogEntry:
     old_value: dict | None
     new_value: dict | None
     created_at: datetime | None
+
+
+@dataclass(frozen=True)
+class ModerationItem:
+    log_id: int
+    admin_id: int
+    target_type: str
+    target_id: int | None
+    action: str
+    reason: str | None
+    created_at: datetime | None = None
+
+    def __post_init__(self) -> None:
+        validate_target_type(self.target_type)
+        validate_moderation_action(self.action)

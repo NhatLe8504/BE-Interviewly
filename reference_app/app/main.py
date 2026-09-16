@@ -12,6 +12,7 @@ from .application.container import ServiceContainer
 from .bootstrap import build_services
 from .config import API_DESCRIPTION, API_TITLE, API_VERSION
 from .infrastructure.database import check_database
+from .infrastructure.persistence.seed import seed_default_data
 from .presentation.api.error_handlers import register_error_handlers
 from .presentation.api.routers import admin as admin_router
 from .presentation.api.routers import auth as auth_router
@@ -31,6 +32,12 @@ def export_openapi(app: FastAPI) -> Path:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    container: ServiceContainer = app.state.services
+    if container.auth_service and hasattr(container.auth_service, "hasher"):
+        try:
+            seed_default_data(container.session_factory, container.auth_service.hasher)
+        except Exception:
+            pass
     export_openapi(app)
     yield
 

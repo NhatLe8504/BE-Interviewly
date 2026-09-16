@@ -48,6 +48,7 @@ def test_candidate_forbidden_from_admin_endpoints(client) -> None:
     assert client.get("/api/v1/admin/users", headers=candidate_headers).status_code == 403
     assert client.get("/api/v1/admin/stats", headers=candidate_headers).status_code == 403
     assert client.get("/api/v1/admin/audit-logs", headers=candidate_headers).status_code == 403
+    assert client.get("/api/v1/admin/moderation", headers=candidate_headers).status_code == 403
     assert client.post("/api/v1/admin/domains", json={"domain_name": "Forbidden"}, headers=candidate_headers).status_code == 403
 
 
@@ -91,3 +92,33 @@ def test_admin_user_management_and_stats(client) -> None:
     assert audit_res.status_code == 200
     audits = audit_res.json()["items"]
     assert any(a["table_name"] == "users" and a["record_id"] == cand_id for a in audits)
+
+
+def test_admin_moderation_flow(client) -> None:
+    _, candidate_headers = create_candidate_and_token(client)
+    _, admin_headers = create_admin_and_token(client)
+
+    # 1. Candidate cannot create or view moderation logs
+    assert client.get("/api/v1/admin/moderation", headers=candidate_headers).status_code == 403
+    assert client.post("/api/v1/admin/moderation", json={"target_type": "question", "action": "flag"}, headers=candidate_headers).status_code == 403
+
+    # 2. Admin creates a moderation action
+    create_res = client.post(
+        "/api/v1/admin/moderation",
+        json={
+            "target_type": "question",
+            "action": "flag",
+            "target_id": 1,
+            "reason": "Needs review for guidelines violation",
+        },
+        headers=admin_headers,
+    )
+    assert create_res.status_code == 201, create_res.text
+    mod_id = create_res.json()["log_id"]
+
+    # 3. Admin lists moderation logs
+    list_res = client.get("/api/v1/admin/moderation?target_type=question", headers=admin_headers)
+    assert list_res.status_code == 200
+    body = list_res.json()
+    assert body["total"] >= 1
+    assert any(m["log_id"] == mod_id for m in body["items"])
