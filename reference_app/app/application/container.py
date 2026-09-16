@@ -21,3 +21,4 @@ class ServiceContainer:
     payment_service: Any = None
     audit_service: Any = None
     pdf_report_service: Any = None
+    analytics_service: Any = None

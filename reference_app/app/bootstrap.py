@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlalchemy import func, select
 
+from .application.analytics.service import AnalyticsService
 from .application.audit.service import AuditLogService
 from .application.auth.service import AuthService
 from .application.billing.service import PaymentService, SubscriptionService
@@ -26,6 +27,9 @@ from .infrastructure.otp import MemoryOtpStore
 from .infrastructure.payment.stripe_adapter import StripeAdapter
 from .infrastructure.payment.vnpay_adapter import VNPayAdapter
 from .infrastructure.persistence import models as _models
+from .infrastructure.persistence.analytics_repository import (
+    SqlAlchemyAnalyticsRepository,
+)
 from .infrastructure.persistence.audit_repository import SqlAlchemyAuditRepository
 from .infrastructure.persistence.billing_repository import SqlAlchemyBillingRepository
 from .infrastructure.persistence.evaluation_repository import SqlAlchemyEvaluationRepository
@@ -104,6 +108,11 @@ def build_services(
         ),
     )
 
+    # Analytics
+    analytics_service = AnalyticsService(
+        repo=SqlAlchemyAnalyticsRepository(),
+    )
+
     # AI Engine
     llm_adapter = OpenAILLMAdapter(
         api_key=settings.openai_api_key,
@@ -178,4 +187,5 @@ def build_services(
         payment_service=payment_service,
         audit_service=audit_service,
         pdf_report_service=pdf_report_service,
+        analytics_service=analytics_service,
     )
