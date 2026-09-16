@@ -17,5 +17,9 @@ class AuthError(DomainError):
     pass
 
 
+class ForbiddenError(DomainError):
+    pass
+
+
 class ConflictError(DomainError):
     pass

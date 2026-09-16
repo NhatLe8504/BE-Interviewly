@@ -6,14 +6,17 @@ from typing import Any
 
 from sqlalchemy import func, select
 
+from .application.admin.service import AdminService
 from .application.analytics.service import AnalyticsService
 from .application.audit.service import AuditLogService
 from .application.auth.service import AuthService
 from .application.billing.service import PaymentService, SubscriptionService
+from .application.catalog.service import CatalogService
 from .application.common import ClockPort
 from .application.container import ServiceContainer
 from .application.evaluation.service import EvaluationService
 from .application.interview.service import InterviewService
+from .application.profile.service import ProfileService
 from .application.report.service import PdfReportService
 from .application.speech.service import SpeechQualityService
 from .config import Settings
@@ -27,14 +30,23 @@ from .infrastructure.otp import MemoryOtpStore
 from .infrastructure.payment.stripe_adapter import StripeAdapter
 from .infrastructure.payment.vnpay_adapter import VNPayAdapter
 from .infrastructure.persistence import models as _models
+from .infrastructure.persistence.admin_repository import (
+    SqlAlchemyAdminRepository,
+)
 from .infrastructure.persistence.analytics_repository import (
     SqlAlchemyAnalyticsRepository,
 )
 from .infrastructure.persistence.audit_repository import SqlAlchemyAuditRepository
 from .infrastructure.persistence.billing_repository import SqlAlchemyBillingRepository
+from .infrastructure.persistence.catalog_repository import (
+    SqlAlchemyCatalogRepository,
+)
 from .infrastructure.persistence.evaluation_repository import SqlAlchemyEvaluationRepository
 from .infrastructure.persistence.models.billing import SubscriptionPlan as OrmSubscriptionPlan
 from .infrastructure.persistence.models.enums import BillingCycle
+from .infrastructure.persistence.profile_repository import (
+    SqlAlchemyProfileRepository,
+)
 from .infrastructure.persistence.session_report_repository import SqlAlchemySessionReportRepository
 from .infrastructure.persistence.session_repository import SqlAlchemySessionRepository
 from .infrastructure.persistence.user_repository import SqlAlchemyUserRepository
@@ -87,11 +99,12 @@ def build_services(
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
     _seed_subscription_plans(session_factory)
+    hasher = Pbkdf2PasswordHasher()
 
     # Auth
     auth_service = AuthService(
         users=SqlAlchemyUserRepository(),
-        hasher=Pbkdf2PasswordHasher(),
+        hasher=hasher,
         tokens=JwtTokenService(
             secret=settings.jwt_secret,
             expires_minutes=settings.jwt_expires_minutes,
@@ -106,6 +119,17 @@ def build_services(
         google_verifier=GoogleOAuthAdapter(
             client_id=settings.google_client_id,
         ),
+    )
+
+    profile_service = ProfileService(
+        repo=SqlAlchemyProfileRepository(),
+        hasher=hasher,
+    )
+    catalog_service = CatalogService(
+        repo=SqlAlchemyCatalogRepository(),
+    )
+    admin_service = AdminService(
+        repo=SqlAlchemyAdminRepository(),
     )
 
     # Analytics
@@ -180,6 +204,9 @@ def build_services(
         engine=engine,
         session_factory=session_factory,
         auth_service=auth_service,
+        profile_service=profile_service,
+        catalog_service=catalog_service,
+        admin_service=admin_service,
         interview_service=interview_service,
         evaluation_service=evaluation_service,
         speech_service=speech_service,

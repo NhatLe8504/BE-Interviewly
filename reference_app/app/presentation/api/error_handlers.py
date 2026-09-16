@@ -7,6 +7,7 @@ from ...domain.errors import (
     AuthError,
     ConflictError,
     DomainValidationError,
+    ForbiddenError,
     NotFoundError,
 )
 
@@ -23,6 +24,10 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(AuthError)
     async def auth_failed(request: Request, exc: AuthError):
         return JSONResponse(status_code=401, content={"detail": str(exc)})
+
+    @app.exception_handler(ForbiddenError)
+    async def forbidden(request: Request, exc: ForbiddenError):
+        return JSONResponse(status_code=403, content={"detail": str(exc)})
 
     @app.exception_handler(ConflictError)
     async def conflict(request: Request, exc: ConflictError):
