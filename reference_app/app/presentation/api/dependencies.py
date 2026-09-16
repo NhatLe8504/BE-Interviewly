@@ -3,9 +3,13 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any
 
-from fastapi import Request
+from fastapi import Depends, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from ...application.container import ServiceContainer
+from ...domain.errors import AuthError
+
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def get_container(request: Request) -> ServiceContainer:
@@ -19,3 +23,14 @@ def get_session(request: Request) -> Iterator[Any]:
         yield session
     finally:
         session.close()
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> Any:
+    if credentials is None or not credentials.credentials:
+        raise AuthError("missing bearer token")
+    user_id = container.auth_service.tokens.parse(credentials.credentials)
+    return container.auth_service.get_user(session, user_id)
