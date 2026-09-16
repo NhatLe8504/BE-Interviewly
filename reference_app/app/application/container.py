@@ -14,3 +14,7 @@ class ServiceContainer:
     engine: Any
     session_factory: Any
     auth_service: Any = None
+    subscription_service: Any = None
+    payment_service: Any = None
+    audit_service: Any = None
+    pdf_report_service: Any = None
