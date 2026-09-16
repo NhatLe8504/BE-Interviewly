@@ -1,4 +1,5 @@
 /RULE.md
 .env
 reference_app/reports/
+*.docx
 /TASK.md
