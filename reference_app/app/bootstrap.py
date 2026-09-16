@@ -27,8 +27,7 @@ from .infrastructure.llm.openai_adapter import OpenAILLMAdapter
 from .infrastructure.oauth import GoogleOAuthAdapter
 from .infrastructure.orm import Base, create_session_factory
 from .infrastructure.otp import MemoryOtpStore
-from .infrastructure.payment.stripe_adapter import StripeAdapter
-from .infrastructure.payment.vnpay_adapter import VNPayAdapter
+from .infrastructure.payment.xgate_adapter import XGateAdapter
 from .infrastructure.persistence import models as _models
 from .infrastructure.persistence.admin_repository import (
     SqlAlchemyAdminRepository,
@@ -171,22 +170,20 @@ def build_services(
         clock=effective_clock,
     )
 
-    vnpay = VNPayAdapter(
-        tmn_code=settings.vnpay_tmn_code,
-        hash_secret=settings.vnpay_hash_secret,
-        payment_url=settings.vnpay_payment_url,
-        return_url=settings.vnpay_return_url,
-    )
-    stripe = StripeAdapter(
-        api_key=settings.stripe_api_key,
-        webhook_secret=settings.stripe_webhook_secret,
+    xgate = XGateAdapter(
+        api_key=settings.xgate_api_key,
+        api_url=settings.xgate_api_url,
+        receiver_bank=settings.xgate_receiver_bank,
+        receiver_account=settings.xgate_receiver_account,
+        receiver_name=settings.xgate_receiver_name,
     )
     payment_service = PaymentService(
         subscription_repo=billing_repo,
         transaction_repo=billing_repo,
-        gateways={"vnpay": vnpay, "stripe": stripe},
+        xgate_gateway=xgate,
         clock=effective_clock,
         audit_service=audit_service,
+        gateways={"xgate": xgate},
     )
 
     # Report

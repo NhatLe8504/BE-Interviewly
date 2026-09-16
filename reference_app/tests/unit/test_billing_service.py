@@ -5,9 +5,8 @@ from decimal import Decimal
 from typing import Any
 import pytest
 
-from app.application.billing.commands import CheckQuotaCommand, CreateCheckoutCommand
+from app.application.billing.commands import CheckQuotaCommand, CreateCheckoutCommand, VerifyPaymentCommand
 from app.application.billing.ports import (
-    PaymentGatewayPort,
     StoredPaymentTransaction,
     StoredSubscriptionPlan,
     StoredUserSubscription,
@@ -72,7 +71,7 @@ class FakeSubscriptionRepo:
             plan_id=kwargs.get("plan_id", sub.plan_id),
             status=kwargs.get("status", sub.status),
             auto_renew=sub.auto_renew,
-            start_date=sub.start_date,
+            start_date=kwargs.get("start_date", sub.start_date),
             end_date=kwargs.get("end_date", sub.end_date),
             plan=sub.plan,
         )
@@ -129,18 +128,27 @@ class FakeTransactionRepo:
         return list(self.transactions.values())[:limit]
 
 
-class FakeGateway:
-    def __init__(self, valid: bool = True, return_code: str = "00") -> None:
-        self.valid = valid
-        self.return_code = return_code
+class FakeXGateGateway:
+    def __init__(self, should_verify: bool = True) -> None:
+        self.should_verify = should_verify
 
-    def generate_payment_url(self, **kwargs) -> str:
-        return f"https://vnpay.test/pay?ref={kwargs['transaction_ref']}"
+    def generate_payment_info(self, *, transaction_ref: str, amount: Decimal, order_info: str = ""):
+        return {
+            "transaction_ref": transaction_ref,
+            "transfer_content": transaction_ref,
+            "amount": amount,
+            "currency": "VND",
+            "bank_name": "bidv",
+            "account_number": "9876543210",
+            "account_name": "INTERVIEW COACH",
+            "qr_code_url": f"https://img.vietqr.io/image/bidv-9876543210.png?amount={amount}&addInfo={transaction_ref}",
+            "payment_url": f"https://img.vietqr.io/image/bidv-9876543210.png?amount={amount}&addInfo={transaction_ref}",
+        }
 
-    def verify_response(self, params: dict[str, Any]):
-        txn_ref = params.get("vnp_TxnRef", "")
-        amount = Decimal(str(params.get("vnp_Amount", "99000")))
-        return self.valid, txn_ref, self.return_code, amount
+    def verify_transaction(self, *, transaction_ref: str, expected_amount: Decimal):
+        if self.should_verify:
+            return True, "xgate_tx_123", expected_amount
+        return False, None, None
 
 
 class FakeAuditService:
@@ -156,12 +164,12 @@ def setup_services():
     clock = FakeClock(datetime(2026, 9, 16, 12, 0, tzinfo=timezone.utc))
     sub_repo = FakeSubscriptionRepo()
     tx_repo = FakeTransactionRepo()
-    gateway = FakeGateway()
+    gateway = FakeXGateGateway(should_verify=True)
     audit = FakeAuditService()
     payment_svc = PaymentService(
         subscription_repo=sub_repo,
         transaction_repo=tx_repo,
-        gateways={"vnpay": gateway},
+        xgate_gateway=gateway,
         clock=clock,
         audit_service=audit,
     )
@@ -176,8 +184,7 @@ def test_create_checkout_free_plan(setup_services):
         cmd=CreateCheckoutCommand(user_id=10, plan_id=1),
     )
     assert res.amount == Decimal("0")
-    assert res.payment_url == ""
-    # Should create active subscription
+    # Free plan creates active subscription immediately
     sub = sub_repo.get_active_subscription(None, 10)
     assert sub is not None
     assert sub.status == "active"
@@ -187,10 +194,13 @@ def test_create_checkout_paid_plan(setup_services):
     sub_svc, payment_svc, sub_repo, tx_repo, _, audit = setup_services
     res = payment_svc.create_checkout(
         session=None,
-        cmd=CreateCheckoutCommand(user_id=11, plan_id=2, payment_gateway="vnpay"),
+        cmd=CreateCheckoutCommand(user_id=11, plan_id=2, payment_gateway="xgate"),
     )
     assert res.amount == Decimal("99000")
-    assert "https://vnpay.test/pay?ref=" in res.payment_url
+    assert res.transaction_ref.startswith("IC")
+    assert res.bank_name == "bidv"
+    assert res.account_number == "9876543210"
+    assert "https://img.vietqr.io/image/bidv-9876543210.png" in res.qr_code_url
     assert len(tx_repo.transactions) == 1
     assert len(audit.logs) == 1
 
@@ -204,47 +214,74 @@ def test_create_checkout_inactive_plan_raises(setup_services):
         )
 
 
-def test_process_vnpay_ipn_flow_and_idempotency(setup_services):
+def test_verify_payment_success_and_idempotency(setup_services):
     _, payment_svc, sub_repo, tx_repo, gateway, audit = setup_services
 
     # 1. Create checkout
     res = payment_svc.create_checkout(
         session=None,
-        cmd=CreateCheckoutCommand(user_id=20, plan_id=2, payment_gateway="vnpay"),
+        cmd=CreateCheckoutCommand(user_id=20, plan_id=2, payment_gateway="xgate"),
     )
     txn_ref = res.transaction_ref
 
-    # 2. Process valid IPN
-    ipn_params = {"vnp_TxnRef": txn_ref, "vnp_Amount": "99000", "vnp_ResponseCode": "00"}
-    result = payment_svc.process_vnpay_ipn(None, ipn_params)
-    assert result == {"RspCode": "00", "Message": "Confirm Success"}
+    # 2. Verify payment
+    result = payment_svc.verify_payment(None, VerifyPaymentCommand(user_id=20, transaction_ref=txn_ref))
+    assert result["status"] == "success"
+    assert "thành công" in result["message"]
 
-    # Check that transaction is success and sub is active
-    tx = tx_repo.get_by_gateway_ref(None, "vnpay", txn_ref)
+    tx = tx_repo.get_by_gateway_ref(None, "xgate", txn_ref)
     assert tx.status == "success"
     sub = sub_repo.get_active_subscription(None, 20)
     assert sub is not None
     assert sub.status == "active"
 
-    # 3. IDEMPOTENCY: send duplicate IPN again
+    # 3. IDEMPOTENCY: verify payment again
     log_count_before = len(audit.logs)
-    dup_result = payment_svc.process_vnpay_ipn(None, ipn_params)
-    assert dup_result == {"RspCode": "00", "Message": "Confirm Success"}
-    # No extra audit log should be added for duplicate processing
+    dup_result = payment_svc.verify_payment(None, VerifyPaymentCommand(user_id=20, transaction_ref=txn_ref))
+    assert dup_result["status"] == "success"
     assert len(audit.logs) == log_count_before
 
 
-def test_process_vnpay_ipn_invalid_checksum(setup_services):
+def test_verify_payment_pending(setup_services):
     _, payment_svc, _, _, gateway, _ = setup_services
-    gateway.valid = False
-    result = payment_svc.process_vnpay_ipn(None, {"vnp_TxnRef": "UNKNOWN"})
-    assert result["RspCode"] == "97"
+    gateway.should_verify = False
+
+    res = payment_svc.create_checkout(
+        session=None,
+        cmd=CreateCheckoutCommand(user_id=25, plan_id=2, payment_gateway="xgate"),
+    )
+    txn_ref = res.transaction_ref
+
+    result = payment_svc.verify_payment(None, VerifyPaymentCommand(user_id=25, transaction_ref=txn_ref))
+    assert result["status"] == "pending"
 
 
-def test_process_vnpay_ipn_not_found(setup_services):
+def test_verify_payment_not_found(setup_services):
     _, payment_svc, _, _, _, _ = setup_services
-    result = payment_svc.process_vnpay_ipn(None, {"vnp_TxnRef": "NOT_EXIST"})
-    assert result["RspCode"] == "01"
+    with pytest.raises(NotFoundError):
+        payment_svc.verify_payment(None, VerifyPaymentCommand(user_id=1, transaction_ref="NON_EXIST"))
+
+
+def test_process_xgate_webhook(setup_services):
+    _, payment_svc, sub_repo, tx_repo, _, _ = setup_services
+    res = payment_svc.create_checkout(
+        session=None,
+        cmd=CreateCheckoutCommand(user_id=30, plan_id=2, payment_gateway="xgate"),
+    )
+    txn_ref = res.transaction_ref
+
+    webhook_payload = {
+        "id": "webhook_event_1",
+        "amount": 99000,
+        "content": f"Chuyen tien {txn_ref}",
+    }
+    result = payment_svc.process_xgate_webhook(None, webhook_payload)
+    assert result["success"] is True
+
+    tx = tx_repo.get_by_gateway_ref(None, "xgate", txn_ref)
+    assert tx.status == "success"
+    sub = sub_repo.get_active_subscription(None, 30)
+    assert sub.status == "active"
 
 
 def test_quota_check(setup_services):
