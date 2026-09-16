@@ -1,0 +1,197 @@
+erDiagram
+    USERS ||--o| CANDIDATE_PROFILES : "has"
+    USERS ||--o{ INTERVIEW_SESSIONS : "creates"
+    USERS ||--o{ USER_SUBSCRIPTIONS : "subscribes"
+    USERS ||--o{ QUESTION_BANK : "created_by (admin)"
+    USERS ||--o{ MODERATION_LOGS : "performs (admin)"
+    USERS ||--o{ AUDIT_LOGS : "triggers"
+
+    JOB_DOMAINS ||--o{ JOB_ROLES : "contains"
+    JOB_DOMAINS ||--o{ QUESTION_BANK : "categorizes"
+    JOB_DOMAINS ||--o{ INTERVIEW_SESSIONS : "categorizes"
+    JOB_DOMAINS ||--o| CANDIDATE_PROFILES : "target_domain"
+
+    JOB_ROLES ||--o{ QUESTION_BANK : "categorizes"
+    JOB_ROLES ||--o{ INTERVIEW_SESSIONS : "categorizes"
+
+    STAR_GUIDANCE_TEMPLATES ||--o{ QUESTION_BANK : "guides"
+
+    QUESTION_BANK ||--o{ INTERVIEW_TURNS : "asked_in"
+
+    INTERVIEW_SESSIONS ||--o{ INTERVIEW_TURNS : "contains"
+    INTERVIEW_SESSIONS ||--o| SESSION_PROGRESS_SUMMARY : "summarized_by"
+    INTERVIEW_SESSIONS ||--o| PDF_REPORTS : "exported_as"
+
+    INTERVIEW_TURNS ||--o| ANSWER_EVALUATIONS : "evaluated_by"
+    INTERVIEW_TURNS ||--o| SPEECH_QUALITY_ANALYSIS : "analyzed_by"
+
+    SUBSCRIPTION_PLANS ||--o{ USER_SUBSCRIPTIONS : "defines"
+    USER_SUBSCRIPTIONS ||--o{ PAYMENT_TRANSACTIONS : "paid_by"
+
+    USERS {
+        bigint user_id PK
+        varchar full_name
+        varchar email UK
+        varchar password_hash
+        varchar phone
+        enum role
+        enum preferred_language
+        enum status
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    CANDIDATE_PROFILES {
+        bigint user_id PK_FK
+        enum experience_level
+        int target_domain_id FK
+        text bio
+        varchar avatar_url
+    }
+
+    JOB_DOMAINS {
+        int domain_id PK
+        varchar domain_name UK
+        text description
+    }
+
+    JOB_ROLES {
+        int role_id PK
+        int domain_id FK
+        varchar role_name
+        text description
+    }
+
+    STAR_GUIDANCE_TEMPLATES {
+        int star_template_id PK
+        varchar title
+        text situation_guide
+        text task_guide
+        text action_guide
+        text result_guide
+        enum language
+    }
+
+    QUESTION_BANK {
+        bigint question_id PK
+        int domain_id FK
+        int role_id FK
+        enum experience_level
+        enum language
+        enum question_type
+        text question_text
+        int star_template_id FK
+        boolean is_active
+        bigint created_by FK
+    }
+
+    INTERVIEW_SESSIONS {
+        bigint session_id PK
+        bigint candidate_id FK
+        int domain_id FK
+        int role_id FK
+        enum experience_level
+        enum language
+        enum mode
+        enum status
+        numeric total_score
+        timestamptz started_at
+        timestamptz completed_at
+    }
+
+    INTERVIEW_TURNS {
+        bigint turn_id PK
+        bigint session_id FK
+        int turn_number
+        enum speaker
+        bigint question_id FK
+        text message_text
+        varchar audio_url
+        text transcribed_text
+    }
+
+    ANSWER_EVALUATIONS {
+        bigint evaluation_id PK
+        bigint turn_id FK_UK
+        numeric clarity_score
+        numeric logic_score
+        numeric example_score
+        numeric overall_score
+        text feedback_text
+    }
+
+    SPEECH_QUALITY_ANALYSIS {
+        bigint analysis_id PK
+        bigint turn_id FK_UK
+        numeric speaking_pace
+        int hesitation_count
+        int filler_word_count
+        text tips_text
+    }
+
+    SESSION_PROGRESS_SUMMARY {
+        bigint summary_id PK
+        bigint session_id FK_UK
+        bigint candidate_id FK
+        numeric avg_clarity_score
+        numeric avg_logic_score
+        numeric avg_example_score
+        numeric avg_overall_score
+        int total_turns
+    }
+
+    PDF_REPORTS {
+        bigint report_id PK
+        bigint session_id FK_UK
+        varchar file_url
+        timestamptz generated_at
+    }
+
+    SUBSCRIPTION_PLANS {
+        int plan_id PK
+        varchar plan_name UK
+        numeric price
+        enum billing_cycle
+        jsonb feature_limits
+        boolean is_active
+    }
+
+    USER_SUBSCRIPTIONS {
+        bigint user_subscription_id PK
+        bigint user_id FK
+        int plan_id FK
+        enum status
+        boolean auto_renew
+        timestamptz start_date
+        timestamptz end_date
+    }
+
+    PAYMENT_TRANSACTIONS {
+        bigint transaction_id PK
+        bigint user_subscription_id FK
+        varchar payment_gateway
+        varchar gateway_transaction_id
+        numeric amount
+        varchar currency
+        enum status
+        timestamptz paid_at
+    }
+
+    MODERATION_LOGS {
+        bigint log_id PK
+        bigint admin_id FK
+        varchar target_type
+        bigint target_id
+        varchar action
+        text reason
+    }
+
+    AUDIT_LOGS {
+        bigint audit_id PK
+        bigint user_id FK
+        varchar table_name
+        bigint record_id
+        enum action
+        jsonb old_value
+        jsonb new_value
+    }
