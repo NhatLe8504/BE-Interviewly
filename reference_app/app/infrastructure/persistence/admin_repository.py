@@ -5,12 +5,17 @@ from typing import Any
 from sqlalchemy import func, or_, select
 
 from ...application.admin.ports import AdminRepositoryPort
-from ...domain.admin import AuditLogEntry, SystemStats, UserAdminSummary
+from ...domain.admin import (
+    AuditLogEntry,
+    ModerationItem,
+    SystemStats,
+    UserAdminSummary,
+)
 from .models.billing import PaymentTransaction
 from .models.catalog import QuestionBank
 from .models.enums import AuditAction, PaymentStatus, SessionStatus, UserRole, UserStatus
 from .models.session import InterviewSession
-from .models.system import AuditLog
+from .models.system import AuditLog, ModerationLog
 from .models.user import User
 
 
@@ -43,6 +48,18 @@ def _to_audit_entry(row: AuditLog) -> AuditLogEntry:
         action=_enum_val(row.action) or "update",
         old_value=row.old_value,
         new_value=row.new_value,
+        created_at=row.created_at,
+    )
+
+
+def _to_moderation_item(row: ModerationLog) -> ModerationItem:
+    return ModerationItem(
+        log_id=row.log_id,
+        admin_id=row.admin_id,
+        target_type=row.target_type,
+        target_id=row.target_id,
+        action=row.action,
+        reason=row.reason,
         created_at=row.created_at,
     )
 
@@ -187,3 +204,51 @@ class SqlAlchemyAdminRepository:
         )
         session.add(log)
         session.commit()
+
+    def list_moderation_logs(
+        self,
+        session: Any,
+        *,
+        target_type: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[ModerationItem]:
+        stmt = select(ModerationLog)
+        if target_type:
+            stmt = stmt.where(ModerationLog.target_type == target_type)
+        stmt = stmt.order_by(ModerationLog.log_id.desc()).offset(offset).limit(limit)
+        rows = session.execute(stmt).scalars().all()
+        return [_to_moderation_item(r) for r in rows]
+
+    def count_moderation_logs(
+        self,
+        session: Any,
+        *,
+        target_type: str | None = None,
+    ) -> int:
+        stmt = select(func.count(ModerationLog.log_id))
+        if target_type:
+            stmt = stmt.where(ModerationLog.target_type == target_type)
+        return session.execute(stmt).scalar() or 0
+
+    def add_moderation_log(
+        self,
+        session: Any,
+        *,
+        admin_id: int,
+        target_type: str,
+        action: str,
+        target_id: int | None = None,
+        reason: str | None = None,
+    ) -> ModerationItem:
+        row = ModerationLog(
+            admin_id=admin_id,
+            target_type=target_type,
+            target_id=target_id,
+            action=action,
+            reason=reason,
+        )
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        return _to_moderation_item(row)
