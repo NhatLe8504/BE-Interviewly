@@ -13,7 +13,7 @@ from ....application.auth.commands import (
 )
 from ....application.auth.ports import AuthUser
 from ....application.container import ServiceContainer
-from ..dependencies import get_container, get_current_user, get_session
+from ..dependencies import bearer_scheme, get_container, get_current_user, get_session
 from ..schemas.auth import (
     GoogleAuthIn,
     LoginIn,
