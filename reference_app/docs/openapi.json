@@ -259,10 +259,599 @@
           }
         ]
       }
+    },
+    "/api/v1/analytics/dashboard": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Get Dashboard",
+        "operationId": "get_dashboard_api_v1_analytics_dashboard_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateDashboardOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/analytics/progress": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Get Progress Trends",
+        "operationId": "get_progress_trends_api_v1_analytics_progress_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 10,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProgressTrendsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/interviews/history": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Get History",
+        "operationId": "get_history_api_v1_interviews_history_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 10,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "domain_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Domain Id"
+            }
+          },
+          {
+            "name": "role_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Role Id"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mode"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryPageOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/history": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Get History",
+        "operationId": "get_history_api_v1_analytics_history_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 10,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "domain_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Domain Id"
+            }
+          },
+          {
+            "name": "role_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Role Id"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mode"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryPageOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/interviews/sessions/{session_id}": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Get Session Detail",
+        "operationId": "get_session_detail_api_v1_interviews_sessions__session_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionDetailOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/sessions/{session_id}": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Get Session Detail",
+        "operationId": "get_session_detail_api_v1_analytics_sessions__session_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionDetailOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/interviews/sessions/{session_id}/result": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Get Session Result",
+        "operationId": "get_session_result_api_v1_interviews_sessions__session_id__result_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResultOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/sessions/{session_id}/result": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Get Session Result",
+        "operationId": "get_session_result_api_v1_analytics_sessions__session_id__result_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResultOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "CandidateDashboardOut": {
+        "properties": {
+          "candidate_id": {
+            "type": "integer",
+            "title": "Candidate Id"
+          },
+          "kpi": {
+            "$ref": "#/components/schemas/CandidateKpiStatsOut"
+          },
+          "skill_radar": {
+            "$ref": "#/components/schemas/SkillRadarOut"
+          },
+          "recent_sessions": {
+            "items": {
+              "$ref": "#/components/schemas/RecentSessionOut"
+            },
+            "type": "array",
+            "title": "Recent Sessions"
+          },
+          "recommendations": {
+            "items": {
+              "$ref": "#/components/schemas/WeakPointRecommendationOut"
+            },
+            "type": "array",
+            "title": "Recommendations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "candidate_id",
+          "kpi",
+          "skill_radar",
+          "recent_sessions",
+          "recommendations"
+        ],
+        "title": "CandidateDashboardOut"
+      },
+      "CandidateKpiStatsOut": {
+        "properties": {
+          "total_interviews": {
+            "type": "integer",
+            "title": "Total Interviews",
+            "description": "Tổng số phiên phỏng vấn đã tham gia"
+          },
+          "completed_interviews": {
+            "type": "integer",
+            "title": "Completed Interviews",
+            "description": "Số phiên hoàn thành"
+          },
+          "avg_score": {
+            "type": "number",
+            "title": "Avg Score",
+            "description": "Điểm trung bình (thang 100)"
+          },
+          "total_practice_minutes": {
+            "type": "integer",
+            "title": "Total Practice Minutes",
+            "description": "Tổng thời gian luyện tập tích lũy (phút)"
+          },
+          "streak_days": {
+            "type": "integer",
+            "title": "Streak Days",
+            "description": "Số ngày luyện tập liên tục (Streak)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_interviews",
+          "completed_interviews",
+          "avg_score",
+          "total_practice_minutes",
+          "streak_days"
+        ],
+        "title": "CandidateKpiStatsOut"
+      },
       "GoogleAuthIn": {
         "properties": {
           "credential": {
@@ -289,6 +878,171 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "HistoryPageOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HistorySessionItemOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "total_pages": {
+            "type": "integer",
+            "title": "Total Pages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size",
+          "total_pages"
+        ],
+        "title": "HistoryPageOut"
+      },
+      "HistorySessionItemOut": {
+        "properties": {
+          "session_id": {
+            "type": "integer",
+            "title": "Session Id"
+          },
+          "candidate_id": {
+            "type": "integer",
+            "title": "Candidate Id"
+          },
+          "domain_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain Id"
+          },
+          "domain_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain Name"
+          },
+          "role_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role Id"
+          },
+          "role_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role Name"
+          },
+          "experience_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Experience Level"
+          },
+          "language": {
+            "type": "string",
+            "title": "Language"
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "total_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Score"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "total_turns": {
+            "type": "integer",
+            "title": "Total Turns"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "candidate_id",
+          "domain_id",
+          "domain_name",
+          "role_id",
+          "role_name",
+          "experience_level",
+          "language",
+          "mode",
+          "status",
+          "total_score",
+          "started_at",
+          "completed_at",
+          "total_turns"
+        ],
+        "title": "HistorySessionItemOut"
       },
       "LoginIn": {
         "properties": {
@@ -324,6 +1078,153 @@
           "message"
         ],
         "title": "MessageOut"
+      },
+      "ProgressTrendPointOut": {
+        "properties": {
+          "session_id": {
+            "type": "integer",
+            "title": "Session Id"
+          },
+          "date": {
+            "type": "string",
+            "title": "Date"
+          },
+          "overall_score": {
+            "type": "number",
+            "title": "Overall Score"
+          },
+          "clarity_score": {
+            "type": "number",
+            "title": "Clarity Score"
+          },
+          "logic_score": {
+            "type": "number",
+            "title": "Logic Score"
+          },
+          "example_score": {
+            "type": "number",
+            "title": "Example Score"
+          },
+          "speaking_pace_wpm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaking Pace Wpm"
+          },
+          "filler_words_count": {
+            "type": "integer",
+            "title": "Filler Words Count"
+          },
+          "star_completion_rate": {
+            "type": "number",
+            "title": "Star Completion Rate"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "date",
+          "overall_score",
+          "clarity_score",
+          "logic_score",
+          "example_score",
+          "speaking_pace_wpm",
+          "filler_words_count",
+          "star_completion_rate"
+        ],
+        "title": "ProgressTrendPointOut"
+      },
+      "ProgressTrendsOut": {
+        "properties": {
+          "candidate_id": {
+            "type": "integer",
+            "title": "Candidate Id"
+          },
+          "trends": {
+            "items": {
+              "$ref": "#/components/schemas/ProgressTrendPointOut"
+            },
+            "type": "array",
+            "title": "Trends"
+          },
+          "avg_wpm": {
+            "type": "number",
+            "title": "Avg Wpm"
+          },
+          "avg_filler_count": {
+            "type": "number",
+            "title": "Avg Filler Count"
+          },
+          "star_mastery_rate": {
+            "type": "number",
+            "title": "Star Mastery Rate"
+          }
+        },
+        "type": "object",
+        "required": [
+          "candidate_id",
+          "trends",
+          "avg_wpm",
+          "avg_filler_count",
+          "star_mastery_rate"
+        ],
+        "title": "ProgressTrendsOut"
+      },
+      "RecentSessionOut": {
+        "properties": {
+          "session_id": {
+            "type": "integer",
+            "title": "Session Id"
+          },
+          "domain_name": {
+            "type": "string",
+            "title": "Domain Name"
+          },
+          "role_name": {
+            "type": "string",
+            "title": "Role Name"
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "domain_name",
+          "role_name",
+          "mode",
+          "score",
+          "status",
+          "started_at"
+        ],
+        "title": "RecentSessionOut"
       },
       "RegisterIn": {
         "properties": {
@@ -387,6 +1288,280 @@
         ],
         "title": "SendOtpIn"
       },
+      "SessionDetailOut": {
+        "properties": {
+          "session_id": {
+            "type": "integer",
+            "title": "Session Id"
+          },
+          "candidate_id": {
+            "type": "integer",
+            "title": "Candidate Id"
+          },
+          "domain_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain Name"
+          },
+          "role_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role Name"
+          },
+          "experience_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Experience Level"
+          },
+          "language": {
+            "type": "string",
+            "title": "Language"
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "total_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Score"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "turns": {
+            "items": {
+              "$ref": "#/components/schemas/TurnDetailOut"
+            },
+            "type": "array",
+            "title": "Turns"
+          },
+          "avg_clarity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Clarity"
+          },
+          "avg_logic": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Logic"
+          },
+          "avg_example": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Example"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "candidate_id",
+          "domain_name",
+          "role_name",
+          "experience_level",
+          "language",
+          "mode",
+          "status",
+          "total_score",
+          "started_at",
+          "completed_at",
+          "turns",
+          "avg_clarity",
+          "avg_logic",
+          "avg_example"
+        ],
+        "title": "SessionDetailOut"
+      },
+      "SessionResultOut": {
+        "properties": {
+          "session_id": {
+            "type": "integer",
+            "title": "Session Id"
+          },
+          "candidate_id": {
+            "type": "integer",
+            "title": "Candidate Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "total_score": {
+            "type": "number",
+            "title": "Total Score"
+          },
+          "readiness_badge": {
+            "type": "string",
+            "title": "Readiness Badge"
+          },
+          "clarity_score": {
+            "type": "number",
+            "title": "Clarity Score"
+          },
+          "structure_score": {
+            "type": "number",
+            "title": "Structure Score"
+          },
+          "evidence_score": {
+            "type": "number",
+            "title": "Evidence Score"
+          },
+          "speaking_pace_wpm": {
+            "type": "number",
+            "title": "Speaking Pace Wpm"
+          },
+          "pace_rating": {
+            "type": "string",
+            "title": "Pace Rating"
+          },
+          "filler_count": {
+            "type": "integer",
+            "title": "Filler Count"
+          },
+          "filler_words": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Filler Words"
+          },
+          "pause_duration": {
+            "type": "number",
+            "title": "Pause Duration"
+          },
+          "star_analysis": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object",
+            "title": "Star Analysis"
+          },
+          "turns": {
+            "items": {
+              "$ref": "#/components/schemas/TurnDetailOut"
+            },
+            "type": "array",
+            "title": "Turns"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "candidate_id",
+          "status",
+          "total_score",
+          "readiness_badge",
+          "clarity_score",
+          "structure_score",
+          "evidence_score",
+          "speaking_pace_wpm",
+          "pace_rating",
+          "filler_count",
+          "filler_words",
+          "pause_duration",
+          "star_analysis",
+          "turns"
+        ],
+        "title": "SessionResultOut"
+      },
+      "SkillRadarOut": {
+        "properties": {
+          "clarity": {
+            "type": "number",
+            "title": "Clarity",
+            "description": "Độ rõ ràng & Mạch lạc (0-100)"
+          },
+          "logic": {
+            "type": "number",
+            "title": "Logic",
+            "description": "Cấu trúc logic (0-100)"
+          },
+          "evidence": {
+            "type": "number",
+            "title": "Evidence",
+            "description": "Dẫn chứng thực tế (0-100)"
+          },
+          "delivery": {
+            "type": "number",
+            "title": "Delivery",
+            "description": "Phong thái & Giọng điệu (0-100)"
+          },
+          "star_method": {
+            "type": "number",
+            "title": "Star Method",
+            "description": "Phương pháp STAR (0-100)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "clarity",
+          "logic",
+          "evidence",
+          "delivery",
+          "star_method"
+        ],
+        "title": "SkillRadarOut"
+      },
       "TokenOut": {
         "properties": {
           "access_token": {
@@ -404,6 +1579,177 @@
           "access_token"
         ],
         "title": "TokenOut"
+      },
+      "TurnDetailOut": {
+        "properties": {
+          "turn_id": {
+            "type": "integer",
+            "title": "Turn Id"
+          },
+          "turn_number": {
+            "type": "integer",
+            "title": "Turn Number"
+          },
+          "speaker": {
+            "type": "string",
+            "title": "Speaker"
+          },
+          "question_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Id"
+          },
+          "message_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Text"
+          },
+          "audio_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Url"
+          },
+          "transcribed_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcribed Text"
+          },
+          "clarity_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clarity Score"
+          },
+          "logic_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logic Score"
+          },
+          "example_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Example Score"
+          },
+          "overall_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Score"
+          },
+          "feedback_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feedback Text"
+          },
+          "speaking_pace": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaking Pace"
+          },
+          "hesitation_count": {
+            "type": "integer",
+            "title": "Hesitation Count"
+          },
+          "filler_word_count": {
+            "type": "integer",
+            "title": "Filler Word Count"
+          },
+          "tips_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tips Text"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "turn_id",
+          "turn_number",
+          "speaker",
+          "question_id",
+          "message_text",
+          "audio_url",
+          "transcribed_text",
+          "clarity_score",
+          "logic_score",
+          "example_score",
+          "overall_score",
+          "feedback_text",
+          "speaking_pace",
+          "hesitation_count",
+          "filler_word_count",
+          "tips_text",
+          "created_at"
+        ],
+        "title": "TurnDetailOut"
       },
       "UserOut": {
         "properties": {
@@ -505,6 +1851,34 @@
           "otp"
         ],
         "title": "VerifyOtpIn"
+      },
+      "WeakPointRecommendationOut": {
+        "properties": {
+          "weak_area": {
+            "type": "string",
+            "title": "Weak Area"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "recommendation": {
+            "type": "string",
+            "title": "Recommendation"
+          },
+          "suggested_question": {
+            "type": "string",
+            "title": "Suggested Question"
+          }
+        },
+        "type": "object",
+        "required": [
+          "weak_area",
+          "score",
+          "recommendation",
+          "suggested_question"
+        ],
+        "title": "WeakPointRecommendationOut"
       }
     },
     "securitySchemes": {
