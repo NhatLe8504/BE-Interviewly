@@ -2358,39 +2358,87 @@
         ]
       }
     },
-    "/api/v1/billing/vnpay-ipn": {
-      "get": {
+    "/api/v1/billing/verify-payment": {
+      "post": {
         "tags": [
           "billing"
         ],
-        "summary": "Vnpay Ipn",
-        "operationId": "vnpay_ipn_api_v1_billing_vnpay_ipn_get",
+        "summary": "Verify Payment",
+        "operationId": "verify_payment_api_v1_billing_verify_payment_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyPaymentIn"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VnpayIpnOut"
+                  "$ref": "#/components/schemas/VerifyPaymentOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/billing/xgate-webhook": {
+      "post": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "Xgate Webhook",
+        "operationId": "xgate_webhook_api_v1_billing_xgate_webhook_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookResponseOut"
                 }
               }
             }
           }
         }
-      },
+      }
+    },
+    "/api/v1/billing/webhook": {
       "post": {
         "tags": [
           "billing"
         ],
-        "summary": "Vnpay Ipn",
-        "operationId": "vnpay_ipn_api_v1_billing_vnpay_ipn_post",
+        "summary": "Xgate Webhook",
+        "operationId": "xgate_webhook_api_v1_billing_webhook_post",
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VnpayIpnOut"
+                  "$ref": "#/components/schemas/WebhookResponseOut"
                 }
               }
             }
@@ -2605,39 +2653,87 @@
         ]
       }
     },
-    "/api/v1/vnpay-ipn": {
-      "get": {
+    "/api/v1/verify-payment": {
+      "post": {
         "tags": [
           "billing"
         ],
-        "summary": "Vnpay Ipn",
-        "operationId": "vnpay_ipn_api_v1_vnpay_ipn_get",
+        "summary": "Verify Payment",
+        "operationId": "verify_payment_api_v1_verify_payment_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyPaymentIn"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VnpayIpnOut"
+                  "$ref": "#/components/schemas/VerifyPaymentOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/xgate-webhook": {
+      "post": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "Xgate Webhook",
+        "operationId": "xgate_webhook_api_v1_xgate_webhook_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookResponseOut"
                 }
               }
             }
           }
         }
-      },
+      }
+    },
+    "/api/v1/webhook": {
       "post": {
         "tags": [
           "billing"
         ],
-        "summary": "Vnpay Ipn",
-        "operationId": "vnpay_ipn_api_v1_vnpay_ipn_post",
+        "summary": "Xgate Webhook",
+        "operationId": "xgate_webhook_api_v1_webhook_post",
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VnpayIpnOut"
+                  "$ref": "#/components/schemas/WebhookResponseOut"
                 }
               }
             }
@@ -3387,7 +3483,7 @@
           "payment_gateway": {
             "type": "string",
             "title": "Payment Gateway",
-            "default": "vnpay"
+            "default": "xgate"
           },
           "return_url": {
             "anyOf": [
@@ -3413,10 +3509,6 @@
             "type": "string",
             "title": "Transaction Ref"
           },
-          "payment_url": {
-            "type": "string",
-            "title": "Payment Url"
-          },
           "amount": {
             "type": "string",
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
@@ -3426,12 +3518,41 @@
             "type": "string",
             "title": "Currency",
             "default": "VND"
+          },
+          "transfer_content": {
+            "type": "string",
+            "title": "Transfer Content",
+            "default": ""
+          },
+          "bank_name": {
+            "type": "string",
+            "title": "Bank Name",
+            "default": ""
+          },
+          "account_number": {
+            "type": "string",
+            "title": "Account Number",
+            "default": ""
+          },
+          "account_name": {
+            "type": "string",
+            "title": "Account Name",
+            "default": ""
+          },
+          "qr_code_url": {
+            "type": "string",
+            "title": "Qr Code Url",
+            "default": ""
+          },
+          "payment_url": {
+            "type": "string",
+            "title": "Payment Url",
+            "default": ""
           }
         },
         "type": "object",
         "required": [
           "transaction_ref",
-          "payment_url",
           "amount"
         ],
         "title": "CheckoutUrlOut"
@@ -6216,23 +6337,51 @@
         ],
         "title": "VerifyOtpIn"
       },
-      "VnpayIpnOut": {
+      "VerifyPaymentIn": {
         "properties": {
-          "RspCode": {
+          "transaction_ref": {
             "type": "string",
-            "title": "Rspcode"
-          },
-          "Message": {
-            "type": "string",
-            "title": "Message"
+            "title": "Transaction Ref"
           }
         },
         "type": "object",
         "required": [
-          "RspCode",
-          "Message"
+          "transaction_ref"
         ],
-        "title": "VnpayIpnOut"
+        "title": "VerifyPaymentIn"
+      },
+      "VerifyPaymentOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "transaction_ref": {
+            "type": "string",
+            "title": "Transaction Ref"
+          },
+          "subscription": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubscriptionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "message",
+          "transaction_ref"
+        ],
+        "title": "VerifyPaymentOut"
       },
       "WeakPointRecommendationOut": {
         "properties": {
@@ -6261,6 +6410,24 @@
           "suggested_question"
         ],
         "title": "WeakPointRecommendationOut"
+      },
+      "WebhookResponseOut": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "message"
+        ],
+        "title": "WebhookResponseOut"
       },
       "app__presentation__api__schemas__analytics__SessionResultOut": {
         "properties": {
