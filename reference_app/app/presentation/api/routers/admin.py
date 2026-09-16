@@ -14,6 +14,7 @@ from ....application.catalog.commands import (
 )
 from ....application.container import ServiceContainer
 from ..dependencies import get_container, get_session, require_admin
+from ..helpers.cache import invalidate_cache
 from ..schemas.admin import (
     AuditLogOut,
     AuditLogPageOut,
@@ -178,6 +179,7 @@ def create_domain(
         action="insert",
         new_value={"domain_name": domain.domain_name},
     )
+    invalidate_cache(container, "catalog:")
     return DomainOut.model_validate(domain)
 
 
@@ -202,6 +204,7 @@ def create_role(
         action="insert",
         new_value={"role_name": role.role_name, "domain_id": role.domain_id},
     )
+    invalidate_cache(container, "catalog:")
     return RoleOut.model_validate(role)
 
 
@@ -254,6 +257,7 @@ def create_question(
         action="insert",
         new_value={"question_text": q.question_text, "domain_id": q.domain_id},
     )
+    invalidate_cache(container, "catalog:")
     return QuestionOut.model_validate(q)
 
 
@@ -287,6 +291,7 @@ def update_question(
         action="update",
         new_value={"question_id": q.question_id},
     )
+    invalidate_cache(container, "catalog:")
     return QuestionOut.model_validate(q)
 
 
@@ -305,3 +310,4 @@ def delete_question(
         record_id=question_id,
         action="delete",
     )
+    invalidate_cache(container, "catalog:")
