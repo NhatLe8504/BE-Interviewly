@@ -2,20 +2,20 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any
 import uuid
+from typing import Any
 
 from ...domain.errors import DomainValidationError, NotFoundError
 from ..common import ClockPort
-from .commands import CheckQuotaCommand, CreateCheckoutCommand
+from .commands import CheckQuotaCommand, CreateCheckoutCommand, VerifyPaymentCommand
 from .ports import (
-    PaymentGatewayPort,
     PaymentInitResult,
     PaymentTransactionRepoPort,
     StoredPaymentTransaction,
     StoredSubscriptionPlan,
     StoredUserSubscription,
     SubscriptionRepoPort,
+    XGateGatewayPort,
 )
 
 
@@ -66,15 +66,17 @@ class PaymentService:
         self,
         subscription_repo: SubscriptionRepoPort,
         transaction_repo: PaymentTransactionRepoPort,
-        gateways: dict[str, PaymentGatewayPort],
+        xgate_gateway: XGateGatewayPort,
         clock: ClockPort,
         audit_service: Any = None,
+        gateways: dict[str, Any] | None = None,
     ) -> None:
         self.subscription_repo = subscription_repo
         self.transaction_repo = transaction_repo
-        self.gateways = gateways
+        self.xgate_gateway = xgate_gateway
         self.clock = clock
         self.audit_service = audit_service
+        self.gateways = gateways or {}
 
     def create_checkout(
         self, session: Any, cmd: CreateCheckoutCommand,
@@ -84,11 +86,6 @@ class PaymentService:
             raise NotFoundError(f"Subscription plan {cmd.plan_id} not found")
         if not plan.is_active:
             raise DomainValidationError("Subscription plan is inactive")
-
-        gateway_key = cmd.payment_gateway.lower()
-        gateway = self.gateways.get(gateway_key)
-        if gateway is None and plan.price > Decimal("0"):
-            raise DomainValidationError(f"Unsupported payment gateway: {cmd.payment_gateway}")
 
         now = self.clock.now()
 
@@ -114,12 +111,17 @@ class PaymentService:
                 )
             return PaymentInitResult(
                 transaction_ref=f"FREE_{sub.user_subscription_id}",
-                payment_url="",
                 amount=Decimal("0"),
                 currency="VND",
+                transfer_content="",
+                bank_name="",
+                account_number="",
+                account_name="",
+                qr_code_url="",
+                payment_url="",
             )
 
-        # For paid plan before payment confirmation, create subscription with status "cancelled" (pending payment)
+        # Create pending subscription record
         sub = self.subscription_repo.create_subscription(
             session,
             user_id=cmd.user_id,
@@ -130,23 +132,24 @@ class PaymentService:
             end_date=now,
         )
 
-        txn_ref = f"TXN{int(now.timestamp())}_{uuid.uuid4().hex[:6]}"
+        # Generate a clean transfer reference for xGate banking: e.g. IC847061
+        random_suffix = int(uuid.uuid4().hex[:6], 16) % 900000 + 100000
+        txn_ref = f"IC{random_suffix}"
+
         tx = self.transaction_repo.create_transaction(
             session,
             user_subscription_id=sub.user_subscription_id,
-            payment_gateway=gateway_key,
+            payment_gateway="xgate",
             gateway_transaction_id=txn_ref,
             amount=plan.price,
             currency="VND",
             status="pending",
         )
 
-        payment_url = gateway.generate_payment_url(
+        info = self.xgate_gateway.generate_payment_info(
             transaction_ref=txn_ref,
             amount=plan.price,
             order_info=f"Interview Coach - {plan.plan_name}",
-            ip_address=cmd.ip_address,
-            return_url=cmd.return_url,
         )
 
         if self.audit_service:
@@ -157,7 +160,7 @@ class PaymentService:
                 user_id=cmd.user_id,
                 record_id=tx.transaction_id,
                 new_value={
-                    "gateway": gateway_key,
+                    "gateway": "xgate",
                     "txn_ref": txn_ref,
                     "amount": str(plan.price),
                     "status": "pending",
@@ -166,77 +169,139 @@ class PaymentService:
 
         return PaymentInitResult(
             transaction_ref=txn_ref,
-            payment_url=payment_url,
             amount=plan.price,
             currency="VND",
+            transfer_content=info["transfer_content"],
+            bank_name=info["bank_name"],
+            account_number=info["account_number"],
+            account_name=info["account_name"],
+            qr_code_url=info["qr_code_url"],
+            payment_url=info["payment_url"],
         )
 
-    def process_vnpay_ipn(
-        self, session: Any, params: dict[str, Any],
-    ) -> dict[str, str]:
-        vnpay = self.gateways.get("vnpay")
-        if not vnpay:
-            return {"RspCode": "99", "Message": "VNPay Gateway Not Configured"}
-
-        is_valid, txn_ref, rsp_code, amount = vnpay.verify_response(params)
-        if not is_valid:
-            return {"RspCode": "97", "Message": "Invalid Checksum"}
-
-        tx = self.transaction_repo.get_by_gateway_ref(session, "vnpay", txn_ref)
+    def verify_payment(
+        self, session: Any, cmd: VerifyPaymentCommand,
+    ) -> dict[str, Any]:
+        tx = self.transaction_repo.get_by_gateway_ref(session, "xgate", cmd.transaction_ref)
         if tx is None:
-            return {"RspCode": "01", "Message": "Order Not Found"}
+            raise NotFoundError(f"Không tìm thấy giao dịch: {cmd.transaction_ref}")
 
-        if tx.amount != amount:
-            return {"RspCode": "04", "Message": "Invalid Amount"}
-
-        # Idempotency: If already success, do not process again
+        # Idempotency check: already verified
         if tx.status == "success":
-            return {"RspCode": "00", "Message": "Confirm Success"}
+            sub = self.subscription_repo.get_active_subscription(session, cmd.user_id)
+            return {
+                "status": "success",
+                "message": "Giao dịch đã được xác nhận thành công trước đó.",
+                "transaction_ref": cmd.transaction_ref,
+                "subscription": sub,
+            }
+
+        # Query xGate REST API for confirmation
+        is_paid, xgate_tx_id, amount = self.xgate_gateway.verify_transaction(
+            transaction_ref=cmd.transaction_ref,
+            expected_amount=tx.amount,
+        )
+
+        if not is_paid:
+            return {
+                "status": "pending",
+                "message": "Chưa nhận được giao dịch chuyển khoản trên xGate. Vui lòng kiểm tra lại sau giây lát.",
+                "transaction_ref": cmd.transaction_ref,
+                "subscription": None,
+            }
 
         now = self.clock.now()
 
-        if rsp_code == "00":
-            # Success
-            self.transaction_repo.update_status(
-                session, tx.transaction_id, status="success", paid_at=now,
+        # Mark transaction success
+        self.transaction_repo.update_status(
+            session, tx.transaction_id, status="success", paid_at=now,
+        )
+
+        # Determine subscription duration based on plan
+        sub_id = tx.user_subscription_id
+        plan = self.subscription_repo.get_plan_by_id(session, sub_id)
+        days = 365 if (plan and plan.billing_cycle == "yearly") else 30
+        end_date = now + timedelta(days=days)
+
+        active_sub = self.subscription_repo.update_subscription(
+            session, sub_id, status="active", start_date=now, end_date=end_date,
+        )
+
+        if self.audit_service:
+            self.audit_service.record(
+                session,
+                table_name="payment_transactions",
+                action="update",
+                record_id=tx.transaction_id,
+                new_value={"status": "success", "paid_at": now.isoformat(), "xgate_id": xgate_tx_id},
             )
-            # Find sub and plan to calculate validity
-            sub_id = tx.user_subscription_id
-            # Duration based on standard 30 days
-            end_date = now + timedelta(days=30)
-            self.subscription_repo.update_subscription(
-                session, sub_id, status="active", start_date=now, end_date=end_date,
+            self.audit_service.record(
+                session,
+                table_name="user_subscriptions",
+                action="update",
+                record_id=sub_id,
+                new_value={"status": "active", "end_date": end_date.isoformat()},
             )
-            if self.audit_service:
-                self.audit_service.record(
-                    session,
-                    table_name="payment_transactions",
-                    action="update",
-                    record_id=tx.transaction_id,
-                    new_value={"status": "success", "paid_at": now.isoformat()},
-                )
-                self.audit_service.record(
-                    session,
-                    table_name="user_subscriptions",
-                    action="update",
-                    record_id=sub_id,
-                    new_value={"status": "active", "end_date": end_date.isoformat()},
-                )
-            return {"RspCode": "00", "Message": "Confirm Success"}
-        else:
-            # Failed
-            self.transaction_repo.update_status(
-                session, tx.transaction_id, status="failed",
+
+        return {
+            "status": "success",
+            "message": "Thanh toán thành công! Gói cước Pro đã được kích hoạt.",
+            "transaction_ref": cmd.transaction_ref,
+            "subscription": active_sub,
+        }
+
+    def process_xgate_webhook(
+        self, session: Any, payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Support for future production webhooks."""
+        content = str(payload.get("content", "")).strip()
+        raw_amount = payload.get("amount", "0")
+        try:
+            amount = Decimal(str(raw_amount))
+        except Exception:
+            amount = Decimal("0")
+
+        # Find matching transaction by transaction_ref inside content
+        import re
+        match = re.search(r"(IC\d+)", content, re.IGNORECASE)
+        if not match:
+            return {"success": False, "message": "No matching IC transfer content found"}
+
+        txn_ref = match.group(1).upper()
+        tx = self.transaction_repo.get_by_gateway_ref(session, "xgate", txn_ref)
+        if tx is None:
+            return {"success": False, "message": f"Transaction {txn_ref} not found"}
+
+        if tx.status == "success":
+            return {"success": True, "message": "Already processed"}
+
+        if amount < tx.amount:
+            return {"success": False, "message": "Amount smaller than order amount"}
+
+        now = self.clock.now()
+        self.transaction_repo.update_status(
+            session, tx.transaction_id, status="success", paid_at=now,
+        )
+
+        sub_id = tx.user_subscription_id
+        plan = self.subscription_repo.get_plan_by_id(session, sub_id)
+        days = 365 if (plan and plan.billing_cycle == "yearly") else 30
+        end_date = now + timedelta(days=days)
+
+        self.subscription_repo.update_subscription(
+            session, sub_id, status="active", start_date=now, end_date=end_date,
+        )
+
+        if self.audit_service:
+            self.audit_service.record(
+                session,
+                table_name="payment_transactions",
+                action="update",
+                record_id=tx.transaction_id,
+                new_value={"status": "success", "paid_at": now.isoformat(), "source": "webhook"},
             )
-            if self.audit_service:
-                self.audit_service.record(
-                    session,
-                    table_name="payment_transactions",
-                    action="update",
-                    record_id=tx.transaction_id,
-                    new_value={"status": "failed", "vnp_code": rsp_code},
-                )
-            return {"RspCode": "00", "Message": "Confirm Success"}
+
+        return {"success": True, "message": "Payment confirmed via webhook"}
 
     def get_payment_history(
         self, session: Any, user_id: int, limit: int = 50,
