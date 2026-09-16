@@ -16,6 +16,7 @@ DEFAULT_GOOGLE_CLIENT_ID = ""
 DEFAULT_GOOGLE_CLIENT_SECRET = ""
 DEFAULT_SENDGRID_FROM_EMAIL = "fuji@mg.fuji.io.vn"
 DEFAULT_SENDGRID_FROM_NAME = "FUJI"
+DEFAULT_REDIS_URL = "redis://localhost:6379/0"
 DEFAULT_VNPAY_TMN_CODE = "INTERVIE"
 DEFAULT_VNPAY_HASH_SECRET = "SANDBOXSECRETKEY1234567890ABCDEF"
 DEFAULT_VNPAY_PAYMENT_URL = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html"
@@ -34,6 +35,11 @@ class Settings:
     sendgrid_from_name: str = DEFAULT_SENDGRID_FROM_NAME
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
+    redis_url: str = DEFAULT_REDIS_URL
+    cloudinary_cloud_name: str = ""
+    cloudinary_api_key: str = ""
+    cloudinary_api_secret: str = ""
+    cloudinary_url: str = ""
     vnpay_tmn_code: str = DEFAULT_VNPAY_TMN_CODE
     vnpay_hash_secret: str = DEFAULT_VNPAY_HASH_SECRET
     vnpay_payment_url: str = DEFAULT_VNPAY_PAYMENT_URL
@@ -67,6 +73,11 @@ class Settings:
             ),
             openai_api_key=os.environ.get("OPENAI_API_KEY", ""),
             openai_model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
+            redis_url=os.environ.get("REDIS_URL", DEFAULT_REDIS_URL),
+            cloudinary_cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME", ""),
+            cloudinary_api_key=os.environ.get("CLOUDINARY_API_KEY", ""),
+            cloudinary_api_secret=os.environ.get("CLOUDINARY_API_SECRET", ""),
+            cloudinary_url=os.environ.get("CLOUDINARY_URL", ""),
             vnpay_tmn_code=os.environ.get(
                 "VNPAY_TMN_CODE", DEFAULT_VNPAY_TMN_CODE,
             ),
