@@ -14,3 +14,4 @@ class ServiceContainer:
     engine: Any
     session_factory: Any
     auth_service: Any = None
+    analytics_service: Any = None

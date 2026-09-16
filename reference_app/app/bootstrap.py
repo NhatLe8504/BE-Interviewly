@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from .application.analytics.service import AnalyticsService
 from .application.auth.service import AuthService
 from .application.common import ClockPort
 from .application.container import ServiceContainer
@@ -11,6 +12,9 @@ from .infrastructure.oauth import GoogleOAuthAdapter
 from .infrastructure.orm import Base, create_session_factory
 from .infrastructure.otp import MemoryOtpStore
 from .infrastructure.persistence import models as _models
+from .infrastructure.persistence.analytics_repository import (
+    SqlAlchemyAnalyticsRepository,
+)
 from .infrastructure.persistence.user_repository import SqlAlchemyUserRepository
 from .infrastructure.security import JwtTokenService, Pbkdf2PasswordHasher
 
@@ -41,10 +45,14 @@ def build_services(
             client_id=settings.google_client_id,
         ),
     )
+    analytics_service = AnalyticsService(
+        repo=SqlAlchemyAnalyticsRepository(),
+    )
     return ServiceContainer(
         clock=effective_clock,
         settings=settings,
         engine=engine,
         session_factory=create_session_factory(engine),
         auth_service=auth_service,
+        analytics_service=analytics_service,
     )
