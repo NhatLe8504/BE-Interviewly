@@ -9,6 +9,7 @@ VALID_EXPERIENCE_LEVELS = frozenset({
     "intern",
     "fresher",
     "junior",
+    "mid",
     "middle",
     "senior",
     "lead",

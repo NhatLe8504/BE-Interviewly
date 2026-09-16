@@ -16,6 +16,14 @@ def _enum_value(val: Any) -> str | None:
     return val.value if hasattr(val, "value") else str(val)
 
 
+def _to_experience_level(val: str | None) -> ExperienceLevel | None:
+    if val is None:
+        return None
+    if val == "middle":
+        return ExperienceLevel.mid
+    return ExperienceLevel(val)
+
+
 class SqlAlchemyProfileRepository:
     def get_profile_by_user_id(self, session: Any, user_id: int) -> UserProfile | None:
         user = session.get(User, user_id)
@@ -77,7 +85,7 @@ class SqlAlchemyProfileRepository:
             if preferred_language is not None:
                 user.preferred_language = Language(preferred_language)
             if experience_level is not None:
-                profile.experience_level = ExperienceLevel(experience_level)
+                profile.experience_level = _to_experience_level(experience_level)
             if target_domain_id is not None:
                 profile.target_domain_id = target_domain_id
             if bio is not None:
@@ -92,7 +100,7 @@ class SqlAlchemyProfileRepository:
             if "preferred_language" in fields_set and preferred_language is not None:
                 user.preferred_language = Language(preferred_language)
             if "experience_level" in fields_set:
-                profile.experience_level = ExperienceLevel(experience_level) if experience_level else None
+                profile.experience_level = _to_experience_level(experience_level)
             if "target_domain_id" in fields_set:
                 profile.target_domain_id = target_domain_id
             if "bio" in fields_set:
