@@ -11,11 +11,15 @@ from .application.auth.service import AuthService
 from .application.billing.service import PaymentService, SubscriptionService
 from .application.common import ClockPort
 from .application.container import ServiceContainer
+from .application.evaluation.service import EvaluationService
+from .application.interview.service import InterviewService
 from .application.report.service import PdfReportService
+from .application.speech.service import SpeechQualityService
 from .config import Settings
 from .infrastructure.clock import SystemClock
 from .infrastructure.database import create_engine_from_url
 from .infrastructure.email import SendGridEmailSender
+from .infrastructure.llm.openai_adapter import OpenAILLMAdapter
 from .infrastructure.oauth import GoogleOAuthAdapter
 from .infrastructure.orm import Base, create_session_factory
 from .infrastructure.otp import MemoryOtpStore
@@ -24,12 +28,15 @@ from .infrastructure.payment.vnpay_adapter import VNPayAdapter
 from .infrastructure.persistence import models as _models
 from .infrastructure.persistence.audit_repository import SqlAlchemyAuditRepository
 from .infrastructure.persistence.billing_repository import SqlAlchemyBillingRepository
+from .infrastructure.persistence.evaluation_repository import SqlAlchemyEvaluationRepository
 from .infrastructure.persistence.models.billing import SubscriptionPlan as OrmSubscriptionPlan
 from .infrastructure.persistence.models.enums import BillingCycle
 from .infrastructure.persistence.session_report_repository import SqlAlchemySessionReportRepository
+from .infrastructure.persistence.session_repository import SqlAlchemySessionRepository
 from .infrastructure.persistence.user_repository import SqlAlchemyUserRepository
 from .infrastructure.report.reportlab_pdf import ReportLabPdfGenerator
 from .infrastructure.security import JwtTokenService, Pbkdf2PasswordHasher
+from .infrastructure.speech.text_analyzer import RegexSpeechTextAnalyzer
 
 
 def _seed_subscription_plans(session_factory: Any) -> None:
@@ -97,6 +104,30 @@ def build_services(
         ),
     )
 
+    # AI Engine
+    llm_adapter = OpenAILLMAdapter(
+        api_key=settings.openai_api_key,
+        model=settings.openai_model,
+    )
+    session_repo = SqlAlchemySessionRepository()
+    eval_repo = SqlAlchemyEvaluationRepository()
+    speech_analyzer = RegexSpeechTextAnalyzer()
+
+    interview_service = InterviewService(
+        sessions=session_repo,
+        turns=session_repo,
+        llm=llm_adapter,
+        clock=effective_clock,
+    )
+    evaluation_service = EvaluationService(
+        evaluations=eval_repo,
+        evaluator=llm_adapter,
+        clock=effective_clock,
+    )
+    speech_service = SpeechQualityService(
+        analyzer=speech_analyzer,
+    )
+
     # Billing & Audit
     audit_repo = SqlAlchemyAuditRepository()
     audit_service = AuditLogService(audit_repo=audit_repo)
@@ -140,6 +171,9 @@ def build_services(
         engine=engine,
         session_factory=session_factory,
         auth_service=auth_service,
+        interview_service=interview_service,
+        evaluation_service=evaluation_service,
+        speech_service=speech_service,
         subscription_service=subscription_service,
         payment_service=payment_service,
         audit_service=audit_service,
