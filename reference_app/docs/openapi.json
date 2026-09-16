@@ -543,10 +543,699 @@
           }
         }
       }
+    },
+    "/api/v1/billing/plans": {
+      "get": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "Get Plans",
+        "operationId": "get_plans_api_v1_billing_plans_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PlanOut"
+                  },
+                  "type": "array",
+                  "title": "Response Get Plans Api V1 Billing Plans Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/billing/checkout": {
+      "post": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "Checkout",
+        "operationId": "checkout_api_v1_billing_checkout_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckoutIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckoutUrlOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/billing/vnpay-ipn": {
+      "get": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "Vnpay Ipn",
+        "operationId": "vnpay_ipn_api_v1_billing_vnpay_ipn_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VnpayIpnOut"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "Vnpay Ipn",
+        "operationId": "vnpay_ipn_api_v1_billing_vnpay_ipn_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VnpayIpnOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/billing/subscriptions/me": {
+      "get": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "Get My Subscription",
+        "operationId": "get_my_subscription_api_v1_billing_subscriptions_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SubscriptionOut"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Get My Subscription Api V1 Billing Subscriptions Me Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/billing/payments/history": {
+      "get": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "Get Payment History",
+        "operationId": "get_payment_history_api_v1_billing_payments_history_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PaymentTransactionOut"
+                  },
+                  "title": "Response Get Payment History Api V1 Billing Payments History Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/billing/quota": {
+      "get": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "Get Quota",
+        "operationId": "get_quota_api_v1_billing_quota_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "feature",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "interview_turns",
+              "title": "Feature"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuotaOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/plans": {
+      "get": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "Get Plans",
+        "operationId": "get_plans_api_v1_plans_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PlanOut"
+                  },
+                  "type": "array",
+                  "title": "Response Get Plans Api V1 Plans Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/checkout": {
+      "post": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "Checkout",
+        "operationId": "checkout_api_v1_checkout_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckoutIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckoutUrlOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/vnpay-ipn": {
+      "get": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "Vnpay Ipn",
+        "operationId": "vnpay_ipn_api_v1_vnpay_ipn_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VnpayIpnOut"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "Vnpay Ipn",
+        "operationId": "vnpay_ipn_api_v1_vnpay_ipn_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VnpayIpnOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/subscriptions/me": {
+      "get": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "Get My Subscription",
+        "operationId": "get_my_subscription_api_v1_subscriptions_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SubscriptionOut"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Get My Subscription Api V1 Subscriptions Me Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/payments/history": {
+      "get": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "Get Payment History",
+        "operationId": "get_payment_history_api_v1_payments_history_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PaymentTransactionOut"
+                  },
+                  "title": "Response Get Payment History Api V1 Payments History Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/quota": {
+      "get": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "Get Quota",
+        "operationId": "get_quota_api_v1_quota_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "feature",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "interview_turns",
+              "title": "Feature"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuotaOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sessions/{id}/pdf/download": {
+      "get": {
+        "tags": [
+          "report"
+        ],
+        "summary": "Download Pdf",
+        "operationId": "download_pdf_api_v1_sessions__id__pdf_download_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sessions/{id}/pdf/preview": {
+      "get": {
+        "tags": [
+          "report"
+        ],
+        "summary": "Preview Pdf",
+        "operationId": "preview_pdf_api_v1_sessions__id__pdf_preview_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sessions/{id}/pdf/meta": {
+      "get": {
+        "tags": [
+          "report"
+        ],
+        "summary": "Get Pdf Meta",
+        "operationId": "get_pdf_meta_api_v1_sessions__id__pdf_meta_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PdfReportMetaOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "CheckoutIn": {
+        "properties": {
+          "plan_id": {
+            "type": "integer",
+            "title": "Plan Id"
+          },
+          "payment_gateway": {
+            "type": "string",
+            "title": "Payment Gateway",
+            "default": "vnpay"
+          },
+          "return_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Return Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "plan_id"
+        ],
+        "title": "CheckoutIn"
+      },
+      "CheckoutUrlOut": {
+        "properties": {
+          "transaction_ref": {
+            "type": "string",
+            "title": "Transaction Ref"
+          },
+          "payment_url": {
+            "type": "string",
+            "title": "Payment Url"
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Amount"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency",
+            "default": "VND"
+          }
+        },
+        "type": "object",
+        "required": [
+          "transaction_ref",
+          "payment_url",
+          "amount"
+        ],
+        "title": "CheckoutUrlOut"
+      },
       "GoogleAuthIn": {
         "properties": {
           "credential": {
@@ -608,6 +1297,176 @@
           "message"
         ],
         "title": "MessageOut"
+      },
+      "PaymentTransactionOut": {
+        "properties": {
+          "transaction_id": {
+            "type": "integer",
+            "title": "Transaction Id"
+          },
+          "user_subscription_id": {
+            "type": "integer",
+            "title": "User Subscription Id"
+          },
+          "payment_gateway": {
+            "type": "string",
+            "title": "Payment Gateway"
+          },
+          "gateway_transaction_id": {
+            "type": "string",
+            "title": "Gateway Transaction Id"
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Amount"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "paid_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paid At"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "transaction_id",
+          "user_subscription_id",
+          "payment_gateway",
+          "gateway_transaction_id",
+          "amount",
+          "currency",
+          "status"
+        ],
+        "title": "PaymentTransactionOut"
+      },
+      "PdfReportMetaOut": {
+        "properties": {
+          "session_id": {
+            "type": "integer",
+            "title": "Session Id"
+          },
+          "file_url": {
+            "type": "string",
+            "title": "File Url"
+          },
+          "generated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "file_url"
+        ],
+        "title": "PdfReportMetaOut"
+      },
+      "PlanOut": {
+        "properties": {
+          "plan_id": {
+            "type": "integer",
+            "title": "Plan Id"
+          },
+          "plan_name": {
+            "type": "string",
+            "title": "Plan Name"
+          },
+          "price": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Price"
+          },
+          "billing_cycle": {
+            "type": "string",
+            "title": "Billing Cycle"
+          },
+          "feature_limits": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Feature Limits"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          }
+        },
+        "type": "object",
+        "required": [
+          "plan_id",
+          "plan_name",
+          "price",
+          "billing_cycle",
+          "is_active"
+        ],
+        "title": "PlanOut"
+      },
+      "QuotaOut": {
+        "properties": {
+          "has_active_subscription": {
+            "type": "boolean",
+            "title": "Has Active Subscription"
+          },
+          "plan_name": {
+            "type": "string",
+            "title": "Plan Name"
+          },
+          "quota_allowed": {
+            "type": "boolean",
+            "title": "Quota Allowed"
+          },
+          "remaining_quota": {
+            "type": "integer",
+            "title": "Remaining Quota"
+          },
+          "feature": {
+            "type": "string",
+            "title": "Feature"
+          }
+        },
+        "type": "object",
+        "required": [
+          "has_active_subscription",
+          "plan_name",
+          "quota_allowed",
+          "remaining_quota",
+          "feature"
+        ],
+        "title": "QuotaOut"
       },
       "RegisterIn": {
         "properties": {
@@ -978,6 +1837,67 @@
         "type": "object",
         "title": "StartSessionIn"
       },
+      "SubscriptionOut": {
+        "properties": {
+          "user_subscription_id": {
+            "type": "integer",
+            "title": "User Subscription Id"
+          },
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "plan_id": {
+            "type": "integer",
+            "title": "Plan Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "auto_renew": {
+            "type": "boolean",
+            "title": "Auto Renew"
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start Date"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_subscription_id",
+          "user_id",
+          "plan_id",
+          "status",
+          "auto_renew",
+          "start_date"
+        ],
+        "title": "SubscriptionOut"
+      },
       "TokenOut": {
         "properties": {
           "access_token": {
@@ -1209,6 +2129,24 @@
           "otp"
         ],
         "title": "VerifyOtpIn"
+      },
+      "VnpayIpnOut": {
+        "properties": {
+          "RspCode": {
+            "type": "string",
+            "title": "Rspcode"
+          },
+          "Message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "RspCode",
+          "Message"
+        ],
+        "title": "VnpayIpnOut"
       }
     },
     "securitySchemes": {
