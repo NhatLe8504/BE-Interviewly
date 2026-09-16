@@ -22,6 +22,11 @@ services:
       context: ./reference_app
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-interviewly}:${POSTGRES_PASSWORD:-interviewly}@db:5432/${POSTGRES_DB:-interviewly}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
+      SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL:-fuji@mg.fuji.io.vn}
+      SENDGRID_FROM_NAME: ${SENDGRID_FROM_NAME:-FUJI}
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:

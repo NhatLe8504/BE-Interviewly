@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from ...domain.identity import OtpRecord
+
 
 @dataclass(frozen=True)
 class StoredUser:
@@ -64,4 +66,35 @@ class TokenIssuerPort(Protocol):
         ...
 
     def parse(self, token: str) -> int:
+        ...
+
+
+@dataclass(frozen=True)
+class GoogleProfile:
+    email: str
+    full_name: str
+    google_id: str
+    picture_url: str | None = None
+
+
+class EmailSenderPort(Protocol):
+    def send_otp_email(
+        self, to_email: str, otp_code: str, purpose: str = "verify_email",
+    ) -> None:
+        ...
+
+
+class GoogleTokenVerifierPort(Protocol):
+    def verify(self, credential: str) -> GoogleProfile:
+        ...
+
+
+class OtpStorePort(Protocol):
+    def save(self, record: OtpRecord) -> None:
+        ...
+
+    def find(self, email: str, purpose: str = "verify_email") -> OtpRecord | None:
+        ...
+
+    def delete(self, email: str, purpose: str = "verify_email") -> None:
         ...

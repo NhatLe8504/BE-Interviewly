@@ -75,3 +75,32 @@ def test_openapi_exposes_auth_paths(client) -> None:
     assert "/api/v1/auth/register" in spec["paths"]
     assert "/api/v1/auth/login" in spec["paths"]
     assert "/api/v1/auth/me" in spec["paths"]
+
+
+def test_send_and_verify_otp_api(client) -> None:
+    email = unique_email("otp")
+    resp = client.post("/api/v1/auth/send-otp", json={"email": email})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["message"] == "OTP sent successfully"
+
+    # Verify wrong OTP
+    bad = client.post(
+        "/api/v1/auth/verify-otp",
+        json={"email": email, "otp": "000000"},
+    )
+    assert bad.status_code == 401
+
+
+def test_google_auth_invalid_token_returns_401(client) -> None:
+    resp = client.post(
+        "/api/v1/auth/google",
+        json={"credential": "invalid-google-token-xyz"},
+    )
+    assert resp.status_code == 401
+
+
+def test_openapi_exposes_all_auth_paths(client) -> None:
+    spec = client.get("/openapi.json").json()
+    assert "/api/v1/auth/send-otp" in spec["paths"]
+    assert "/api/v1/auth/verify-otp" in spec["paths"]
+    assert "/api/v1/auth/google" in spec["paths"]

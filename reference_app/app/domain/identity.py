@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime
+import uuid
+
 from .errors import DomainValidationError
 
 MIN_PASSWORD_LENGTH = 8
@@ -25,3 +29,23 @@ def validate_full_name(full_name: str) -> str:
     if not cleaned:
         raise DomainValidationError("full_name must not be blank")
     return cleaned
+
+
+def generate_otp_code(digits: int = 6) -> str:
+    value = int(uuid.uuid4().hex[:10], 16) % (10 ** digits)
+    return str(value).zfill(digits)
+
+
+@dataclass(frozen=True)
+class OtpRecord:
+    email: str
+    code: str
+    expires_at: datetime
+    purpose: str = "verify_email"
+
+    def is_valid(self, code: str, now: datetime, purpose: str | None = None) -> bool:
+        if purpose and self.purpose != purpose:
+            return False
+        if now > self.expires_at:
+            return False
+        return self.code == code.strip()
