@@ -7,7 +7,7 @@ from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from ...application.container import ServiceContainer
-from ...domain.errors import AuthError
+from ...domain.errors import AuthError, ForbiddenError
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -32,3 +32,14 @@ def get_current_user_id(
     if credentials is None or not credentials.credentials:
         raise AuthError("missing bearer token")
     return container.auth_service.tokens.parse(credentials.credentials)
+
+
+def require_admin(
+    user_id: int = Depends(get_current_user_id),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> int:
+    user = container.auth_service.get_user(session, user_id)
+    if user.role != "admin":
+        raise ForbiddenError("admin access required")
+    return user_id

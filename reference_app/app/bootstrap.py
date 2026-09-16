@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from .application.admin.service import AdminService
 from .application.auth.service import AuthService
+from .application.catalog.service import CatalogService
 from .application.common import ClockPort
 from .application.container import ServiceContainer
 from .application.profile.service import ProfileService
@@ -12,6 +14,12 @@ from .infrastructure.oauth import GoogleOAuthAdapter
 from .infrastructure.orm import Base, create_session_factory
 from .infrastructure.otp import MemoryOtpStore
 from .infrastructure.persistence import models as _models
+from .infrastructure.persistence.admin_repository import (
+    SqlAlchemyAdminRepository,
+)
+from .infrastructure.persistence.catalog_repository import (
+    SqlAlchemyCatalogRepository,
+)
 from .infrastructure.persistence.profile_repository import (
     SqlAlchemyProfileRepository,
 )
@@ -50,6 +58,12 @@ def build_services(
         repo=SqlAlchemyProfileRepository(),
         hasher=hasher,
     )
+    catalog_service = CatalogService(
+        repo=SqlAlchemyCatalogRepository(),
+    )
+    admin_service = AdminService(
+        repo=SqlAlchemyAdminRepository(),
+    )
     return ServiceContainer(
         clock=effective_clock,
         settings=settings,
@@ -57,4 +71,6 @@ def build_services(
         session_factory=create_session_factory(engine),
         auth_service=auth_service,
         profile_service=profile_service,
+        catalog_service=catalog_service,
+        admin_service=admin_service,
     )

@@ -13,7 +13,9 @@ from .bootstrap import build_services
 from .config import API_DESCRIPTION, API_TITLE, API_VERSION
 from .infrastructure.database import check_database
 from .presentation.api.error_handlers import register_error_handlers
+from .presentation.api.routers import admin as admin_router
 from .presentation.api.routers import auth as auth_router
+from .presentation.api.routers import catalog as catalog_router
 from .presentation.api.routers import profile as profile_router
 
 
@@ -56,6 +58,8 @@ def create_app(services: ServiceContainer | None = None) -> FastAPI:
 
     app.include_router(auth_router.router)
     app.include_router(profile_router.router)
+    app.include_router(catalog_router.router)
+    app.include_router(admin_router.router)
     register_error_handlers(app)
     return app
 
