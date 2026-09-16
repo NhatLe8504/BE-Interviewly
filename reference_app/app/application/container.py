@@ -27,3 +27,4 @@ class ServiceContainer:
     analytics_service: Any = None
     redis_client: Any = None
     storage_service: Any = None
+    cache_service: Any = None
