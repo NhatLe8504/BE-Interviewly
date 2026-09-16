@@ -14,3 +14,6 @@ class ServiceContainer:
     engine: Any
     session_factory: Any
     auth_service: Any = None
+    interview_service: Any = None
+    evaluation_service: Any = None
+    speech_service: Any = None

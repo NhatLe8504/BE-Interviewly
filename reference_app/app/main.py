@@ -14,6 +14,8 @@ from .config import API_DESCRIPTION, API_TITLE, API_VERSION
 from .infrastructure.database import check_database
 from .presentation.api.error_handlers import register_error_handlers
 from .presentation.api.routers import auth as auth_router
+from .presentation.api.routers import evaluation as evaluation_router
+from .presentation.api.routers import interview as interview_router
 
 
 def export_openapi(app: FastAPI) -> Path:
@@ -54,6 +56,8 @@ def create_app(services: ServiceContainer | None = None) -> FastAPI:
         return {"status": "ok", "database": check_database(container.engine)}
 
     app.include_router(auth_router.router)
+    app.include_router(interview_router.router)
+    app.include_router(evaluation_router.router)
     register_error_handlers(app)
     return app
 

@@ -259,6 +259,290 @@
           }
         ]
       }
+    },
+    "/api/v1/interviews/sessions": {
+      "post": {
+        "tags": [
+          "interviews"
+        ],
+        "summary": "Start Session",
+        "operationId": "start_session_api_v1_interviews_sessions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartSessionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/interviews/sessions/{session_id}": {
+      "get": {
+        "tags": [
+          "interviews"
+        ],
+        "summary": "Get Session Details",
+        "operationId": "get_session_details_api_v1_interviews_sessions__session_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/interviews/sessions/{session_id}/turns": {
+      "post": {
+        "tags": [
+          "interviews"
+        ],
+        "summary": "Submit Turn",
+        "operationId": "submit_turn_api_v1_interviews_sessions__session_id__turns_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "turn_number",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Turn Number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TurnSubmitIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TurnSubmitResultOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/interviews/sessions/{session_id}/stream": {
+      "get": {
+        "tags": [
+          "interviews"
+        ],
+        "summary": "Stream Question",
+        "operationId": "stream_question_api_v1_interviews_sessions__session_id__stream_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/interviews/sessions/{session_id}/turns/{turn_id}/evaluation": {
+      "get": {
+        "tags": [
+          "evaluations"
+        ],
+        "summary": "Get Turn Evaluation",
+        "operationId": "get_turn_evaluation_api_v1_interviews_sessions__session_id__turns__turn_id__evaluation_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "turn_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Turn Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RubricEvaluationOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/interviews/sessions/{session_id}/result": {
+      "get": {
+        "tags": [
+          "evaluations"
+        ],
+        "summary": "Get Session Result",
+        "operationId": "get_session_result_api_v1_interviews_sessions__session_id__result_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResultOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -366,6 +650,69 @@
         ],
         "title": "RegisterIn"
       },
+      "RubricEvaluationOut": {
+        "properties": {
+          "turn_id": {
+            "type": "integer",
+            "title": "Turn Id"
+          },
+          "clarity_score": {
+            "type": "number",
+            "title": "Clarity Score"
+          },
+          "structure_score": {
+            "type": "number",
+            "title": "Structure Score"
+          },
+          "evidence_score": {
+            "type": "number",
+            "title": "Evidence Score"
+          },
+          "overall_score": {
+            "type": "number",
+            "title": "Overall Score"
+          },
+          "star_analysis": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StarAnalysisOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "feedback": {
+            "type": "string",
+            "title": "Feedback",
+            "default": ""
+          },
+          "sample_better_answer": {
+            "type": "string",
+            "title": "Sample Better Answer",
+            "default": ""
+          },
+          "speech_metrics": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpeechMetricsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "turn_id",
+          "clarity_score",
+          "structure_score",
+          "evidence_score",
+          "overall_score"
+        ],
+        "title": "RubricEvaluationOut"
+      },
       "SendOtpIn": {
         "properties": {
           "email": {
@@ -387,6 +734,250 @@
         ],
         "title": "SendOtpIn"
       },
+      "SessionOut": {
+        "properties": {
+          "session_id": {
+            "type": "integer",
+            "title": "Session Id"
+          },
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "level": {
+            "type": "string",
+            "title": "Level"
+          },
+          "language": {
+            "type": "string",
+            "title": "Language"
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "total_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Score"
+          },
+          "current_turn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TurnOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "user_id",
+          "level",
+          "language",
+          "mode",
+          "status"
+        ],
+        "title": "SessionOut"
+      },
+      "SessionResultOut": {
+        "properties": {
+          "session_id": {
+            "type": "integer",
+            "title": "Session Id"
+          },
+          "candidate_id": {
+            "type": "integer",
+            "title": "Candidate Id"
+          },
+          "avg_clarity": {
+            "type": "number",
+            "title": "Avg Clarity"
+          },
+          "avg_structure": {
+            "type": "number",
+            "title": "Avg Structure"
+          },
+          "avg_evidence": {
+            "type": "number",
+            "title": "Avg Evidence"
+          },
+          "avg_overall": {
+            "type": "number",
+            "title": "Avg Overall"
+          },
+          "total_turns": {
+            "type": "integer",
+            "title": "Total Turns"
+          },
+          "performance_rating": {
+            "type": "string",
+            "title": "Performance Rating"
+          },
+          "evaluations": {
+            "items": {
+              "$ref": "#/components/schemas/RubricEvaluationOut"
+            },
+            "type": "array",
+            "title": "Evaluations",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "candidate_id",
+          "avg_clarity",
+          "avg_structure",
+          "avg_evidence",
+          "avg_overall",
+          "total_turns",
+          "performance_rating"
+        ],
+        "title": "SessionResultOut"
+      },
+      "SpeechMetricsOut": {
+        "properties": {
+          "wpm": {
+            "type": "number",
+            "title": "Wpm"
+          },
+          "pause_duration": {
+            "type": "number",
+            "title": "Pause Duration"
+          },
+          "filler_count": {
+            "type": "integer",
+            "title": "Filler Count"
+          },
+          "filler_words": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Filler Words",
+            "default": []
+          },
+          "pace_assessment": {
+            "type": "string",
+            "title": "Pace Assessment"
+          },
+          "tips": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tips",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "wpm",
+          "pause_duration",
+          "filler_count",
+          "pace_assessment"
+        ],
+        "title": "SpeechMetricsOut"
+      },
+      "StarAnalysisOut": {
+        "properties": {
+          "situation": {
+            "type": "boolean",
+            "title": "Situation"
+          },
+          "task": {
+            "type": "boolean",
+            "title": "Task"
+          },
+          "action": {
+            "type": "boolean",
+            "title": "Action"
+          },
+          "result": {
+            "type": "boolean",
+            "title": "Result"
+          },
+          "completeness_percentage": {
+            "type": "number",
+            "title": "Completeness Percentage",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "situation",
+          "task",
+          "action",
+          "result"
+        ],
+        "title": "StarAnalysisOut"
+      },
+      "StartSessionIn": {
+        "properties": {
+          "domain_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain Id"
+          },
+          "role_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role Id"
+          },
+          "role_name": {
+            "type": "string",
+            "maxLength": 150,
+            "title": "Role Name",
+            "default": "Software Engineer"
+          },
+          "level": {
+            "type": "string",
+            "maxLength": 50,
+            "title": "Level",
+            "default": "fresher"
+          },
+          "language": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Language",
+            "default": "vi"
+          },
+          "mode": {
+            "type": "string",
+            "maxLength": 20,
+            "title": "Mode",
+            "default": "text"
+          }
+        },
+        "type": "object",
+        "title": "StartSessionIn"
+      },
       "TokenOut": {
         "properties": {
           "access_token": {
@@ -404,6 +995,119 @@
           "access_token"
         ],
         "title": "TokenOut"
+      },
+      "TurnOut": {
+        "properties": {
+          "turn_id": {
+            "type": "integer",
+            "title": "Turn Id"
+          },
+          "session_id": {
+            "type": "integer",
+            "title": "Session Id"
+          },
+          "turn_number": {
+            "type": "integer",
+            "title": "Turn Number"
+          },
+          "question_text": {
+            "type": "string",
+            "title": "Question Text"
+          },
+          "answer_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer Text"
+          },
+          "speaker": {
+            "type": "string",
+            "title": "Speaker",
+            "default": "ai"
+          },
+          "duration_seconds": {
+            "type": "number",
+            "title": "Duration Seconds",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "turn_id",
+          "session_id",
+          "turn_number",
+          "question_text"
+        ],
+        "title": "TurnOut"
+      },
+      "TurnSubmitIn": {
+        "properties": {
+          "answer_text": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Answer Text"
+          },
+          "duration_seconds": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Duration Seconds",
+            "default": 0.0
+          },
+          "pause_duration_seconds": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Pause Duration Seconds",
+            "default": 0.0
+          },
+          "audio_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "answer_text"
+        ],
+        "title": "TurnSubmitIn"
+      },
+      "TurnSubmitResultOut": {
+        "properties": {
+          "submitted_turn": {
+            "$ref": "#/components/schemas/TurnOut"
+          },
+          "next_turn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TurnOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "is_completed": {
+            "type": "boolean",
+            "title": "Is Completed",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "submitted_turn"
+        ],
+        "title": "TurnSubmitResultOut"
       },
       "UserOut": {
         "properties": {

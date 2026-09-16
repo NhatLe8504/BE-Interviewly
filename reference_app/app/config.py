@@ -28,6 +28,8 @@ class Settings:
     sendgrid_api_key: str = ""
     sendgrid_from_email: str = DEFAULT_SENDGRID_FROM_EMAIL
     sendgrid_from_name: str = DEFAULT_SENDGRID_FROM_NAME
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -52,4 +54,6 @@ class Settings:
             sendgrid_from_name=os.environ.get(
                 "SENDGRID_FROM_NAME", DEFAULT_SENDGRID_FROM_NAME,
             ),
+            openai_api_key=os.environ.get("OPENAI_API_KEY", ""),
+            openai_model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
         )
