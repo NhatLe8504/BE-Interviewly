@@ -127,6 +127,8 @@ class SessionDetailOut(BaseSchema):
     started_at: datetime
     completed_at: datetime | None
     turns: list[TurnDetailOut]
+    total_turns: int = 0
+    performance_rating: str = ""
     avg_clarity: float | None
     avg_logic: float | None
     avg_example: float | None
@@ -148,3 +150,5 @@ class SessionResultOut(BaseSchema):
     pause_duration: float
     star_analysis: dict[str, bool]
     turns: list[TurnDetailOut]
+    total_turns: int = 0
+    performance_rating: str = ""

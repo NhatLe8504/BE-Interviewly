@@ -170,3 +170,5 @@ class SessionResultReport:
     pause_duration: float
     star_analysis: dict[str, bool]
     turns: list[TurnDetailItem]
+    total_turns: int = 0
+    performance_rating: str = ""

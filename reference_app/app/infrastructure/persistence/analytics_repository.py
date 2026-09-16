@@ -503,4 +503,6 @@ class SqlAlchemyAnalyticsRepository:
             pause_duration=pause_duration,
             star_analysis=star_analysis,
             turns=detail.turns,
+            total_turns=len(detail.turns),
+            performance_rating=badge,
         )
