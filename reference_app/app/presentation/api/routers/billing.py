@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from ....application.billing.commands import (
     CheckQuotaCommand,
     CreateCheckoutCommand,
+    VerifyPaymentCommand,
 )
 from ....application.billing.ports import (
     StoredPaymentTransaction,
@@ -15,6 +16,7 @@ from ....application.billing.ports import (
 )
 from ....application.container import ServiceContainer
 from ..dependencies import get_container, get_current_user, get_session
+from ..helpers.cache import cache_response
 from ..schemas.billing import (
     CheckoutIn,
     CheckoutUrlOut,
@@ -22,7 +24,9 @@ from ..schemas.billing import (
     PlanOut,
     QuotaOut,
     SubscriptionOut,
-    VnpayIpnOut,
+    VerifyPaymentIn,
+    VerifyPaymentOut,
+    WebhookResponseOut,
 )
 
 router = APIRouter(prefix="/api/v1/billing", tags=["billing"])
@@ -72,6 +76,7 @@ def _to_tx_out(tx: StoredPaymentTransaction) -> PaymentTransactionOut:
 
 @router.get("/plans", response_model=list[PlanOut])
 @compat_router.get("/plans", response_model=list[PlanOut])
+@cache_response(ttl_seconds=900, prefix="billing:plans")
 def get_plans(
     session: Any = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
@@ -102,39 +107,59 @@ def checkout(
     )
     return CheckoutUrlOut(
         transaction_ref=res.transaction_ref,
-        payment_url=res.payment_url,
         amount=res.amount,
         currency=res.currency,
+        transfer_content=res.transfer_content,
+        bank_name=res.bank_name,
+        account_number=res.account_number,
+        account_name=res.account_name,
+        qr_code_url=res.qr_code_url,
+        payment_url=res.payment_url,
     )
 
 
-async def _handle_vnpay_ipn(
-    request: Request,
-    session: Any,
-    container: ServiceContainer,
-) -> VnpayIpnOut:
-    params = dict(request.query_params)
-    if not params:
-        try:
-            body = await request.json()
-            if isinstance(body, dict):
-                params = body
-        except Exception:
-            params = {}
-    result = container.payment_service.process_vnpay_ipn(session, params)
-    return VnpayIpnOut(RspCode=result["RspCode"], Message=result["Message"])
+@router.post("/verify-payment", response_model=VerifyPaymentOut)
+@compat_router.post("/verify-payment", response_model=VerifyPaymentOut)
+def verify_payment(
+    data: VerifyPaymentIn,
+    current_user: Any = Depends(get_current_user),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> VerifyPaymentOut:
+    res = container.payment_service.verify_payment(
+        session,
+        VerifyPaymentCommand(
+            user_id=current_user.user_id,
+            transaction_ref=data.transaction_ref,
+        ),
+    )
+    sub_out = _to_sub_out(res.get("subscription"))
+    return VerifyPaymentOut(
+        status=res["status"],
+        message=res["message"],
+        transaction_ref=res["transaction_ref"],
+        subscription=sub_out,
+    )
 
 
-@router.get("/vnpay-ipn", response_model=VnpayIpnOut)
-@router.post("/vnpay-ipn", response_model=VnpayIpnOut)
-@compat_router.get("/vnpay-ipn", response_model=VnpayIpnOut)
-@compat_router.post("/vnpay-ipn", response_model=VnpayIpnOut)
-async def vnpay_ipn(
+@router.post("/webhook", response_model=WebhookResponseOut)
+@router.post("/xgate-webhook", response_model=WebhookResponseOut)
+@compat_router.post("/webhook", response_model=WebhookResponseOut)
+@compat_router.post("/xgate-webhook", response_model=WebhookResponseOut)
+async def xgate_webhook(
     request: Request,
     session: Any = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
-) -> VnpayIpnOut:
-    return await _handle_vnpay_ipn(request, session, container)
+) -> WebhookResponseOut:
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    result = container.payment_service.process_xgate_webhook(session, body)
+    return WebhookResponseOut(
+        success=result.get("success", False),
+        message=result.get("message", ""),
+    )
 
 
 @router.get("/subscriptions/me", response_model=SubscriptionOut | None)

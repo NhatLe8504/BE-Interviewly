@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query
 
 from ....application.container import ServiceContainer
 from ..dependencies import get_container, get_session
+from ..helpers.cache import cache_response
 from ..schemas.catalog import (
     DomainOut,
     QuestionDetailOut,
@@ -19,6 +20,7 @@ router = APIRouter(prefix="/api/v1/catalog", tags=["catalog"])
 
 
 @router.get("/domains", response_model=list[DomainOut])
+@cache_response(ttl_seconds=600, prefix="catalog:domains")
 def list_domains(
     session: Any = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
@@ -28,6 +30,7 @@ def list_domains(
 
 
 @router.get("/roles", response_model=list[RoleOut])
+@cache_response(ttl_seconds=600, prefix="catalog:roles")
 def list_roles(
     domain_id: int | None = Query(None, description="Filter roles by domain"),
     session: Any = Depends(get_session),
@@ -38,6 +41,7 @@ def list_roles(
 
 
 @router.get("/star-templates", response_model=list[StarTemplateOut])
+@cache_response(ttl_seconds=600, prefix="catalog:star_templates")
 def list_star_templates(
     language: str | None = Query(None, pattern="^(vi|en)$"),
     session: Any = Depends(get_session),
@@ -48,6 +52,7 @@ def list_star_templates(
 
 
 @router.get("/questions", response_model=QuestionPageOut)
+@cache_response(ttl_seconds=180, prefix="catalog:questions")
 def list_questions(
     domain_id: int | None = Query(None),
     role_id: int | None = Query(None),
@@ -98,6 +103,7 @@ def get_random_question(
 
 
 @router.get("/questions/{question_id}", response_model=QuestionDetailOut)
+@cache_response(ttl_seconds=600, prefix="catalog:question_detail")
 def get_question_detail(
     question_id: int,
     session: Any = Depends(get_session),
@@ -128,3 +134,4 @@ def get_question_detail(
         "star_template": tmpl_out,
     }
     return QuestionDetailOut.model_validate(base_dict)
+
