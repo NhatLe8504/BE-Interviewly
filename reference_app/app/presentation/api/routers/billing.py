@@ -16,6 +16,7 @@ from ....application.billing.ports import (
 )
 from ....application.container import ServiceContainer
 from ..dependencies import get_container, get_current_user, get_session
+from ..helpers.cache import cache_response
 from ..schemas.billing import (
     CheckoutIn,
     CheckoutUrlOut,
@@ -75,6 +76,7 @@ def _to_tx_out(tx: StoredPaymentTransaction) -> PaymentTransactionOut:
 
 @router.get("/plans", response_model=list[PlanOut])
 @compat_router.get("/plans", response_model=list[PlanOut])
+@cache_response(ttl_seconds=900, prefix="billing:plans")
 def get_plans(
     session: Any = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
