@@ -8,9 +8,15 @@ from typing import Any
 class CreateCheckoutCommand:
     user_id: int
     plan_id: int
-    payment_gateway: str = "vnpay"
+    payment_gateway: str = "xgate"
     ip_address: str = "127.0.0.1"
     return_url: str | None = None
+
+
+@dataclass(frozen=True)
+class VerifyPaymentCommand:
+    user_id: int
+    transaction_ref: str
 
 
 @dataclass(frozen=True)

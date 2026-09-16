@@ -18,15 +18,24 @@ class PlanOut(BaseModel):
 
 class CheckoutIn(BaseModel):
     plan_id: int
-    payment_gateway: str = "vnpay"
+    payment_gateway: str = "xgate"
     return_url: str | None = None
 
 
 class CheckoutUrlOut(BaseModel):
     transaction_ref: str
-    payment_url: str
     amount: Decimal
     currency: str = "VND"
+    transfer_content: str = ""
+    bank_name: str = ""
+    account_number: str = ""
+    account_name: str = ""
+    qr_code_url: str = ""
+    payment_url: str = ""
+
+
+class VerifyPaymentIn(BaseModel):
+    transaction_ref: str
 
 
 class PaymentTransactionOut(BaseModel):
@@ -52,9 +61,11 @@ class SubscriptionOut(BaseModel):
     plan: PlanOut | None = None
 
 
-class VnpayIpnOut(BaseModel):
-    RspCode: str
-    Message: str
+class VerifyPaymentOut(BaseModel):
+    status: str
+    message: str
+    transaction_ref: str
+    subscription: SubscriptionOut | None = None
 
 
 class QuotaOut(BaseModel):
@@ -63,3 +74,8 @@ class QuotaOut(BaseModel):
     quota_allowed: bool
     remaining_quota: int
     feature: str
+
+
+class WebhookResponseOut(BaseModel):
+    success: bool
+    message: str
