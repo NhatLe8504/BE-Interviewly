@@ -13,6 +13,7 @@ from .bootstrap import build_services
 from .config import API_DESCRIPTION, API_TITLE, API_VERSION
 from .infrastructure.database import check_database
 from .infrastructure.persistence.seed import seed_default_data
+from .infrastructure.redis_client import check_redis
 from .presentation.api.error_handlers import register_error_handlers
 from .presentation.api.routers import admin as admin_router
 from .presentation.api.routers import analytics as analytics_router
@@ -23,6 +24,7 @@ from .presentation.api.routers import evaluation as evaluation_router
 from .presentation.api.routers import interview as interview_router
 from .presentation.api.routers import profile as profile_router
 from .presentation.api.routers import report as report_router
+from .presentation.api.routers import upload as upload_router
 
 
 def export_openapi(app: FastAPI) -> Path:
@@ -66,7 +68,13 @@ def create_app(services: ServiceContainer | None = None) -> FastAPI:
     @app.get("/health", tags=["health"])
     async def health(request: Request) -> dict:
         container: ServiceContainer = request.app.state.services
-        return {"status": "ok", "database": check_database(container.engine)}
+        data: dict[str, str] = {
+            "status": "ok",
+            "database": check_database(container.engine),
+        }
+        if container.redis_client is not None:
+            data["redis"] = check_redis(container.redis_client)
+        return data
 
     app.include_router(auth_router.router)
     app.include_router(profile_router.router)
@@ -78,6 +86,7 @@ def create_app(services: ServiceContainer | None = None) -> FastAPI:
     app.include_router(billing_router.router)
     app.include_router(billing_router.compat_router)
     app.include_router(report_router.router)
+    app.include_router(upload_router.router)
     register_error_handlers(app)
     return app
 
