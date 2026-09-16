@@ -1,15 +1,15 @@
-# NHIỆM VỤ DÀNH CHO: LÊ MINH HIẾU (1) (Frontend & Voice Interaction Lead)
+# NHIỆM VỤ DÀNH CHO: HUỲNH THANH SƠN (Frontend Analytics & Reports Lead)
 
-> **Lưu ý:** Nhiệm vụ của bạn tập trung chủ yếu ở **Frontend** (`Interview_Coach_SRC_CODE/FE-xeniellq1`).  
-> Chi tiết toàn bộ nhiệm vụ, component, hooks và luồng xử lý đã được ghi đầy đủ tại file:  
-> 👉 [`Interview_Coach_SRC_CODE/FE-xeniellq1/TASK.md`](../FE-xeniellq1/TASK.md)
+> **Lưu ý:** Nhiệm vụ của bạn tập trung chủ yếu ở **Frontend** (`Interview_Coach_SRC_CODE/FE-thanhson240624`).  
+> Chi tiết toàn bộ nhiệm vụ, component biểu đồ Recharts, Dashboard và Result Page đã được ghi đầy đủ tại file:  
+> 👉 [`Interview_Coach_SRC_CODE/FE-thanhson240624/TASK.md`](../FE-thanhson240624/TASK.md)
 
 ### Tóm tắt công việc chính của bạn:
-1. **Thiết lập phỏng vấn (`/practice`):** Gọi API nạp danh mục Domain/Role động, kiểm tra hạn mức gói cước trước khi bắt đầu.
-2. **Phòng phỏng vấn ảo AI (`/practice/[sessionId]`):** Thay thế mock script bằng kết nối API Backend thực tế qua JWT.
-3. **SSE Streaming:** Nhận câu hỏi AI trực tiếp dạng stream ký tự mượt mà.
-4. **Voice-to-Text & Sóng âm Canvas:** Thu âm qua micro, vẽ sóng âm thanh thời gian thực, bóc băng giọng nói và cho phép sửa lỗi trước khi nộp.
-5. **STAR Guidance Drawer:** Bảng trượt hướng dẫn cấu trúc câu trả lời STAR cho ứng viên.
+1. **Trang Kết quả phiên phỏng vấn (`/practice/[sessionId]/result`):** Kết nối API nhận kết quả thật, hiển thị Rubric 3 tiêu chí, phân tích phát âm WPM, nhận xét chi tiết và AI Ideal Answer.
+2. **Candidate Dashboard (`/dashboard`):** Thẻ chỉ số KPI, Biểu đồ tiến độ đường, Biểu đồ Radar 5 kỹ năng, danh sách phiên gần đây, widget gợi ý điểm yếu.
+3. **Lịch sử phỏng vấn (`/dashboard/interviews` và `[sessionId]`):** Bảng danh sách lọc đa năng, chi tiết timeline hỏi đáp quá khứ và phát lại file ghi âm giọng nói ứng viên.
+4. **Phân tích chuyên sâu (`/dashboard/progress`):** Biểu đồ xu hướng cải thiện WPM, giảm từ đệm và tỷ lệ thành thạo phương pháp STAR.
+5. **Xem & Tải báo cáo PDF (`/reports`, `/report`):** Kết nối nút tải báo cáo kỹ năng PDF từ Backend.
 
 ---
 
