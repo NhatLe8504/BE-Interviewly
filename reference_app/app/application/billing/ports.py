@@ -46,9 +46,14 @@ class StoredPaymentTransaction:
 @dataclass(frozen=True)
 class PaymentInitResult:
     transaction_ref: str
-    payment_url: str
     amount: Decimal
-    currency: str
+    currency: str = "VND"
+    transfer_content: str = ""
+    bank_name: str = ""
+    account_number: str = ""
+    account_name: str = ""
+    qr_code_url: str = ""
+    payment_url: str = ""
 
 
 class SubscriptionRepoPort(Protocol):
@@ -132,6 +137,25 @@ class PaymentTransactionRepoPort(Protocol):
         ...
 
 
+class XGateGatewayPort(Protocol):
+    def generate_payment_info(
+        self,
+        *,
+        transaction_ref: str,
+        amount: Decimal,
+        order_info: str = "",
+    ) -> dict[str, Any]:
+        ...
+
+    def verify_transaction(
+        self,
+        *,
+        transaction_ref: str,
+        expected_amount: Decimal,
+    ) -> tuple[bool, str | None, Decimal | None]:
+        ...
+
+
 class PaymentGatewayPort(Protocol):
     def generate_payment_url(
         self,
@@ -147,5 +171,4 @@ class PaymentGatewayPort(Protocol):
     def verify_response(
         self, params: dict[str, Any]
     ) -> tuple[bool, str, str, Decimal]:
-        """Returns (is_valid, txn_ref, status_code, amount)."""
         ...

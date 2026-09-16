@@ -1,23 +1,11 @@
 from __future__ import annotations
 
 from decimal import Decimal
-import hashlib
-import hmac
-import urllib.parse
 import uuid
 
 
 def unique_email(prefix: str = "billing") -> str:
     return f"{prefix}-{uuid.uuid4().hex[:10]}@example.com"
-
-
-def sign_vnpay(params: dict[str, str], secret: str = "SANDBOXSECRETKEY1234567890ABCDEF") -> dict[str, str]:
-    sorted_items = sorted(params.items(), key=lambda x: x[0])
-    qs = "&".join(f"{k}={urllib.parse.quote_plus(str(v))}" for k, v in sorted_items)
-    h = hmac.new(secret.encode("utf-8"), qs.encode("utf-8"), hashlib.sha512).hexdigest()
-    result = dict(params)
-    result["vnp_SecureHash"] = h
-    return result
 
 
 def auth_headers(client, email: str | None = None) -> dict[str, str]:
@@ -58,7 +46,7 @@ def test_free_checkout_instant_activation(client) -> None:
     resp = client.post(
         "/api/v1/billing/checkout",
         headers=headers,
-        json={"plan_id": free_plan["plan_id"], "payment_gateway": "vnpay"},
+        json={"plan_id": free_plan["plan_id"], "payment_gateway": "xgate"},
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -72,55 +60,59 @@ def test_free_checkout_instant_activation(client) -> None:
     assert sub_data["plan"]["plan_name"] == "Free"
 
 
-def test_pro_checkout_and_vnpay_ipn_flow(client) -> None:
+def test_pro_checkout_and_xgate_verify_payment_flow(client) -> None:
     headers = auth_headers(client)
     plans = client.get("/api/v1/billing/plans").json()
     pro_plan = next(p for p in plans if p["plan_name"] == "Pro Monthly")
 
-    # 1. Checkout
+    # 1. Checkout via xGate
     checkout_resp = client.post(
         "/api/v1/billing/checkout",
         headers=headers,
-        json={"plan_id": pro_plan["plan_id"], "payment_gateway": "vnpay"},
+        json={"plan_id": pro_plan["plan_id"], "payment_gateway": "xgate"},
     )
     assert checkout_resp.status_code == 200, checkout_resp.text
     checkout_data = checkout_resp.json()
     txn_ref = checkout_data["transaction_ref"]
-    assert "vnp_SecureHash" in checkout_data["payment_url"]
+    assert txn_ref.startswith("IC")
+    assert checkout_data["bank_name"] != ""
+    assert checkout_data["account_number"] != ""
+    assert "vietqr.io" in checkout_data["qr_code_url"]
 
-    # 2. Before IPN, subscription is not active yet
+    # 2. Before verification, subscription is not active yet
     sub_resp = client.get("/api/v1/billing/subscriptions/me", headers=headers)
     assert sub_resp.status_code == 200
-    assert sub_resp.json() is None  # no active sub yet
+    assert sub_resp.json() is None  # not active yet
 
-    # 3. Simulate VNPay IPN webhook
-    raw_ipn = {
-        "vnp_Amount": "9900000",
-        "vnp_BankCode": "NCB",
-        "vnp_BankTranNo": "VNP14073848",
-        "vnp_CardType": "ATM",
-        "vnp_Command": "pay",
-        "vnp_CurrCode": "VND",
-        "vnp_OrderInfo": "Payment Pro Monthly",
-        "vnp_PayDate": "20260916120000",
-        "vnp_ResponseCode": "00",
-        "vnp_TmnCode": "INTERVIE",
-        "vnp_TransactionNo": "14073848",
-        "vnp_TransactionStatus": "00",
-        "vnp_TxnRef": txn_ref,
-    }
-    signed_ipn = sign_vnpay(raw_ipn)
+    # 3. Simulate xGate REST API finding transaction
+    payment_svc = client.app.state.services.payment_service
+    payment_svc.xgate_gateway.verify_transaction = (
+        lambda transaction_ref, expected_amount: (True, "mock_xgate_tx_999", expected_amount)
+    )
 
-    ipn_resp = client.get("/api/v1/billing/vnpay-ipn", params=signed_ipn)
-    assert ipn_resp.status_code == 200, ipn_resp.text
-    assert ipn_resp.json() == {"RspCode": "00", "Message": "Confirm Success"}
+    # 4. Verify payment
+    verify_resp = client.post(
+        "/api/v1/billing/verify-payment",
+        headers=headers,
+        json={"transaction_ref": txn_ref},
+    )
+    assert verify_resp.status_code == 200, verify_resp.text
+    verify_data = verify_resp.json()
+    assert verify_data["status"] == "success"
+    assert "thành công" in verify_data["message"]
+    assert verify_data["subscription"] is not None
+    assert verify_data["subscription"]["status"] == "active"
 
-    # 4. IDEMPOTENCY: calling IPN second time returns success without duplicate processing
-    dup_ipn = client.get("/api/v1/billing/vnpay-ipn", params=signed_ipn)
-    assert dup_ipn.status_code == 200
-    assert dup_ipn.json() == {"RspCode": "00", "Message": "Confirm Success"}
+    # 5. IDEMPOTENCY: calling verify-payment second time succeeds cleanly
+    dup_resp = client.post(
+        "/api/v1/billing/verify-payment",
+        headers=headers,
+        json={"transaction_ref": txn_ref},
+    )
+    assert dup_resp.status_code == 200
+    assert dup_resp.json()["status"] == "success"
 
-    # 5. After IPN, subscription is active
+    # 6. Check subscription state
     sub_active = client.get("/api/v1/billing/subscriptions/me", headers=headers)
     assert sub_active.status_code == 200
     active_data = sub_active.json()
@@ -128,7 +120,7 @@ def test_pro_checkout_and_vnpay_ipn_flow(client) -> None:
     assert active_data["status"] == "active"
     assert active_data["plan"]["plan_name"] == "Pro Monthly"
 
-    # 6. Payment history shows transaction
+    # 7. Payment history shows success transaction
     history = client.get("/api/v1/billing/payments/history", headers=headers)
     assert history.status_code == 200
     history_data = history.json()
@@ -136,9 +128,38 @@ def test_pro_checkout_and_vnpay_ipn_flow(client) -> None:
     assert history_data[0]["status"] == "success"
     assert history_data[0]["gateway_transaction_id"] == txn_ref
 
-    # 7. Quota check
+    # 8. Quota check
     quota = client.get("/api/v1/billing/quota", headers=headers)
     assert quota.status_code == 200
     quota_data = quota.json()
     assert quota_data["has_active_subscription"] is True
     assert quota_data["plan_name"] == "Pro Monthly"
+
+
+def test_xgate_webhook_flow(client) -> None:
+    headers = auth_headers(client)
+    plans = client.get("/api/v1/billing/plans").json()
+    pro_plan = next(p for p in plans if p["plan_name"] == "Pro Monthly")
+
+    checkout_resp = client.post(
+        "/api/v1/billing/checkout",
+        headers=headers,
+        json={"plan_id": pro_plan["plan_id"], "payment_gateway": "xgate"},
+    )
+    txn_ref = checkout_resp.json()["transaction_ref"]
+
+    webhook_resp = client.post(
+        "/api/v1/billing/webhook",
+        json={
+            "id": "event_123",
+            "amount": 99000,
+            "content": f"Chuyen khoan tien {txn_ref}",
+        },
+    )
+    assert webhook_resp.status_code == 200
+    assert webhook_resp.json()["success"] is True
+
+    # Subscription is active after webhook
+    sub_resp = client.get("/api/v1/billing/subscriptions/me", headers=headers)
+    assert sub_resp.status_code == 200
+    assert sub_resp.json()["status"] == "active"
