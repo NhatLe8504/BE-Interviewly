@@ -11,6 +11,7 @@ from .application.analytics.service import AnalyticsService
 from .application.audit.service import AuditLogService
 from .application.auth.service import AuthService
 from .application.billing.service import PaymentService, SubscriptionService
+from .application.cache.service import CacheService
 from .application.catalog.service import CatalogService
 from .application.common import ClockPort
 from .application.container import ServiceContainer
@@ -20,6 +21,7 @@ from .application.profile.service import ProfileService
 from .application.report.service import PdfReportService
 from .application.speech.service import SpeechQualityService
 from .config import Settings
+from .infrastructure.cache.redis_cache import MemoryCacheAdapter, RedisCacheAdapter
 from .infrastructure.clock import SystemClock
 from .infrastructure.database import create_engine_from_url
 from .infrastructure.email import SendGridEmailSender
@@ -214,6 +216,10 @@ def build_services(
         cloudinary_url=settings.cloudinary_url,
     )
 
+    # Cache Service
+    cache_adapter = RedisCacheAdapter(redis_client) if redis_client is not None else MemoryCacheAdapter()
+    cache_service = CacheService(cache=cache_adapter)
+
     return ServiceContainer(
         clock=effective_clock,
         settings=settings,
@@ -233,4 +239,6 @@ def build_services(
         analytics_service=analytics_service,
         redis_client=redis_client,
         storage_service=storage_service,
+        cache_service=cache_service,
     )
+
