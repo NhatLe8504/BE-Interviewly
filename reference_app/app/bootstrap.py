@@ -50,9 +50,11 @@ from .infrastructure.persistence.profile_repository import (
 from .infrastructure.persistence.session_report_repository import SqlAlchemySessionReportRepository
 from .infrastructure.persistence.session_repository import SqlAlchemySessionRepository
 from .infrastructure.persistence.user_repository import SqlAlchemyUserRepository
+from .infrastructure.redis_client import create_redis_client
 from .infrastructure.report.reportlab_pdf import ReportLabPdfGenerator
 from .infrastructure.security import JwtTokenService, Pbkdf2PasswordHasher
 from .infrastructure.speech.text_analyzer import RegexSpeechTextAnalyzer
+from .infrastructure.storage.cloudinary_storage import CloudinaryStorageService
 
 
 def _seed_subscription_plans(session_factory: Any) -> None:
@@ -198,6 +200,20 @@ def build_services(
         storage_dir=storage_dir,
     )
 
+    # Redis Client
+    try:
+        redis_client = create_redis_client(settings.redis_url)
+    except Exception:
+        redis_client = None
+
+    # Cloudinary Storage
+    storage_service = CloudinaryStorageService(
+        cloud_name=settings.cloudinary_cloud_name,
+        api_key=settings.cloudinary_api_key,
+        api_secret=settings.cloudinary_api_secret,
+        cloudinary_url=settings.cloudinary_url,
+    )
+
     return ServiceContainer(
         clock=effective_clock,
         settings=settings,
@@ -215,4 +231,6 @@ def build_services(
         audit_service=audit_service,
         pdf_report_service=pdf_report_service,
         analytics_service=analytics_service,
+        redis_client=redis_client,
+        storage_service=storage_service,
     )

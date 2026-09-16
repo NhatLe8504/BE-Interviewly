@@ -25,3 +25,5 @@ class ServiceContainer:
     audit_service: Any = None
     pdf_report_service: Any = None
     analytics_service: Any = None
+    redis_client: Any = None
+    storage_service: Any = None
