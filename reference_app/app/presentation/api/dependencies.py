@@ -43,3 +43,14 @@ def require_admin(
     if user.role != "admin":
         raise ForbiddenError("admin access required")
     return user_id
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> Any:
+    if credentials is None or not credentials.credentials:
+        raise AuthError("missing bearer token")
+    user_id = container.auth_service.tokens.parse(credentials.credentials)
+    return container.auth_service.get_user(session, user_id)
