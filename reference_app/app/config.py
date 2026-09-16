@@ -16,6 +16,10 @@ DEFAULT_GOOGLE_CLIENT_ID = ""
 DEFAULT_GOOGLE_CLIENT_SECRET = ""
 DEFAULT_SENDGRID_FROM_EMAIL = "fuji@mg.fuji.io.vn"
 DEFAULT_SENDGRID_FROM_NAME = "FUJI"
+DEFAULT_VNPAY_TMN_CODE = "INTERVIE"
+DEFAULT_VNPAY_HASH_SECRET = "SANDBOXSECRETKEY1234567890ABCDEF"
+DEFAULT_VNPAY_PAYMENT_URL = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html"
+DEFAULT_VNPAY_RETURN_URL = "http://localhost:3000/subscription/result/success"
 
 
 @dataclass(frozen=True)
@@ -28,6 +32,13 @@ class Settings:
     sendgrid_api_key: str = ""
     sendgrid_from_email: str = DEFAULT_SENDGRID_FROM_EMAIL
     sendgrid_from_name: str = DEFAULT_SENDGRID_FROM_NAME
+    vnpay_tmn_code: str = DEFAULT_VNPAY_TMN_CODE
+    vnpay_hash_secret: str = DEFAULT_VNPAY_HASH_SECRET
+    vnpay_payment_url: str = DEFAULT_VNPAY_PAYMENT_URL
+    vnpay_return_url: str = DEFAULT_VNPAY_RETURN_URL
+    stripe_api_key: str = ""
+    stripe_webhook_secret: str = ""
+    pdf_reports_dir: str = "reports"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -52,4 +63,19 @@ class Settings:
             sendgrid_from_name=os.environ.get(
                 "SENDGRID_FROM_NAME", DEFAULT_SENDGRID_FROM_NAME,
             ),
+            vnpay_tmn_code=os.environ.get(
+                "VNPAY_TMN_CODE", DEFAULT_VNPAY_TMN_CODE,
+            ),
+            vnpay_hash_secret=os.environ.get(
+                "VNPAY_HASH_SECRET", DEFAULT_VNPAY_HASH_SECRET,
+            ),
+            vnpay_payment_url=os.environ.get(
+                "VNPAY_PAYMENT_URL", DEFAULT_VNPAY_PAYMENT_URL,
+            ),
+            vnpay_return_url=os.environ.get(
+                "VNPAY_RETURN_URL", DEFAULT_VNPAY_RETURN_URL,
+            ),
+            stripe_api_key=os.environ.get("STRIPE_API_KEY", ""),
+            stripe_webhook_secret=os.environ.get("STRIPE_WEBHOOK_SECRET", ""),
+            pdf_reports_dir=os.environ.get("PDF_REPORTS_DIR", "reports"),
         )
