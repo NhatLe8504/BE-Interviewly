@@ -188,3 +188,22 @@ class AdminService:
         if txn is None:
             raise NotFoundError(f"payment transaction {transaction_id} not found")
         return txn
+
+
+    def update_payment_status(
+        self, session: Any, admin_id: int, transaction_id: int, status: str,
+    ) -> PaymentAdminItem:
+        existing = self.repo.get_payment_by_id(session, transaction_id)
+        if existing is None:
+            raise NotFoundError(f"payment transaction {transaction_id} not found")
+        updated = self.repo.update_payment_status(session, transaction_id, status)
+        self.repo.record_audit(
+            session,
+            user_id=admin_id,
+            table_name="payment_transactions",
+            record_id=transaction_id,
+            action="update",
+            old_value={"status": existing.status},
+            new_value={"status": status},
+        )
+        return updated

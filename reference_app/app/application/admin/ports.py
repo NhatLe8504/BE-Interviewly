@@ -129,3 +129,11 @@ class AdminRepositoryPort(Protocol):
 
     def get_payment_by_id(self, session: Any, transaction_id: int) -> PaymentAdminItem | None:
         ...
+
+    def update_payment_status(
+        self,
+        session: Any,
+        transaction_id: int,
+        status: str,
+    ) -> PaymentAdminItem:
+        ...

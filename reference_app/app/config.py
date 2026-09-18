@@ -25,9 +25,9 @@ DEFAULT_VNPAY_RETURN_URL = "http://localhost:3000/subscription/result/success"
 # xGate Payment Gateway Config
 DEFAULT_XGATE_API_KEY = "xgate_86c34581a1efc75cf97ab04f51eae3845030"
 DEFAULT_XGATE_API_URL = "https://api.xgate.vn/api/v1/transactions"
-DEFAULT_XGATE_RECEIVER_BANK = "bidv"
-DEFAULT_XGATE_RECEIVER_ACCOUNT = "9876543210"
-DEFAULT_XGATE_RECEIVER_NAME = "INTERVIEW COACH"
+DEFAULT_XGATE_RECEIVER_BANK = "mb"
+DEFAULT_XGATE_RECEIVER_ACCOUNT = "9394441571"
+DEFAULT_XGATE_RECEIVER_NAME = "LE VAN NHAT"
 
 
 @dataclass(frozen=True)
@@ -106,8 +106,8 @@ class Settings:
             stripe_webhook_secret=os.environ.get("STRIPE_WEBHOOK_SECRET", ""),
             xgate_api_key=os.environ.get("XGATE_API_KEY", DEFAULT_XGATE_API_KEY),
             xgate_api_url=os.environ.get("XGATE_API_URL", DEFAULT_XGATE_API_URL),
-            xgate_receiver_bank=os.environ.get("XGATE_RECEIVER_BANK", DEFAULT_XGATE_RECEIVER_BANK),
-            xgate_receiver_account=os.environ.get("XGATE_RECEIVER_ACCOUNT", DEFAULT_XGATE_RECEIVER_ACCOUNT),
-            xgate_receiver_name=os.environ.get("XGATE_RECEIVER_NAME", DEFAULT_XGATE_RECEIVER_NAME),
+            xgate_receiver_bank=os.environ.get("PAYMENT_QR_BANK_CODE", os.environ.get("XGATE_RECEIVER_BANK", DEFAULT_XGATE_RECEIVER_BANK)),
+            xgate_receiver_account=os.environ.get("PAYMENT_QR_ACCOUNT_NUMBER", os.environ.get("XGATE_RECEIVER_ACCOUNT", os.environ.get("XGATE_ACCOUNT", DEFAULT_XGATE_RECEIVER_ACCOUNT))),
+            xgate_receiver_name=os.environ.get("PAYMENT_QR_ACCOUNT_NAME", os.environ.get("XGATE_RECEIVER_NAME", DEFAULT_XGATE_RECEIVER_NAME)),
             pdf_reports_dir=os.environ.get("PDF_REPORTS_DIR", "reports"),
         )
