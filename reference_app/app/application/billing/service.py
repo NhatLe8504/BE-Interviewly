@@ -303,6 +303,73 @@ class PaymentService:
 
         return {"success": True, "message": "Payment confirmed via webhook"}
 
+
+    def sync_xgate_transactions(
+        self, session: Any, limit: int = 50,
+    ) -> dict[str, Any]:
+        """Fetch real transactions from xGate API and reconcile with local transactions."""
+        import re
+        txns = self.xgate_gateway.fetch_transactions(limit=limit)
+        matched_count = 0
+        new_confirmed_count = 0
+
+        for tx in txns:
+            tx_type = str(tx.get("type", "")).lower()
+            if tx_type != "in":
+                continue
+
+            content = str(tx.get("content", "")).strip()
+            raw_amount = tx.get("amount", 0)
+            try:
+                amount = Decimal(str(raw_amount))
+            except Exception:
+                amount = Decimal("0")
+
+            xgate_id = str(tx.get("id", ""))
+            match = re.search(r"(IC\d+)", content, re.IGNORECASE)
+            if not match:
+                continue
+
+            txn_ref = match.group(1).upper()
+            pending_tx = self.transaction_repo.get_by_gateway_ref(session, "xgate", txn_ref)
+            if pending_tx is not None:
+                matched_count += 1
+                if pending_tx.status == "pending" and amount >= pending_tx.amount:
+                    now = self.clock.now()
+                    self.transaction_repo.update_status(
+                        session, pending_tx.transaction_id, status="success", paid_at=now,
+                    )
+                    sub_id = pending_tx.user_subscription_id
+                    plan = self.subscription_repo.get_plan_by_id(session, sub_id)
+                    days = 7 if (plan and plan.billing_cycle == "weekly") else 365 if (plan and plan.billing_cycle == "yearly") else 30
+                    end_date = now + timedelta(days=days)
+
+                    self.subscription_repo.update_subscription(
+                        session, sub_id, status="active", start_date=now, end_date=end_date,
+                    )
+                    if self.audit_service:
+                        self.audit_service.record(
+                            session,
+                            table_name="payment_transactions",
+                            action="update",
+                            record_id=pending_tx.transaction_id,
+                            new_value={
+                                "status": "success",
+                                "paid_at": now.isoformat(),
+                                "xgate_id": xgate_id,
+                                "sync": "manual",
+                            },
+                        )
+                    new_confirmed_count += 1
+
+        return {
+            "success": True,
+            "scanned_xgate_count": len(txns),
+            "matched_count": matched_count,
+            "new_confirmed_count": new_confirmed_count,
+            "message": f"Đã quét {len(txns)} giao dịch xGate, đối soát khớp {matched_count} giao dịch, kích hoạt thành công {new_confirmed_count} đơn mới.",
+        }
+
     def get_payment_history(
         self, session: Any, user_id: int, limit: int = 50,
     ) -> list[StoredPaymentTransaction]:

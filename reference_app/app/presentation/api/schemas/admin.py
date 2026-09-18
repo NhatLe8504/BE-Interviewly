@@ -18,6 +18,16 @@ class UserAdminOut(BaseModel):
     updated_at: datetime | None = None
 
 
+class UserAdminCreateIn(BaseModel):
+    full_name: str = Field(..., min_length=2, max_length=150)
+    email: str = Field(..., min_length=5, max_length=255)
+    password: str = Field(..., min_length=6, max_length=100)
+    phone: str | None = Field(None, max_length=20)
+    role: str = Field("candidate", pattern="^(candidate|admin)$")
+    status: str = Field("active", pattern="^(active|suspended|deleted)$")
+    preferred_language: str = Field("vi", pattern="^(vi|en)$")
+
+
 class UserStatusUpdateIn(BaseModel):
     status: str = Field(..., pattern="^(active|suspended|deleted)$")
 
@@ -88,3 +98,44 @@ class ModerationPageOut(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class PaymentAdminOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    transaction_id: int
+    user_subscription_id: int
+    payment_gateway: str
+    gateway_transaction_id: str
+    amount: float
+    currency: str
+    status: str
+    paid_at: datetime | None = None
+    created_at: datetime | None = None
+    user_id: int | None = None
+    user_email: str | None = None
+    user_name: str | None = None
+    plan_name: str | None = None
+    bank_code: str | None = None
+    account_number: str | None = None
+    sender_bank: str | None = None
+    sender_account: str | None = None
+
+
+class PaymentListPageOut(BaseModel):
+    items: list[PaymentAdminOut]
+    total: int
+    limit: int
+    offset: int
+
+
+class PaymentStatusUpdateIn(BaseModel):
+    status: str = Field(..., pattern="^(pending|success|failed|refunded)$")
+
+
+class XGateSyncOut(BaseModel):
+    success: bool
+    scanned_xgate_count: int
+    matched_count: int
+    new_confirmed_count: int
+    message: str

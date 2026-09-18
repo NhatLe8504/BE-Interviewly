@@ -24,10 +24,15 @@ from ..schemas.admin import (
     ModerationItemOut,
     ModerationPageOut,
     SystemStatsOut,
+    UserAdminCreateIn,
     UserAdminOut,
     UserListPageOut,
     UserRoleUpdateIn,
     UserStatusUpdateIn,
+    PaymentAdminOut,
+    PaymentListPageOut,
+    PaymentStatusUpdateIn,
+    XGateSyncOut,
 )
 from ..schemas.catalog import (
     DomainCreateIn,
@@ -66,6 +71,17 @@ def list_users(
         limit=limit,
         offset=offset,
     )
+
+
+@router.post("/users", response_model=UserAdminOut, status_code=201)
+def create_user(
+    data: UserAdminCreateIn,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> UserAdminOut:
+    user = container.admin_service.create_user(session, admin_id, data, container.auth_service.hasher)
+    return UserAdminOut.model_validate(user)
 
 
 @router.get("/users/{user_id}", response_model=UserAdminOut)
@@ -112,6 +128,59 @@ def get_stats(
     stats = container.admin_service.get_system_stats(session)
     return SystemStatsOut.model_validate(stats)
 
+
+
+@router.get("/payments", response_model=PaymentListPageOut)
+def list_payments(
+    status: str | None = Query(None, pattern="^(pending|success|failed|refunded)$"),
+    gateway: str | None = Query(None),
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> PaymentListPageOut:
+    items, total = container.admin_service.get_payments(
+        session, status=status, gateway=gateway, limit=limit, offset=offset
+    )
+    return PaymentListPageOut(
+        items=[PaymentAdminOut.model_validate(p) for p in items],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/payments/{transaction_id}", response_model=PaymentAdminOut)
+def get_payment_detail(
+    transaction_id: int,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> PaymentAdminOut:
+    payment = container.admin_service.get_payment(session, transaction_id)
+    return PaymentAdminOut.model_validate(payment)
+
+@router.post("/payments/sync-xgate", response_model=XGateSyncOut)
+def sync_xgate_payments(
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> XGateSyncOut:
+    res = container.payment_service.sync_xgate_transactions(session)
+    return XGateSyncOut(**res)
+
+
+@router.patch("/payments/{transaction_id}/status", response_model=PaymentAdminOut)
+def update_payment_status(
+    transaction_id: int,
+    data: PaymentStatusUpdateIn,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> PaymentAdminOut:
+    payment = container.admin_service.update_payment_status(session, admin_id, transaction_id, data.status)
+    return PaymentAdminOut.model_validate(payment)
 
 @router.get("/audit-logs", response_model=AuditLogPageOut)
 def list_audit_logs(
