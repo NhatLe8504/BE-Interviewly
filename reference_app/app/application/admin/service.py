@@ -168,3 +168,23 @@ class AdminService:
             target_id=cmd.target_id,
             reason=cmd.reason,
         )
+
+
+    def get_payments(
+        self,
+        session: Any,
+        *,
+        status: str | None = None,
+        gateway: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[PaymentAdminItem], int]:
+        items = self.repo.list_payments(session, status=status, gateway=gateway, limit=limit, offset=offset)
+        total = self.repo.count_payments(session, status=status, gateway=gateway)
+        return items, total
+
+    def get_payment(self, session: Any, transaction_id: int) -> PaymentAdminItem:
+        txn = self.repo.get_payment_by_id(session, transaction_id)
+        if txn is None:
+            raise NotFoundError(f"payment transaction {transaction_id} not found")
+        return txn
