@@ -12,6 +12,59 @@ from ....application.voice.ports import VoiceConnectionPort
 router = APIRouter(tags=["voice"])
 
 
+class PresenceManager:
+    def __init__(self) -> None:
+        self.connected_users: dict[int, set[WebSocket]] = {}
+        self.anonymous_sockets: set[WebSocket] = set()
+
+    def connect(self, ws: WebSocket, user_id: int | None = None) -> None:
+        if user_id:
+            if user_id not in self.connected_users:
+                self.connected_users[user_id] = set()
+            self.connected_users[user_id].add(ws)
+        else:
+            self.anonymous_sockets.add(ws)
+
+    def disconnect(self, ws: WebSocket, user_id: int | None = None) -> None:
+        if user_id and user_id in self.connected_users:
+            self.connected_users[user_id].discard(ws)
+            if not self.connected_users[user_id]:
+                del self.connected_users[user_id]
+        self.anonymous_sockets.discard(ws)
+
+    def get_online_count(self) -> int:
+        count = len(self.connected_users) + len(self.anonymous_sockets)
+        return max(1, count)
+
+    def is_user_online(self, user_id: int) -> bool:
+        return user_id in self.connected_users and len(self.connected_users[user_id]) > 0
+
+    def get_online_user_ids(self) -> list[int]:
+        return list(self.connected_users.keys())
+
+    async def broadcast_state(self) -> None:
+        msg = {
+            "type": "presence_state",
+            "online_count": self.get_online_count(),
+            "online_user_ids": self.get_online_user_ids(),
+        }
+        all_sockets = [
+            ws
+            for sockets in self.connected_users.values()
+            for ws in sockets
+        ] + list(self.anonymous_sockets)
+
+        for ws in all_sockets:
+            try:
+                await ws.send_json(msg)
+            except Exception:
+                pass
+
+
+presence_manager = PresenceManager()
+
+
+
 class WebSocketVoiceConnection(VoiceConnectionPort):
     """
     Adapter implementing VoiceConnectionPort over a FastAPI WebSocket.
@@ -163,3 +216,47 @@ async def voice_websocket_endpoint(websocket: WebSocket, session_id: int):
 @router.websocket("/api/v1/interviews/{session_id}/ws")
 async def interview_voice_websocket_endpoint(websocket: WebSocket, session_id: int):
     await handle_voice_websocket_session(websocket, session_id)
+
+
+@router.get("/api/v1/admin/presence", tags=["admin"])
+def get_presence_stats():
+    return {
+        "online_count": presence_manager.get_online_count(),
+        "online_user_ids": presence_manager.get_online_user_ids(),
+    }
+
+
+@router.websocket("/api/v1/ws/presence")
+async def presence_websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    token = websocket.query_params.get("token")
+    container: ServiceContainer = websocket.app.state.services
+    user_id = None
+    if token and container.auth_service:
+        try:
+            user_id = container.auth_service.tokens.parse(token)
+        except Exception:
+            pass
+
+    presence_manager.connect(websocket, user_id)
+    try:
+        await websocket.send_json({
+            "type": "presence_state",
+            "online_count": presence_manager.get_online_count(),
+            "online_user_ids": presence_manager.get_online_user_ids(),
+        })
+        await presence_manager.broadcast_state()
+
+        while True:
+            data = await websocket.receive_text()
+            try:
+                msg = json.loads(data)
+                if msg.get("type") == "ping":
+                    await websocket.send_json({"type": "pong"})
+            except Exception:
+                pass
+    except WebSocketDisconnect:
+        pass
+    finally:
+        presence_manager.disconnect(websocket, user_id)
+        await presence_manager.broadcast_state()
