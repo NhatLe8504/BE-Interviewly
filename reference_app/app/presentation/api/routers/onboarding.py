@@ -154,6 +154,34 @@ def get_my_onboarding_status(
     }
 
 
+@router.post("/reset")
+def reset_onboarding_status(
+    credentials: Any = Depends(bearer_scheme),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> dict[str, Any]:
+    """Reset onboarding status to false for the current user to allow re-testing."""
+    if not credentials or not credentials.credentials:
+        return {"status": "error", "message": "unauthorized", "is_onboarded": False}
+
+    try:
+        user_id = container.auth_service.tokens.parse(credentials.credentials)
+    except Exception:
+        return {"status": "error", "message": "unauthorized", "is_onboarded": False}
+
+    stmt = select(OnboardingResponse).where(OnboardingResponse.user_id == user_id)
+    records = session.execute(stmt).scalars().all()
+    for r in records:
+        session.delete(r)
+    session.commit()
+
+    return {
+        "status": "success",
+        "message": "Đã đặt lại trạng thái Onboarding về false thành công!",
+        "is_onboarded": False,
+    }
+
+
 # --- Admin Onboarding Analytics Endpoints ---
 
 @admin_router.get("/stats")
