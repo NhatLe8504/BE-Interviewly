@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlalchemy import func, or_, select
+from sqlalchemy.orm import joinedload
 
 from ...application.admin.ports import AdminRepositoryPort
 from ...domain.admin import (
@@ -10,8 +11,9 @@ from ...domain.admin import (
     ModerationItem,
     SystemStats,
     UserAdminSummary,
+    PaymentAdminItem,
 )
-from .models.billing import PaymentTransaction
+from .models.billing import PaymentTransaction, UserSubscription, SubscriptionPlan
 from .models.catalog import QuestionBank
 from .models.enums import AuditAction, Language, PaymentStatus, SessionStatus, UserRole, UserStatus
 from ...domain.errors import ConflictError
@@ -52,6 +54,26 @@ def _to_audit_entry(row: AuditLog) -> AuditLogEntry:
         created_at=row.created_at,
     )
 
+
+
+def _to_payment_item(row: PaymentTransaction) -> PaymentAdminItem:
+    user = row.subscription.user if row.subscription else None
+    plan = row.subscription.plan if row.subscription else None
+    return PaymentAdminItem(
+        transaction_id=row.transaction_id,
+        user_subscription_id=row.user_subscription_id,
+        payment_gateway=row.payment_gateway,
+        gateway_transaction_id=row.gateway_transaction_id,
+        amount=float(row.amount),
+        currency=row.currency,
+        status=_enum_val(row.status) or "pending",
+        paid_at=row.paid_at,
+        created_at=row.created_at,
+        user_id=user.user_id if user else None,
+        user_email=user.email if user else None,
+        user_name=user.full_name if user else None,
+        plan_name=plan.plan_name if plan else None,
+    )
 
 def _to_moderation_item(row: ModerationLog) -> ModerationItem:
     return ModerationItem(
@@ -283,3 +305,59 @@ class SqlAlchemyAdminRepository:
         session.commit()
         session.refresh(row)
         return _to_moderation_item(row)
+
+
+    def list_payments(
+        self,
+        session: Any,
+        *,
+        status: str | None = None,
+        gateway: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[PaymentAdminItem]:
+        stmt = (
+            select(PaymentTransaction)
+            .options(
+                joinedload(PaymentTransaction.subscription)
+                .joinedload(UserSubscription.user),
+                joinedload(PaymentTransaction.subscription)
+                .joinedload(UserSubscription.plan),
+            )
+            .order_by(PaymentTransaction.created_at.desc())
+        )
+        if status:
+            stmt = stmt.where(PaymentTransaction.status == PaymentStatus(status))
+        if gateway:
+            stmt = stmt.where(PaymentTransaction.payment_gateway == gateway)
+
+        rows = session.execute(stmt.offset(offset).limit(limit)).scalars().all()
+        return [_to_payment_item(r) for r in rows]
+
+    def count_payments(
+        self,
+        session: Any,
+        *,
+        status: str | None = None,
+        gateway: str | None = None,
+    ) -> int:
+        stmt = select(func.count()).select_from(PaymentTransaction)
+        if status:
+            stmt = stmt.where(PaymentTransaction.status == PaymentStatus(status))
+        if gateway:
+            stmt = stmt.where(PaymentTransaction.payment_gateway == gateway)
+        return session.execute(stmt).scalar() or 0
+
+    def get_payment_by_id(self, session: Any, transaction_id: int) -> PaymentAdminItem | None:
+        stmt = (
+            select(PaymentTransaction)
+            .options(
+                joinedload(PaymentTransaction.subscription)
+                .joinedload(UserSubscription.user),
+                joinedload(PaymentTransaction.subscription)
+                .joinedload(UserSubscription.plan),
+            )
+            .where(PaymentTransaction.transaction_id == transaction_id)
+        )
+        row = session.execute(stmt).scalar_one_or_none()
+        return _to_payment_item(row) if row else None

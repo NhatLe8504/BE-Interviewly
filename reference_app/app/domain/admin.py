@@ -91,3 +91,20 @@ class ModerationItem:
     def __post_init__(self) -> None:
         validate_target_type(self.target_type)
         validate_moderation_action(self.action)
+
+
+@dataclass(frozen=True)
+class PaymentAdminItem:
+    transaction_id: int
+    user_subscription_id: int
+    payment_gateway: str
+    gateway_transaction_id: str
+    amount: float
+    currency: str
+    status: str
+    paid_at: datetime | None = None
+    created_at: datetime | None = None
+    user_id: int | None = None
+    user_email: str | None = None
+    user_name: str | None = None
+    plan_name: str | None = None

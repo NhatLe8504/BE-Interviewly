@@ -29,6 +29,8 @@ from ..schemas.admin import (
     UserListPageOut,
     UserRoleUpdateIn,
     UserStatusUpdateIn,
+    PaymentAdminOut,
+    PaymentListPageOut,
 )
 from ..schemas.catalog import (
     DomainCreateIn,
@@ -124,6 +126,38 @@ def get_stats(
     stats = container.admin_service.get_system_stats(session)
     return SystemStatsOut.model_validate(stats)
 
+
+
+@router.get("/payments", response_model=PaymentListPageOut)
+def list_payments(
+    status: str | None = Query(None, pattern="^(pending|success|failed|refunded)$"),
+    gateway: str | None = Query(None),
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> PaymentListPageOut:
+    items, total = container.admin_service.get_payments(
+        session, status=status, gateway=gateway, limit=limit, offset=offset
+    )
+    return PaymentListPageOut(
+        items=[PaymentAdminOut.model_validate(p) for p in items],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/payments/{transaction_id}", response_model=PaymentAdminOut)
+def get_payment_detail(
+    transaction_id: int,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> PaymentAdminOut:
+    payment = container.admin_service.get_payment(session, transaction_id)
+    return PaymentAdminOut.model_validate(payment)
 
 @router.get("/audit-logs", response_model=AuditLogPageOut)
 def list_audit_logs(

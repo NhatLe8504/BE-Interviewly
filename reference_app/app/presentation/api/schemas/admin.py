@@ -98,3 +98,28 @@ class ModerationPageOut(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class PaymentAdminOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    transaction_id: int
+    user_subscription_id: int
+    payment_gateway: str
+    gateway_transaction_id: str
+    amount: float
+    currency: str
+    status: str
+    paid_at: datetime | None = None
+    created_at: datetime | None = None
+    user_id: int | None = None
+    user_email: str | None = None
+    user_name: str | None = None
+    plan_name: str | None = None
+
+
+class PaymentListPageOut(BaseModel):
+    items: list[PaymentAdminOut]
+    total: int
+    limit: int
+    offset: int

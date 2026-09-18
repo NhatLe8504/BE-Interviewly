@@ -105,3 +105,27 @@ class AdminRepositoryPort(Protocol):
         reason: str | None = None,
     ) -> ModerationItem:
         ...
+
+
+    def list_payments(
+        self,
+        session: Any,
+        *,
+        status: str | None = None,
+        gateway: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[PaymentAdminItem]:
+        ...
+
+    def count_payments(
+        self,
+        session: Any,
+        *,
+        status: str | None = None,
+        gateway: str | None = None,
+    ) -> int:
+        ...
+
+    def get_payment_by_id(self, session: Any, transaction_id: int) -> PaymentAdminItem | None:
+        ...
