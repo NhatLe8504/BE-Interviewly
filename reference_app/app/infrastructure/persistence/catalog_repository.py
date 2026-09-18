@@ -15,7 +15,7 @@ from .models.catalog import JobDomain as JobDomainModel
 from .models.catalog import JobRole as JobRoleModel
 from .models.catalog import QuestionBank as QuestionBankModel
 from .models.catalog import StarGuidanceTemplate as StarGuidanceTemplateModel
-from .models.enums import ExperienceLevel, Language, QuestionType
+from .models.enums import ExperienceLevel, Language, QuestionType, QuestionModerationStatus
 
 
 def _enum_value(val: Any) -> str | None:
@@ -82,6 +82,19 @@ def _to_question(row: QuestionBankModel) -> QuestionBankItem:
 
 
 class SqlAlchemyCatalogRepository:
+    def find_available_question_ids(
+        self, session: Any, question_ids: list[int], language: str,
+    ) -> set[int]:
+        if not question_ids:
+            return set()
+        stmt = select(QuestionBankModel.question_id).where(
+            QuestionBankModel.question_id.in_(question_ids),
+            QuestionBankModel.is_active == True,
+            QuestionBankModel.moderation_status == QuestionModerationStatus.approved,
+            QuestionBankModel.language == Language(language),
+        )
+        return set(session.execute(stmt).scalars().all())
+
     def list_domains(self, session: Any) -> list[JobDomain]:
         stmt = select(JobDomainModel).order_by(JobDomainModel.domain_name)
         rows = session.execute(stmt).scalars().all()
@@ -260,6 +273,7 @@ class SqlAlchemyCatalogRepository:
             stmt = stmt.where(QuestionBankModel.language == Language(language))
         if is_active is not None:
             stmt = stmt.where(QuestionBankModel.is_active == is_active)
+        stmt = stmt.where(QuestionBankModel.moderation_status == QuestionModerationStatus.approved)
         stmt = stmt.order_by(QuestionBankModel.question_id.desc()).offset(offset).limit(limit)
         rows = session.execute(stmt).scalars().all()
         return [_to_question(r) for r in rows]
@@ -288,6 +302,7 @@ class SqlAlchemyCatalogRepository:
             stmt = stmt.where(QuestionBankModel.language == Language(language))
         if is_active is not None:
             stmt = stmt.where(QuestionBankModel.is_active == is_active)
+        stmt = stmt.where(QuestionBankModel.moderation_status == QuestionModerationStatus.approved)
         return session.execute(stmt).scalar() or 0
 
     def get_question_by_id(

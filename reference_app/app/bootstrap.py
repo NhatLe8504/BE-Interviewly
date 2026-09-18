@@ -1,5 +1,62 @@
 from __future__ import annotations
 
+def _auto_migrate_columns(engine: Any) -> None:
+    """Ensures newly added columns exist in existing PostgreSQL/SQLite tables."""
+    with engine.begin() as conn:
+        dialect = engine.dialect.name
+        if dialect == "postgresql":
+            # Create enums if not exist
+            conn.exec_driver_sql("""
+                DO $$ BEGIN
+                    CREATE TYPE question_moderation_status_enum AS ENUM ('pending', 'approved', 'rejected');
+                EXCEPTION
+                    WHEN duplicate_object THEN null;
+                END $$;
+                DO $$ BEGIN
+                    CREATE TYPE question_source_enum AS ENUM ('admin_manual', 'admin_ai', 'user_ai', 'user_manual');
+                EXCEPTION
+                    WHEN duplicate_object THEN null;
+                END $$;
+            """)
+            # Alter question_bank columns
+            cols = [
+                ("moderation_status", "question_moderation_status_enum DEFAULT 'approved' NOT NULL"),
+                ("moderated_by", "BIGINT"),
+                ("moderated_at", "TIMESTAMP WITH TIME ZONE"),
+                ("moderation_reason", "TEXT"),
+                ("source", "question_source_enum DEFAULT 'admin_manual' NOT NULL"),
+                ("practice_id", "BIGINT"),
+                ("intent", "TEXT"),
+                ("difficulty", "INTEGER DEFAULT 3"),
+            ]
+            for col_name, col_def in cols:
+                conn.exec_driver_sql(f"ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS {col_name} {col_def};")
+            conn.exec_driver_sql(
+                "ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS barge_in_enabled BOOLEAN DEFAULT FALSE NOT NULL;"
+            )
+        elif dialect == "sqlite":
+            for col_name, col_def in [
+                ("moderation_status", "VARCHAR DEFAULT 'approved'"),
+                ("moderated_by", "BIGINT"),
+                ("moderated_at", "DATETIME"),
+                ("moderation_reason", "TEXT"),
+                ("source", "VARCHAR DEFAULT 'admin_manual'"),
+                ("practice_id", "BIGINT"),
+                ("intent", "TEXT"),
+                ("difficulty", "INTEGER DEFAULT 3"),
+            ]:
+                try:
+                    conn.exec_driver_sql(f"ALTER TABLE question_bank ADD COLUMN {col_name} {col_def};")
+                except Exception:
+                    pass
+            try:
+                conn.exec_driver_sql(
+                    "ALTER TABLE interview_sessions ADD COLUMN barge_in_enabled BOOLEAN DEFAULT 0 NOT NULL;"
+                )
+            except Exception:
+                pass
+
+
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -55,6 +112,7 @@ from .infrastructure.redis_client import create_redis_client
 from .infrastructure.report.reportlab_pdf import ReportLabPdfGenerator
 from .infrastructure.security import JwtTokenService, Pbkdf2PasswordHasher
 from .infrastructure.speech.text_analyzer import RegexSpeechTextAnalyzer
+from .infrastructure.tts.edge_tts_adapter import EdgeTTSAdapter
 from .infrastructure.storage.cloudinary_storage import CloudinaryStorageService
 
 
@@ -100,6 +158,7 @@ def build_services(
     effective_clock = clock or SystemClock()
     engine = create_engine_from_url(settings.database_url)
     Base.metadata.create_all(engine)
+    _auto_migrate_columns(engine)
     session_factory = create_session_factory(engine)
     _seed_subscription_plans(session_factory)
     hasher = Pbkdf2PasswordHasher()
@@ -128,9 +187,8 @@ def build_services(
         repo=SqlAlchemyProfileRepository(),
         hasher=hasher,
     )
-    catalog_service = CatalogService(
-        repo=SqlAlchemyCatalogRepository(),
-    )
+    catalog_repo = SqlAlchemyCatalogRepository()
+    catalog_service = CatalogService(repo=catalog_repo)
     admin_service = AdminService(
         repo=SqlAlchemyAdminRepository(),
     )
@@ -154,6 +212,7 @@ def build_services(
         turns=session_repo,
         llm=llm_adapter,
         clock=effective_clock,
+        questions=catalog_repo,
     )
     evaluation_service = EvaluationService(
         evaluations=eval_repo,
@@ -217,6 +276,10 @@ def build_services(
     cache_adapter = RedisCacheAdapter(redis_client) if redis_client is not None else MemoryCacheAdapter()
     cache_service = CacheService(cache=cache_adapter)
 
+
+    # Edge TTS
+    tts_adapter = EdgeTTSAdapter()
+
     return ServiceContainer(
         clock=effective_clock,
         settings=settings,
@@ -237,5 +300,7 @@ def build_services(
         redis_client=redis_client,
         storage_service=storage_service,
         cache_service=cache_service,
+        tts_adapter=tts_adapter,
+        llm_voice_adapter=llm_adapter,
     )
 

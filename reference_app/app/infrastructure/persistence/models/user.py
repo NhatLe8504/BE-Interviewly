@@ -46,7 +46,7 @@ class User(Base):
     profile: Mapped["CandidateProfile | None"] = relationship(back_populates="user", uselist=False)
     sessions: Mapped[list["InterviewSession"]] = relationship(back_populates="candidate")
     subscriptions: Mapped[list["UserSubscription"]] = relationship(back_populates="user")
-    questions_created: Mapped[list["QuestionBank"]] = relationship(back_populates="creator")
+    questions_created: Mapped[list["QuestionBank"]] = relationship(back_populates="creator", foreign_keys="[QuestionBank.created_by]")
     moderation_actions: Mapped[list["ModerationLog"]] = relationship(back_populates="admin")
     audit_entries: Mapped[list["AuditLog"]] = relationship(back_populates="user")
 

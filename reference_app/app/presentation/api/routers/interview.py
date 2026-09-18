@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from ....application.container import ServiceContainer
 from ....application.evaluation.commands import EvaluateTurnCommand
 from ....application.interview.commands import StartSessionCommand, SubmitTurnCommand
-from ..dependencies import get_container, get_session
+from ..dependencies import get_container, get_current_user_id, get_session
 from ..schemas.auth import UserOut
 from ..schemas.interview import (
     SessionOut,
@@ -18,30 +18,32 @@ from ..schemas.interview import (
     TurnSubmitIn,
     TurnSubmitResultOut,
 )
-from .auth import bearer_scheme
 
 router = APIRouter(prefix="/api/v1/interviews", tags=["interviews"])
-
-
-def _extract_user_id(
-    credentials: Any, session: Any, container: ServiceContainer, fallback_id: int = 1,
-) -> int:
-    if credentials and credentials.credentials:
-        try:
-            return container.auth_service.tokens.parse(credentials.credentials)
-        except Exception:
-            pass
-    return fallback_id
 
 
 @router.post("/sessions", response_model=SessionOut, status_code=201)
 def start_session(
     data: StartSessionIn,
-    credentials: Any = Depends(bearer_scheme),
+    user_id: int = Depends(get_current_user_id),
     session: Any = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
 ) -> SessionOut:
-    user_id = _extract_user_id(credentials, session, container)
+    from ....application.interview.commands import StageConfigCommand
+    configs = None
+    if data.stage_configs:
+        configs = [
+            StageConfigCommand(
+                stage_key=sc.stage_key,
+                source_mode=sc.source_mode,
+                min_turns=sc.min_turns,
+                max_turns=sc.max_turns,
+                selected_question_ids=sc.selected_question_ids,
+                difficulty_filter=sc.difficulty_filter,
+            )
+            for sc in data.stage_configs
+        ]
+
     cmd = StartSessionCommand(
         user_id=user_id,
         domain_id=data.domain_id,
@@ -50,6 +52,10 @@ def start_session(
         level=data.level,
         language=data.language,
         mode=data.mode,
+        barge_in_enabled=data.barge_in_enabled,
+        stage_configs=configs,
+        selected_question_ids=data.selected_question_ids,
+        practice_id=data.practice_id,
     )
     interview_session, first_turn = container.interview_service.start_session(session, cmd)
 
@@ -59,6 +65,7 @@ def start_session(
         level=interview_session.level,
         language=interview_session.language,
         mode=interview_session.mode,
+        barge_in_enabled=interview_session.barge_in_enabled,
         status=interview_session.status,
         total_score=float(interview_session.total_score) if interview_session.total_score else None,
         current_turn=TurnOut(
@@ -88,6 +95,7 @@ def get_session_details(
         level=interview_session.level,
         language=interview_session.language,
         mode=interview_session.mode,
+        barge_in_enabled=interview_session.barge_in_enabled,
         status=interview_session.status,
         total_score=float(interview_session.total_score) if interview_session.total_score else None,
         current_turn=TurnOut(
