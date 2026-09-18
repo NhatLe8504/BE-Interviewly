@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from typing import Any
 
@@ -15,6 +15,7 @@ from ....application.catalog.commands import (
     UpdateRoleCommand,
 )
 from ....application.container import ServiceContainer
+from ....infrastructure.logging.server_log_store import global_server_log_store
 from ..dependencies import get_container, get_session, require_admin
 from ..helpers.cache import invalidate_cache
 from ..schemas.admin import (
@@ -187,7 +188,6 @@ def list_audit_logs(
     table_name: str | None = Query(None),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    admin_id: int = Depends(require_admin),
     session: Any = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
 ) -> AuditLogPageOut:
@@ -200,6 +200,40 @@ def list_audit_logs(
         limit=limit,
         offset=offset,
     )
+
+
+@router.get("/server-logs")
+def get_server_logs(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    level: str | None = Query(None),
+    search: str | None = Query(None),
+    method: str | None = Query(None),
+    status_code: int | None = Query(None),
+    tail_lines: int = Query(60, ge=1, le=200),
+) -> dict[str, Any]:
+    """
+    Get live server terminal lines and API route logs recorded within the last 24 hours.
+    Old logs beyond 24h are automatically pruned.
+    """
+    routes, total = global_server_log_store.get_route_logs(
+        limit=limit,
+        offset=offset,
+        level=level,
+        search=search,
+        method=method,
+        status_code=status_code,
+    )
+    lines = global_server_log_store.get_terminal_lines(tail=tail_lines, level=level)
+    stats = global_server_log_store.get_stats()
+    return {
+        "terminal_lines": lines,
+        "routes": routes,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "stats": stats,
+    }
 
 
 @router.get("/moderation", response_model=ModerationPageOut)
