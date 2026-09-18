@@ -28,3 +28,5 @@ class ServiceContainer:
     redis_client: Any = None
     storage_service: Any = None
     cache_service: Any = None
+    tts_adapter: Any = None
+    llm_voice_adapter: Any = None

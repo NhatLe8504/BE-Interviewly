@@ -52,6 +52,7 @@ class InterviewSession:
     level: str = ExperienceLevel.fresher.value
     language: str = Language.vi.value
     mode: str = SessionMode.text.value
+    barge_in_enabled: bool = False
     status: str = SessionStatus.in_progress.value
     total_score: Decimal | None = None
     started_at: datetime | None = None
@@ -66,6 +67,8 @@ class InterviewSession:
             raise DomainValidationError(f"invalid language: {self.language}")
         if self.mode not in VALID_MODES:
             raise DomainValidationError(f"invalid mode: {self.mode}")
+        if not isinstance(self.barge_in_enabled, bool):
+            raise DomainValidationError("barge_in_enabled must be a boolean")
         if self.status not in VALID_STATUSES:
             raise DomainValidationError(f"invalid status: {self.status}")
         if self.total_score is not None:
@@ -96,6 +99,7 @@ class InterviewSession:
             level=self.level,
             language=self.language,
             mode=self.mode,
+            barge_in_enabled=self.barge_in_enabled,
             status=SessionStatus.completed.value,
             total_score=total_score,
             started_at=self.started_at,
@@ -113,6 +117,7 @@ class InterviewSession:
             level=self.level,
             language=self.language,
             mode=self.mode,
+            barge_in_enabled=self.barge_in_enabled,
             status=SessionStatus.abandoned.value,
             total_score=self.total_score,
             started_at=self.started_at,

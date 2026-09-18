@@ -25,6 +25,7 @@ from .presentation.api.routers import interview as interview_router
 from .presentation.api.routers import profile as profile_router
 from .presentation.api.routers import report as report_router
 from .presentation.api.routers import upload as upload_router
+from .presentation.api.routers import voice_ws as voice_router
 
 
 def export_openapi(app: FastAPI) -> Path:
@@ -87,6 +88,7 @@ def create_app(services: ServiceContainer | None = None) -> FastAPI:
     app.include_router(billing_router.compat_router)
     app.include_router(report_router.router)
     app.include_router(upload_router.router)
+    app.include_router(voice_router.router)
     register_error_handlers(app)
     return app
 

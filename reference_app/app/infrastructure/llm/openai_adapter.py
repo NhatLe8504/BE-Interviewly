@@ -5,6 +5,7 @@ import json
 from typing import AsyncIterator
 import httpx
 
+from ...application.voice.ports import LLMVoiceStreamPort
 from ...application.evaluation.ports import RubricEvaluationData, RubricEvaluatorPort
 from ...application.interview.ports import LLMInterviewerPort
 from .prompt_templates import (
@@ -15,7 +16,7 @@ from .prompt_templates import (
 )
 
 
-class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort):
+class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPort):
     def __init__(
         self,
         api_key: str = "",
@@ -202,3 +203,48 @@ class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort):
             resp.raise_for_status()
             data = resp.json()
             return data["choices"][0]["message"]["content"].strip()
+
+    async def stream_ai_tokens(
+        self, messages: list[dict[str, str]],
+    ) -> AsyncIterator[str]:
+        if not self.api_key:
+            sample_text = (
+                "Cảm ơn câu trả lời của bạn. Tôi thấy bạn có kinh nghiệm với vấn đề vừa rồi. "
+                "Bạn có thể giải thích thêm về cách bạn đo lường hiệu năng thực tế không? "
+                "Điều đó sẽ giúp tôi đánh giá rõ hơn năng lực của bạn."
+            )
+            for word in sample_text.split(" "):
+                yield word + " "
+                await asyncio.sleep(0.01)
+            return
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "stream": True,
+            "temperature": 0.7,
+        }
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            async with client.stream(
+                "POST",
+                f"{self.base_url}/chat/completions",
+                headers=headers,
+                json=payload,
+            ) as response:
+                async for line in response.aiter_lines():
+                    if line.startswith("data: "):
+                        data_str = line[6:].strip()
+                        if data_str == "[DONE]":
+                            break
+                        try:
+                            chunk = json.loads(data_str)
+                            delta = chunk["choices"][0]["delta"].get("content", "")
+                            if delta:
+                                yield delta
+                        except Exception:
+                            continue
