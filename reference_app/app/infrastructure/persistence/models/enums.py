@@ -51,6 +51,7 @@ class TurnSpeaker(str, enum.Enum):
 
 class BillingCycle(str, enum.Enum):
     free = "free"
+    weekly = "weekly"
     monthly = "monthly"
     yearly = "yearly"
 
