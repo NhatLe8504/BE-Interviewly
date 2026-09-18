@@ -19,7 +19,9 @@ from .commands import (
     CreateQuestionCommand,
     CreateRoleCommand,
     CreateStarTemplateCommand,
+    UpdateDomainCommand,
     UpdateQuestionCommand,
+    UpdateRoleCommand,
 )
 from .ports import CatalogRepositoryPort
 
@@ -43,6 +45,28 @@ class CatalogService:
             session, domain_name=cmd.domain_name.strip(), description=cmd.description,
         )
 
+    def update_domain(
+        self, session: Any, domain_id: int, cmd: UpdateDomainCommand,
+    ) -> JobDomain:
+        existing = self.repo.get_domain_by_id(session, domain_id)
+        if existing is None:
+            raise NotFoundError(f"domain {domain_id} not found")
+        if cmd.domain_name is not None:
+            validate_not_blank(cmd.domain_name, "domain_name")
+        return self.repo.update_domain(
+            session,
+            domain_id,
+            domain_name=cmd.domain_name.strip() if cmd.domain_name else None,
+            description=cmd.description,
+            fields_set=cmd.fields_set if cmd.fields_set else None,
+        )
+
+    def delete_domain(self, session: Any, domain_id: int) -> None:
+        existing = self.repo.get_domain_by_id(session, domain_id)
+        if existing is None:
+            raise NotFoundError(f"domain {domain_id} not found")
+        self.repo.delete_domain(session, domain_id)
+
     def get_roles(self, session: Any, domain_id: int | None = None) -> list[JobRole]:
         if domain_id is not None and not self.repo.get_domain_by_id(session, domain_id):
             raise NotFoundError(f"domain {domain_id} not found")
@@ -64,6 +88,31 @@ class CatalogService:
             role_name=cmd.role_name.strip(),
             description=cmd.description,
         )
+
+    def update_role(
+        self, session: Any, role_id: int, cmd: UpdateRoleCommand,
+    ) -> JobRole:
+        existing = self.repo.get_role_by_id(session, role_id)
+        if existing is None:
+            raise NotFoundError(f"role {role_id} not found")
+        if cmd.domain_id is not None and not self.repo.get_domain_by_id(session, cmd.domain_id):
+            raise NotFoundError(f"domain {cmd.domain_id} not found")
+        if cmd.role_name is not None:
+            validate_not_blank(cmd.role_name, "role_name")
+        return self.repo.update_role(
+            session,
+            role_id,
+            role_name=cmd.role_name.strip() if cmd.role_name else None,
+            description=cmd.description,
+            domain_id=cmd.domain_id,
+            fields_set=cmd.fields_set if cmd.fields_set else None,
+        )
+
+    def delete_role(self, session: Any, role_id: int) -> None:
+        existing = self.repo.get_role_by_id(session, role_id)
+        if existing is None:
+            raise NotFoundError(f"role {role_id} not found")
+        self.repo.delete_role(session, role_id)
 
     def get_star_templates(
         self, session: Any, language: str | None = None,

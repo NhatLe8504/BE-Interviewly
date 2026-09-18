@@ -18,6 +18,11 @@ class DomainCreateIn(BaseModel):
     description: str | None = None
 
 
+class DomainUpdateIn(BaseModel):
+    domain_name: str | None = Field(None, min_length=1, max_length=100)
+    description: str | None = None
+
+
 class RoleOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -32,6 +37,12 @@ class RoleCreateIn(BaseModel):
     domain_id: int
     role_name: str = Field(..., min_length=1, max_length=150)
     description: str | None = None
+
+
+class RoleUpdateIn(BaseModel):
+    role_name: str | None = Field(None, min_length=1, max_length=150)
+    description: str | None = None
+    domain_id: int | None = None
 
 
 class StarTemplateOut(BaseModel):

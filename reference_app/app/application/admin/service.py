@@ -42,6 +42,12 @@ class AdminService:
         total = self.repo.count_users(session, search=search, role=role, status=status)
         return items, total
 
+    def get_user(self, session: Any, user_id: int) -> UserAdminSummary:
+        user = self.repo.get_user_by_id(session, user_id)
+        if user is None:
+            raise NotFoundError(f"user {user_id} not found")
+        return user
+
     def update_user_status(
         self, session: Any, admin_id: int, user_id: int, status: str,
     ) -> UserAdminSummary:

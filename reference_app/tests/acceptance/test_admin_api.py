@@ -46,6 +46,7 @@ def create_admin_and_token(client) -> tuple[int, dict[str, str]]:
 def test_candidate_forbidden_from_admin_endpoints(client) -> None:
     _, candidate_headers = create_candidate_and_token(client)
     assert client.get("/api/v1/admin/users", headers=candidate_headers).status_code == 403
+    assert client.get("/api/v1/admin/users/1", headers=candidate_headers).status_code == 403
     assert client.get("/api/v1/admin/stats", headers=candidate_headers).status_code == 403
     assert client.get("/api/v1/admin/audit-logs", headers=candidate_headers).status_code == 403
     assert client.get("/api/v1/admin/moderation", headers=candidate_headers).status_code == 403
@@ -63,7 +64,13 @@ def test_admin_user_management_and_stats(client) -> None:
     assert body["total"] >= 2
     assert any(u["user_id"] == cand_id for u in body["items"])
 
-    # 2. Suspend candidate
+    # 2. Get user detail
+    detail_res = client.get(f"/api/v1/admin/users/{cand_id}", headers=admin_headers)
+    assert detail_res.status_code == 200
+    assert detail_res.json()["user_id"] == cand_id
+    assert detail_res.json()["email"].startswith("candidate-")
+
+    # 3. Suspend candidate
     status_res = client.patch(
         f"/api/v1/admin/users/{cand_id}/status",
         json={"status": "suspended"},
@@ -72,7 +79,7 @@ def test_admin_user_management_and_stats(client) -> None:
     assert status_res.status_code == 200
     assert status_res.json()["status"] == "suspended"
 
-    # 3. Promote candidate to admin
+    # 4. Promote candidate to admin
     role_res = client.patch(
         f"/api/v1/admin/users/{cand_id}/role",
         json={"role": "admin"},
@@ -81,17 +88,50 @@ def test_admin_user_management_and_stats(client) -> None:
     assert role_res.status_code == 200
     assert role_res.json()["role"] == "admin"
 
-    # 4. Get stats
+    # 5. Get stats
     stats_res = client.get("/api/v1/admin/stats", headers=admin_headers)
     assert stats_res.status_code == 200
     stats = stats_res.json()
     assert stats["total_users"] >= 2
 
-    # 5. Check audit logs
+    # 6. Check audit logs
     audit_res = client.get("/api/v1/admin/audit-logs", headers=admin_headers)
     assert audit_res.status_code == 200
     audits = audit_res.json()["items"]
     assert any(a["table_name"] == "users" and a["record_id"] == cand_id for a in audits)
+
+
+def test_admin_catalog_domain_and_role_crud(client) -> None:
+    _, admin_headers = create_admin_and_token(client)
+
+    # 1. Create domain
+    name = f"Domain {uuid.uuid4().hex[:6]}"
+    dom_res = client.post("/api/v1/admin/domains", json={"domain_name": name, "description": "Initial desc"}, headers=admin_headers)
+    assert dom_res.status_code == 201
+    domain_id = dom_res.json()["domain_id"]
+
+    # 2. Update domain
+    up_dom = client.put(f"/api/v1/admin/domains/{domain_id}", json={"description": "Updated desc"}, headers=admin_headers)
+    assert up_dom.status_code == 200
+    assert up_dom.json()["description"] == "Updated desc"
+
+    # 3. Create role
+    role_res = client.post("/api/v1/admin/roles", json={"domain_id": domain_id, "role_name": "Test Role"}, headers=admin_headers)
+    assert role_res.status_code == 201
+    role_id = role_res.json()["role_id"]
+
+    # 4. Update role
+    up_role = client.put(f"/api/v1/admin/roles/{role_id}", json={"role_name": "Updated Role"}, headers=admin_headers)
+    assert up_role.status_code == 200
+    assert up_role.json()["role_name"] == "Updated Role"
+
+    # 5. Delete role
+    del_role = client.delete(f"/api/v1/admin/roles/{role_id}", headers=admin_headers)
+    assert del_role.status_code == 204
+
+    # 6. Delete domain
+    del_dom = client.delete(f"/api/v1/admin/domains/{domain_id}", headers=admin_headers)
+    assert del_dom.status_code == 204
 
 
 def test_admin_moderation_flow(client) -> None:

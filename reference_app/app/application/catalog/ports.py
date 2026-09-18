@@ -22,6 +22,20 @@ class CatalogRepositoryPort(Protocol):
     ) -> JobDomain:
         ...
 
+    def update_domain(
+        self,
+        session: Any,
+        domain_id: int,
+        *,
+        domain_name: str | None = None,
+        description: str | None = None,
+        fields_set: frozenset[str] | None = None,
+    ) -> JobDomain:
+        ...
+
+    def delete_domain(self, session: Any, domain_id: int) -> None:
+        ...
+
     def list_roles(self, session: Any, *, domain_id: int | None = None) -> list[JobRole]:
         ...
 
@@ -31,6 +45,21 @@ class CatalogRepositoryPort(Protocol):
     def add_role(
         self, session: Any, *, domain_id: int, role_name: str, description: str | None = None,
     ) -> JobRole:
+        ...
+
+    def update_role(
+        self,
+        session: Any,
+        role_id: int,
+        *,
+        role_name: str | None = None,
+        description: str | None = None,
+        domain_id: int | None = None,
+        fields_set: frozenset[str] | None = None,
+    ) -> JobRole:
+        ...
+
+    def delete_role(self, session: Any, role_id: int) -> None:
         ...
 
     def list_star_templates(
