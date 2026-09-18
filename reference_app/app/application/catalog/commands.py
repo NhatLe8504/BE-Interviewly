@@ -10,10 +10,25 @@ class CreateDomainCommand:
 
 
 @dataclass(frozen=True)
+class UpdateDomainCommand:
+    domain_name: str | None = None
+    description: str | None = None
+    fields_set: frozenset[str] = field(default_factory=frozenset)
+
+
+@dataclass(frozen=True)
 class CreateRoleCommand:
     domain_id: int
     role_name: str
     description: str | None = None
+
+
+@dataclass(frozen=True)
+class UpdateRoleCommand:
+    role_name: str | None = None
+    description: str | None = None
+    domain_id: int | None = None
+    fields_set: frozenset[str] = field(default_factory=frozenset)
 
 
 @dataclass(frozen=True)
