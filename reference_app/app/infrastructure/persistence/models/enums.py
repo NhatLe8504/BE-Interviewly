@@ -72,3 +72,16 @@ class AuditAction(str, enum.Enum):
     insert = "insert"
     update = "update"
     delete = "delete"
+
+class QuestionModerationStatus(str, enum.Enum):
+    pending = "pending"
+    approved = "approved"
+    rejected = "rejected"
+
+
+class QuestionSource(str, enum.Enum):
+    admin_manual = "admin_manual"
+    admin_ai = "admin_ai"
+    user_ai = "user_ai"
+    user_manual = "user_manual"
+

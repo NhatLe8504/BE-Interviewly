@@ -21,7 +21,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ...orm import Base
-from .enums import ExperienceLevel, Language, QuestionType
+from .enums import ExperienceLevel, Language, QuestionType, QuestionModerationStatus, QuestionSource
 
 if TYPE_CHECKING:
     from .session import InterviewSession
@@ -117,6 +117,26 @@ class QuestionBank(Base):
     created_by: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("users.user_id", ondelete="SET NULL"),
     )
+    moderation_status: Mapped[QuestionModerationStatus] = mapped_column(
+        Enum(QuestionModerationStatus, name="question_moderation_status_enum"),
+        nullable=False,
+        server_default="approved",
+        default=QuestionModerationStatus.approved,
+    )
+    moderated_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.user_id", ondelete="SET NULL"),
+    )
+    moderated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    moderation_reason: Mapped[str | None] = mapped_column(Text)
+    source: Mapped[QuestionSource] = mapped_column(
+        Enum(QuestionSource, name="question_source_enum"),
+        nullable=False,
+        server_default="admin_manual",
+        default=QuestionSource.admin_manual,
+    )
+    practice_id: Mapped[int | None] = mapped_column(BigInteger)
+    intent: Mapped[str | None] = mapped_column(Text)
+    difficulty: Mapped[int | None] = mapped_column(Integer, default=3)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(),
     )
@@ -128,4 +148,4 @@ class QuestionBank(Base):
     domain: Mapped["JobDomain"] = relationship(back_populates="questions")
     role: Mapped["JobRole | None"] = relationship(back_populates="questions")
     star_template: Mapped["StarGuidanceTemplate | None"] = relationship(back_populates="questions")
-    creator: Mapped["User | None"] = relationship(back_populates="questions_created")
+    creator: Mapped["User | None"] = relationship(back_populates="questions_created", foreign_keys=[created_by])

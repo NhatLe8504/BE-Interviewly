@@ -5305,6 +5305,11 @@
             "type": "string",
             "title": "Mode"
           },
+          "barge_in_enabled": {
+            "type": "boolean",
+            "title": "Barge In Enabled",
+            "default": false
+          },
           "status": {
             "type": "string",
             "title": "Status"
@@ -5423,6 +5428,73 @@
           "pace_assessment"
         ],
         "title": "SpeechMetricsOut"
+      },
+      "StageConfigIn": {
+        "properties": {
+          "stage_key": {
+            "type": "string",
+            "enum": [
+              "warmup",
+              "technical",
+              "closing"
+            ],
+            "title": "Stage Key"
+          },
+          "source_mode": {
+            "type": "string",
+            "enum": [
+              "auto_random",
+              "manual",
+              "mixed"
+            ],
+            "title": "Source Mode",
+            "default": "auto_random"
+          },
+          "min_turns": {
+            "type": "integer",
+            "maximum": 3.0,
+            "minimum": 1.0,
+            "title": "Min Turns",
+            "default": 1
+          },
+          "max_turns": {
+            "type": "integer",
+            "maximum": 3.0,
+            "minimum": 1.0,
+            "title": "Max Turns",
+            "default": 2
+          },
+          "selected_question_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Question Ids"
+          },
+          "difficulty_filter": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Difficulty Filter"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage_key"
+        ],
+        "title": "StageConfigIn"
       },
       "StarAnalysisOut": {
         "properties": {
@@ -5639,15 +5711,65 @@
           },
           "language": {
             "type": "string",
-            "maxLength": 10,
+            "enum": [
+              "vi",
+              "en"
+            ],
             "title": "Language",
             "default": "vi"
           },
           "mode": {
             "type": "string",
-            "maxLength": 20,
+            "enum": [
+              "text",
+              "voice"
+            ],
             "title": "Mode",
             "default": "text"
+          },
+          "barge_in_enabled": {
+            "type": "boolean",
+            "title": "Barge In Enabled",
+            "default": false
+          },
+          "stage_configs": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/StageConfigIn"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Configs"
+          },
+          "selected_question_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Question Ids"
+          },
+          "practice_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Practice Id"
           }
         },
         "type": "object",

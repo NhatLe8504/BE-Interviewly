@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     Enum,
@@ -53,6 +54,9 @@ class InterviewSession(Base):
     )
     mode: Mapped[SessionMode] = mapped_column(
         Enum(SessionMode, name="session_mode_enum"), nullable=False, server_default="text",
+    )
+    barge_in_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false", default=False,
     )
     status: Mapped[SessionStatus] = mapped_column(
         Enum(SessionStatus, name="session_status_enum"),

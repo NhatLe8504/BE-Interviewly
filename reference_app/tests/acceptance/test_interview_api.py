@@ -29,6 +29,7 @@ def test_interview_session_and_turn_flow(client) -> None:
             "level": "junior",
             "language": "vi",
             "mode": "text",
+            "barge_in_enabled": True,
         },
         headers=headers,
     )
@@ -36,6 +37,7 @@ def test_interview_session_and_turn_flow(client) -> None:
     session_data = start_resp.json()
     session_id = session_data["session_id"]
     assert session_data["status"] == "in_progress"
+    assert session_data["barge_in_enabled"] is True
     assert session_data["current_turn"] is not None
     assert session_data["current_turn"]["turn_number"] == 1
     assert len(session_data["current_turn"]["question_text"]) > 0
@@ -88,3 +90,38 @@ def test_interview_session_and_turn_flow(client) -> None:
     assert stream_resp.status_code == 200
     assert "text/event-stream" in stream_resp.headers["content-type"]
     assert "data: " in stream_resp.text
+
+
+def test_start_session_rejects_invalid_manual_stage_plan(client) -> None:
+    headers = get_authenticated_headers(client)
+    response = client.post(
+        "/api/v1/interviews/sessions",
+        json={
+            "role_name": "Frontend Engineer",
+            "level": "senior",
+            "language": "vi",
+            "mode": "text",
+            "stage_configs": [
+                {
+                    "stage_key": "technical",
+                    "source_mode": "manual",
+                    "min_turns": 1,
+                    "max_turns": 2,
+                    "selected_question_ids": [1],
+                },
+            ],
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 422
+    assert "manual stage requires" in response.json()["detail"]
+
+
+def test_start_session_requires_authentication(client) -> None:
+    response = client.post(
+        "/api/v1/interviews/sessions",
+        json={"role_name": "Frontend Engineer"},
+    )
+
+    assert response.status_code == 401
