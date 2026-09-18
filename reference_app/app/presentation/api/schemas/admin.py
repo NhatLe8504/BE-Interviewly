@@ -18,6 +18,16 @@ class UserAdminOut(BaseModel):
     updated_at: datetime | None = None
 
 
+class UserAdminCreateIn(BaseModel):
+    full_name: str = Field(..., min_length=2, max_length=150)
+    email: str = Field(..., min_length=5, max_length=255)
+    password: str = Field(..., min_length=6, max_length=100)
+    phone: str | None = Field(None, max_length=20)
+    role: str = Field("candidate", pattern="^(candidate|admin)$")
+    status: str = Field("active", pattern="^(active|suspended|deleted)$")
+    preferred_language: str = Field("vi", pattern="^(vi|en)$")
+
+
 class UserStatusUpdateIn(BaseModel):
     status: str = Field(..., pattern="^(active|suspended|deleted)$")
 

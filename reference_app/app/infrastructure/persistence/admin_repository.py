@@ -13,7 +13,8 @@ from ...domain.admin import (
 )
 from .models.billing import PaymentTransaction
 from .models.catalog import QuestionBank
-from .models.enums import AuditAction, PaymentStatus, SessionStatus, UserRole, UserStatus
+from .models.enums import AuditAction, Language, PaymentStatus, SessionStatus, UserRole, UserStatus
+from ...domain.errors import ConflictError
 from .models.session import InterviewSession
 from .models.system import AuditLog, ModerationLog
 from .models.user import User
@@ -108,6 +109,36 @@ class SqlAlchemyAdminRepository:
     def get_user_by_id(self, session: Any, user_id: int) -> UserAdminSummary | None:
         row = session.get(User, user_id)
         return _to_user_summary(row) if row else None
+
+    def create_user(
+        self,
+        session: Any,
+        *,
+        full_name: str,
+        email: str,
+        password_hash: str,
+        phone: str | None = None,
+        role: str = "candidate",
+        status: str = "active",
+        preferred_language: str = "vi",
+    ) -> UserAdminSummary:
+        existing = session.execute(select(User).where(User.email == email)).scalar_one_or_none()
+        if existing is not None:
+            raise ConflictError(f"Email {email} is already registered")
+
+        user = User(
+            full_name=full_name,
+            email=email,
+            password_hash=password_hash,
+            phone=phone,
+            role=UserRole(role),
+            status=UserStatus(status),
+            preferred_language=Language(preferred_language) if preferred_language in [l.value for l in Language] else Language.vi,
+        )
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        return _to_user_summary(user)
 
     def update_user_status(self, session: Any, user_id: int, status: str) -> UserAdminSummary:
         row = session.get(User, user_id)

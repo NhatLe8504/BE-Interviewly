@@ -24,6 +24,7 @@ from ..schemas.admin import (
     ModerationItemOut,
     ModerationPageOut,
     SystemStatsOut,
+    UserAdminCreateIn,
     UserAdminOut,
     UserListPageOut,
     UserRoleUpdateIn,
@@ -66,6 +67,17 @@ def list_users(
         limit=limit,
         offset=offset,
     )
+
+
+@router.post("/users", response_model=UserAdminOut, status_code=201)
+def create_user(
+    data: UserAdminCreateIn,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> UserAdminOut:
+    user = container.admin_service.create_user(session, admin_id, data, container.auth_service.hasher)
+    return UserAdminOut.model_validate(user)
 
 
 @router.get("/users/{user_id}", response_model=UserAdminOut)
