@@ -31,6 +31,8 @@ from ..schemas.admin import (
     UserStatusUpdateIn,
     PaymentAdminOut,
     PaymentListPageOut,
+    PaymentStatusUpdateIn,
+    XGateSyncOut,
 )
 from ..schemas.catalog import (
     DomainCreateIn,
@@ -157,6 +159,27 @@ def get_payment_detail(
     container: ServiceContainer = Depends(get_container),
 ) -> PaymentAdminOut:
     payment = container.admin_service.get_payment(session, transaction_id)
+    return PaymentAdminOut.model_validate(payment)
+
+@router.post("/payments/sync-xgate", response_model=XGateSyncOut)
+def sync_xgate_payments(
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> XGateSyncOut:
+    res = container.payment_service.sync_xgate_transactions(session)
+    return XGateSyncOut(**res)
+
+
+@router.patch("/payments/{transaction_id}/status", response_model=PaymentAdminOut)
+def update_payment_status(
+    transaction_id: int,
+    data: PaymentStatusUpdateIn,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> PaymentAdminOut:
+    payment = container.admin_service.update_payment_status(session, admin_id, transaction_id, data.status)
     return PaymentAdminOut.model_validate(payment)
 
 @router.get("/audit-logs", response_model=AuditLogPageOut)

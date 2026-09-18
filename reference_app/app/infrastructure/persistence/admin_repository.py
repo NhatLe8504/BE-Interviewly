@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone, timedelta
+
 from typing import Any
 
 from sqlalchemy import func, or_, select
@@ -15,7 +17,7 @@ from ...domain.admin import (
 )
 from .models.billing import PaymentTransaction, UserSubscription, SubscriptionPlan
 from .models.catalog import QuestionBank
-from .models.enums import AuditAction, Language, PaymentStatus, SessionStatus, UserRole, UserStatus
+from .models.enums import AuditAction, Language, PaymentStatus, SessionStatus, UserRole, UserStatus, SubStatus
 from ...domain.errors import ConflictError
 from .models.session import InterviewSession
 from .models.system import AuditLog, ModerationLog
@@ -361,3 +363,40 @@ class SqlAlchemyAdminRepository:
         )
         row = session.execute(stmt).scalar_one_or_none()
         return _to_payment_item(row) if row else None
+
+
+    def update_payment_status(
+        self,
+        session: Any,
+        transaction_id: int,
+        status: str,
+    ) -> PaymentAdminItem:
+        stmt = (
+            select(PaymentTransaction)
+            .options(
+                joinedload(PaymentTransaction.subscription)
+                .joinedload(UserSubscription.user),
+                joinedload(PaymentTransaction.subscription)
+                .joinedload(UserSubscription.plan),
+            )
+            .where(PaymentTransaction.transaction_id == transaction_id)
+        )
+        row = session.execute(stmt).scalars().first()
+        if not row:
+            raise ValueError(f"payment transaction {transaction_id} not found")
+
+        row.status = PaymentStatus(status)
+        now = datetime.now(timezone.utc)
+        if status == "success":
+            if not row.paid_at:
+                row.paid_at = now
+            if row.subscription:
+                row.subscription.status = SubStatus.active
+                row.subscription.start_date = now
+                cycle = _enum_val(row.subscription.plan.billing_cycle) if row.subscription.plan else "monthly"
+                days = 7 if cycle == "weekly" else 365 if cycle == "yearly" else 30
+                row.subscription.end_date = now + timedelta(days=days)
+
+        session.commit()
+        session.refresh(row)
+        return _to_payment_item(row)

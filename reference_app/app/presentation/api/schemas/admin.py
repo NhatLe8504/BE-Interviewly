@@ -123,3 +123,15 @@ class PaymentListPageOut(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class PaymentStatusUpdateIn(BaseModel):
+    status: str = Field(..., pattern="^(pending|success|failed|refunded)$")
+
+
+class XGateSyncOut(BaseModel):
+    success: bool
+    scanned_xgate_count: int
+    matched_count: int
+    new_confirmed_count: int
+    message: str
