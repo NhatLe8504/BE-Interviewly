@@ -100,6 +100,40 @@ class SqlAlchemyCatalogRepository:
         session.refresh(row)
         return _to_domain(row)
 
+    def update_domain(
+        self,
+        session: Any,
+        domain_id: int,
+        *,
+        domain_name: str | None = None,
+        description: str | None = None,
+        fields_set: frozenset[str] | None = None,
+    ) -> JobDomain:
+        row = session.get(JobDomainModel, domain_id)
+        if row is None:
+            raise ValueError(f"domain {domain_id} not found")
+
+        if fields_set is None:
+            if domain_name is not None:
+                row.domain_name = domain_name
+            if description is not None:
+                row.description = description
+        else:
+            if "domain_name" in fields_set and domain_name is not None:
+                row.domain_name = domain_name
+            if "description" in fields_set:
+                row.description = description
+
+        session.commit()
+        session.refresh(row)
+        return _to_domain(row)
+
+    def delete_domain(self, session: Any, domain_id: int) -> None:
+        row = session.get(JobDomainModel, domain_id)
+        if row:
+            session.delete(row)
+            session.commit()
+
     def list_roles(self, session: Any, *, domain_id: int | None = None) -> list[JobRole]:
         stmt = select(JobRoleModel)
         if domain_id is not None:
@@ -120,6 +154,45 @@ class SqlAlchemyCatalogRepository:
         session.commit()
         session.refresh(row)
         return _to_role(row)
+
+    def update_role(
+        self,
+        session: Any,
+        role_id: int,
+        *,
+        role_name: str | None = None,
+        description: str | None = None,
+        domain_id: int | None = None,
+        fields_set: frozenset[str] | None = None,
+    ) -> JobRole:
+        row = session.get(JobRoleModel, role_id)
+        if row is None:
+            raise ValueError(f"role {role_id} not found")
+
+        if fields_set is None:
+            if role_name is not None:
+                row.role_name = role_name
+            if description is not None:
+                row.description = description
+            if domain_id is not None:
+                row.domain_id = domain_id
+        else:
+            if "role_name" in fields_set and role_name is not None:
+                row.role_name = role_name
+            if "description" in fields_set:
+                row.description = description
+            if "domain_id" in fields_set and domain_id is not None:
+                row.domain_id = domain_id
+
+        session.commit()
+        session.refresh(row)
+        return _to_role(row)
+
+    def delete_role(self, session: Any, role_id: int) -> None:
+        row = session.get(JobRoleModel, role_id)
+        if row:
+            session.delete(row)
+            session.commit()
 
     def list_star_templates(
         self, session: Any, *, language: str | None = None,
