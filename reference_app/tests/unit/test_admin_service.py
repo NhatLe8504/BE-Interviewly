@@ -151,6 +151,16 @@ def test_list_users_and_search(admin_env):
     assert zero == 0
 
 
+def test_get_user_detail(admin_env):
+    service, _, user_id, _ = admin_env
+    user = service.get_user(None, user_id)
+    assert user.user_id == user_id
+    assert user.full_name == "Alice Candidate"
+
+    with pytest.raises(NotFoundError):
+        service.get_user(None, 9999)
+
+
 def test_update_user_status_with_audit(admin_env):
     service, repo, user_id, admin_id = admin_env
     updated = service.update_user_status(None, admin_id, user_id, "suspended")

@@ -7,7 +7,9 @@ from app.application.catalog.commands import (
     CreateQuestionCommand,
     CreateRoleCommand,
     CreateStarTemplateCommand,
+    UpdateDomainCommand,
     UpdateQuestionCommand,
+    UpdateRoleCommand,
 )
 from app.application.catalog.service import CatalogService
 from app.domain.catalog import (
@@ -42,6 +44,20 @@ class FakeCatalogRepo:
         self.next_domain_id += 1
         return item
 
+    def update_domain(self, session, domain_id: int, *, domain_name=None, description=None, fields_set=None):
+        d = self.domains[domain_id]
+        updated = JobDomain(
+            domain_id=domain_id,
+            domain_name=domain_name if (fields_set and "domain_name" in fields_set) else (domain_name or d.domain_name),
+            description=description if (fields_set and "description" in fields_set) else (description if description is not None else d.description),
+            created_at=d.created_at,
+        )
+        self.domains[domain_id] = updated
+        return updated
+
+    def delete_domain(self, session, domain_id: int):
+        self.domains.pop(domain_id, None)
+
     def list_roles(self, session, *, domain_id: int | None = None):
         if domain_id is not None:
             return [r for r in self.roles.values() if r.domain_id == domain_id]
@@ -55,6 +71,21 @@ class FakeCatalogRepo:
         self.roles[self.next_role_id] = item
         self.next_role_id += 1
         return item
+
+    def update_role(self, session, role_id: int, *, role_name=None, description=None, domain_id=None, fields_set=None):
+        r = self.roles[role_id]
+        updated = JobRole(
+            role_id=role_id,
+            domain_id=domain_id if (fields_set and "domain_id" in fields_set) else (domain_id or r.domain_id),
+            role_name=role_name if (fields_set and "role_name" in fields_set) else (role_name or r.role_name),
+            description=description if (fields_set and "description" in fields_set) else (description if description is not None else r.description),
+            created_at=r.created_at,
+        )
+        self.roles[role_id] = updated
+        return updated
+
+    def delete_role(self, session, role_id: int):
+        self.roles.pop(role_id, None)
 
     def list_star_templates(self, session, *, language: str | None = None):
         if language:
@@ -156,6 +187,23 @@ def test_domain_and_role_crud(catalog_env):
     roles = service.get_roles(None, domain_id=domain_id)
     assert len(roles) == 1
     assert roles[0].role_name == "Backend"
+
+    # Update domain
+    up_dom = service.update_domain(None, domain_id, UpdateDomainCommand(domain_name="Information Technology"))
+    assert up_dom.domain_name == "Information Technology"
+
+    # Update role
+    up_role = service.update_role(None, role_id, UpdateRoleCommand(role_name="Senior Backend"))
+    assert up_role.role_name == "Senior Backend"
+
+    # Delete role and domain
+    service.delete_role(None, role_id)
+    with pytest.raises(NotFoundError):
+        service.get_role(None, role_id)
+
+    service.delete_domain(None, domain_id)
+    with pytest.raises(NotFoundError):
+        service.get_domain(None, domain_id)
 
 
 def test_create_role_domain_not_found(catalog_env):

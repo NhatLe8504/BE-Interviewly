@@ -10,7 +10,9 @@ from ....application.catalog.commands import (
     CreateQuestionCommand,
     CreateRoleCommand,
     CreateStarTemplateCommand,
+    UpdateDomainCommand,
     UpdateQuestionCommand,
+    UpdateRoleCommand,
 )
 from ....application.container import ServiceContainer
 from ..dependencies import get_container, get_session, require_admin
@@ -30,11 +32,13 @@ from ..schemas.admin import (
 from ..schemas.catalog import (
     DomainCreateIn,
     DomainOut,
+    DomainUpdateIn,
     QuestionCreateIn,
     QuestionOut,
     QuestionUpdateIn,
     RoleCreateIn,
     RoleOut,
+    RoleUpdateIn,
     StarTemplateCreateIn,
     StarTemplateOut,
 )
@@ -62,6 +66,17 @@ def list_users(
         limit=limit,
         offset=offset,
     )
+
+
+@router.get("/users/{user_id}", response_model=UserAdminOut)
+def get_user_detail(
+    user_id: int,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> UserAdminOut:
+    user = container.admin_service.get_user(session, user_id)
+    return UserAdminOut.model_validate(user)
 
 
 @router.patch("/users/{user_id}/status", response_model=UserAdminOut)
@@ -183,6 +198,53 @@ def create_domain(
     return DomainOut.model_validate(domain)
 
 
+@router.put("/domains/{domain_id}", response_model=DomainOut)
+def update_domain(
+    domain_id: int,
+    data: DomainUpdateIn,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> DomainOut:
+    domain = container.catalog_service.update_domain(
+        session,
+        domain_id,
+        UpdateDomainCommand(
+            domain_name=data.domain_name,
+            description=data.description,
+            fields_set=frozenset(data.model_fields_set),
+        ),
+    )
+    container.admin_service.repo.record_audit(
+        session,
+        user_id=admin_id,
+        table_name="job_domains",
+        record_id=domain_id,
+        action="update",
+        new_value={"domain_name": domain.domain_name},
+    )
+    invalidate_cache(container, "catalog:")
+    return DomainOut.model_validate(domain)
+
+
+@router.delete("/domains/{domain_id}", status_code=204)
+def delete_domain(
+    domain_id: int,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> None:
+    container.catalog_service.delete_domain(session, domain_id)
+    container.admin_service.repo.record_audit(
+        session,
+        user_id=admin_id,
+        table_name="job_domains",
+        record_id=domain_id,
+        action="delete",
+    )
+    invalidate_cache(container, "catalog:")
+
+
 @router.post("/roles", response_model=RoleOut, status_code=201)
 def create_role(
     data: RoleCreateIn,
@@ -206,6 +268,54 @@ def create_role(
     )
     invalidate_cache(container, "catalog:")
     return RoleOut.model_validate(role)
+
+
+@router.put("/roles/{role_id}", response_model=RoleOut)
+def update_role(
+    role_id: int,
+    data: RoleUpdateIn,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> RoleOut:
+    role = container.catalog_service.update_role(
+        session,
+        role_id,
+        UpdateRoleCommand(
+            role_name=data.role_name,
+            description=data.description,
+            domain_id=data.domain_id,
+            fields_set=frozenset(data.model_fields_set),
+        ),
+    )
+    container.admin_service.repo.record_audit(
+        session,
+        user_id=admin_id,
+        table_name="job_roles",
+        record_id=role_id,
+        action="update",
+        new_value={"role_name": role.role_name},
+    )
+    invalidate_cache(container, "catalog:")
+    return RoleOut.model_validate(role)
+
+
+@router.delete("/roles/{role_id}", status_code=204)
+def delete_role(
+    role_id: int,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> None:
+    container.catalog_service.delete_role(session, role_id)
+    container.admin_service.repo.record_audit(
+        session,
+        user_id=admin_id,
+        table_name="job_roles",
+        record_id=role_id,
+        action="delete",
+    )
+    invalidate_cache(container, "catalog:")
 
 
 @router.post("/star-templates", response_model=StarTemplateOut, status_code=201)
