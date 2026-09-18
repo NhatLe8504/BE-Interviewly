@@ -11,9 +11,9 @@ class XGateAdapter:
         self,
         api_key: str = "xgate_86c34581a1efc75cf97ab04f51eae3845030",
         api_url: str = "https://api.xgate.vn/api/v1/transactions",
-        receiver_bank: str = "bidv",
-        receiver_account: str = "9876543210",
-        receiver_name: str = "INTERVIEW COACH",
+        receiver_bank: str = "mb",
+        receiver_account: str = "9394441571",
+        receiver_name: str = "LE VAN NHAT",
         http_client: Any = None,
     ) -> None:
         self.api_key = api_key

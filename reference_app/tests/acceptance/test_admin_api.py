@@ -162,3 +162,76 @@ def test_admin_moderation_flow(client) -> None:
     body = list_res.json()
     assert body["total"] >= 1
     assert any(m["log_id"] == mod_id for m in body["items"])
+
+
+def test_admin_create_user(client) -> None:
+    _, admin_headers = create_admin_and_token(client)
+    email = unique_email("newuser")
+
+    res = client.post(
+        "/api/v1/admin/users",
+        json={
+            "full_name": "Created By Admin",
+            "email": email,
+            "password": "securepassword123",
+            "phone": "0987654321",
+            "role": "candidate",
+            "status": "active",
+            "preferred_language": "vi",
+        },
+        headers=admin_headers,
+    )
+    assert res.status_code == 201
+    data = res.json()
+    assert data["email"] == email
+    assert data["full_name"] == "Created By Admin"
+    assert data["role"] == "candidate"
+    assert data["status"] == "active"
+
+    # Verify duplicate email rejected
+    dup = client.post(
+        "/api/v1/admin/users",
+        json={
+            "full_name": "Duplicate",
+            "email": email,
+            "password": "securepassword123",
+        },
+        headers=admin_headers,
+    )
+    assert dup.status_code == 409
+
+
+def test_admin_payments_endpoints(client) -> None:
+    _, admin_headers = create_admin_and_token(client)
+
+    # List payments
+    res = client.get("/api/v1/admin/payments", headers=admin_headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert "items" in data
+    assert "total" in data
+
+    if data["items"]:
+        first_txn = data["items"][0]
+        txn_id = first_txn["transaction_id"]
+
+        # Get detail
+        detail_res = client.get(f"/api/v1/admin/payments/{txn_id}", headers=admin_headers)
+        assert detail_res.status_code == 200
+        assert detail_res.json()["transaction_id"] == txn_id
+
+        # Update status
+        patch_res = client.patch(
+            f"/api/v1/admin/payments/{txn_id}/status",
+            json={"status": "success"},
+            headers=admin_headers,
+        )
+        assert patch_res.status_code == 200
+        assert patch_res.json()["status"] == "success"
+
+    # Test sync endpoint
+    sync_res = client.post("/api/v1/admin/payments/sync-xgate", headers=admin_headers)
+    assert sync_res.status_code == 200
+    sync_data = sync_res.json()
+    assert "success" in sync_data
+    assert sync_data["success"] is True

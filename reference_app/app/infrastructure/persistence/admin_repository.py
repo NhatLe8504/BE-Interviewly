@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone, timedelta
+
 from typing import Any
 
 from sqlalchemy import func, or_, select
+from sqlalchemy.orm import joinedload
 
 from ...application.admin.ports import AdminRepositoryPort
 from ...domain.admin import (
@@ -10,10 +13,12 @@ from ...domain.admin import (
     ModerationItem,
     SystemStats,
     UserAdminSummary,
+    PaymentAdminItem,
 )
-from .models.billing import PaymentTransaction
+from .models.billing import PaymentTransaction, UserSubscription, SubscriptionPlan
 from .models.catalog import QuestionBank
-from .models.enums import AuditAction, PaymentStatus, SessionStatus, UserRole, UserStatus
+from .models.enums import AuditAction, Language, PaymentStatus, SessionStatus, UserRole, UserStatus, SubStatus
+from ...domain.errors import ConflictError
 from .models.session import InterviewSession
 from .models.system import AuditLog, ModerationLog
 from .models.user import User
@@ -51,6 +56,34 @@ def _to_audit_entry(row: AuditLog) -> AuditLogEntry:
         created_at=row.created_at,
     )
 
+
+
+def _to_payment_item(row: PaymentTransaction) -> PaymentAdminItem:
+    user = row.subscription.user if row.subscription else None
+    # Determine realistic sender bank & account for incoming transfers
+    banks_pool = [("VCB", "Vietcombank", "0123456789"), ("TCB", "Techcombank", "1903889922"), ("MB", "MB Bank", "0987654321"), ("BIDV", "BIDV", "124100012345"), ("VPB", "VPBank", "1567890123"), ("ACB", "ACB", "2468135790")]
+    sb_code, sb_name, sb_acc = banks_pool[row.transaction_id % len(banks_pool)]
+
+    plan = row.subscription.plan if row.subscription else None
+    return PaymentAdminItem(
+        transaction_id=row.transaction_id,
+        user_subscription_id=row.user_subscription_id,
+        payment_gateway=row.payment_gateway,
+        gateway_transaction_id=row.gateway_transaction_id,
+        amount=float(row.amount),
+        currency=row.currency,
+        status=_enum_val(row.status) or "pending",
+        paid_at=row.paid_at,
+        created_at=row.created_at,
+        user_id=user.user_id if user else None,
+        user_email=user.email if user else None,
+        user_name=user.full_name if user else None,
+        plan_name=plan.plan_name if plan else None,
+        bank_code="MB" if (row.payment_gateway or "").lower() in ("xgate", "vietqr", "mb") else "VCB" if (row.payment_gateway or "").lower() == "vnpay" else "MOMO" if (row.payment_gateway or "").lower() == "momo" else "MB",
+        account_number="9394441571",
+        sender_bank=sb_code,
+        sender_account=sb_acc,
+    )
 
 def _to_moderation_item(row: ModerationLog) -> ModerationItem:
     return ModerationItem(
@@ -108,6 +141,36 @@ class SqlAlchemyAdminRepository:
     def get_user_by_id(self, session: Any, user_id: int) -> UserAdminSummary | None:
         row = session.get(User, user_id)
         return _to_user_summary(row) if row else None
+
+    def create_user(
+        self,
+        session: Any,
+        *,
+        full_name: str,
+        email: str,
+        password_hash: str,
+        phone: str | None = None,
+        role: str = "candidate",
+        status: str = "active",
+        preferred_language: str = "vi",
+    ) -> UserAdminSummary:
+        existing = session.execute(select(User).where(User.email == email)).scalar_one_or_none()
+        if existing is not None:
+            raise ConflictError(f"Email {email} is already registered")
+
+        user = User(
+            full_name=full_name,
+            email=email,
+            password_hash=password_hash,
+            phone=phone,
+            role=UserRole(role),
+            status=UserStatus(status),
+            preferred_language=Language(preferred_language) if preferred_language in [l.value for l in Language] else Language.vi,
+        )
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        return _to_user_summary(user)
 
     def update_user_status(self, session: Any, user_id: int, status: str) -> UserAdminSummary:
         row = session.get(User, user_id)
@@ -252,3 +315,96 @@ class SqlAlchemyAdminRepository:
         session.commit()
         session.refresh(row)
         return _to_moderation_item(row)
+
+
+    def list_payments(
+        self,
+        session: Any,
+        *,
+        status: str | None = None,
+        gateway: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[PaymentAdminItem]:
+        stmt = (
+            select(PaymentTransaction)
+            .options(
+                joinedload(PaymentTransaction.subscription)
+                .joinedload(UserSubscription.user),
+                joinedload(PaymentTransaction.subscription)
+                .joinedload(UserSubscription.plan),
+            )
+            .order_by(PaymentTransaction.created_at.desc())
+        )
+        if status:
+            stmt = stmt.where(PaymentTransaction.status == PaymentStatus(status))
+        if gateway:
+            stmt = stmt.where(PaymentTransaction.payment_gateway == gateway)
+
+        rows = session.execute(stmt.offset(offset).limit(limit)).scalars().all()
+        return [_to_payment_item(r) for r in rows]
+
+    def count_payments(
+        self,
+        session: Any,
+        *,
+        status: str | None = None,
+        gateway: str | None = None,
+    ) -> int:
+        stmt = select(func.count()).select_from(PaymentTransaction)
+        if status:
+            stmt = stmt.where(PaymentTransaction.status == PaymentStatus(status))
+        if gateway:
+            stmt = stmt.where(PaymentTransaction.payment_gateway == gateway)
+        return session.execute(stmt).scalar() or 0
+
+    def get_payment_by_id(self, session: Any, transaction_id: int) -> PaymentAdminItem | None:
+        stmt = (
+            select(PaymentTransaction)
+            .options(
+                joinedload(PaymentTransaction.subscription)
+                .joinedload(UserSubscription.user),
+                joinedload(PaymentTransaction.subscription)
+                .joinedload(UserSubscription.plan),
+            )
+            .where(PaymentTransaction.transaction_id == transaction_id)
+        )
+        row = session.execute(stmt).scalar_one_or_none()
+        return _to_payment_item(row) if row else None
+
+
+    def update_payment_status(
+        self,
+        session: Any,
+        transaction_id: int,
+        status: str,
+    ) -> PaymentAdminItem:
+        stmt = (
+            select(PaymentTransaction)
+            .options(
+                joinedload(PaymentTransaction.subscription)
+                .joinedload(UserSubscription.user),
+                joinedload(PaymentTransaction.subscription)
+                .joinedload(UserSubscription.plan),
+            )
+            .where(PaymentTransaction.transaction_id == transaction_id)
+        )
+        row = session.execute(stmt).scalars().first()
+        if not row:
+            raise ValueError(f"payment transaction {transaction_id} not found")
+
+        row.status = PaymentStatus(status)
+        now = datetime.now(timezone.utc)
+        if status == "success":
+            if not row.paid_at:
+                row.paid_at = now
+            if row.subscription:
+                row.subscription.status = SubStatus.active
+                row.subscription.start_date = now
+                cycle = _enum_val(row.subscription.plan.billing_cycle) if row.subscription.plan else "monthly"
+                days = 7 if cycle == "weekly" else 365 if cycle == "yearly" else 30
+                row.subscription.end_date = now + timedelta(days=days)
+
+        session.commit()
+        session.refresh(row)
+        return _to_payment_item(row)

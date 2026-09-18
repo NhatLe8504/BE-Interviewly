@@ -42,6 +42,37 @@ class AdminService:
         total = self.repo.count_users(session, search=search, role=role, status=status)
         return items, total
 
+    def create_user(
+        self,
+        session: Any,
+        admin_id: int,
+        data: Any,
+        hasher: Any,
+    ) -> UserAdminSummary:
+        validate_user_role(data.role)
+        validate_user_status(data.status)
+        password_hash = hasher.hash(data.password)
+        created = self.repo.create_user(
+            session,
+            full_name=data.full_name,
+            email=data.email,
+            password_hash=password_hash,
+            phone=data.phone,
+            role=data.role,
+            status=data.status,
+            preferred_language=getattr(data, "preferred_language", "vi") or "vi",
+        )
+        self.repo.record_audit(
+            session,
+            user_id=admin_id,
+            table_name="users",
+            record_id=created.user_id,
+            action="insert",
+            old_value=None,
+            new_value={"full_name": created.full_name, "email": created.email, "role": created.role, "status": created.status},
+        )
+        return created
+
     def get_user(self, session: Any, user_id: int) -> UserAdminSummary:
         user = self.repo.get_user_by_id(session, user_id)
         if user is None:
@@ -137,3 +168,42 @@ class AdminService:
             target_id=cmd.target_id,
             reason=cmd.reason,
         )
+
+
+    def get_payments(
+        self,
+        session: Any,
+        *,
+        status: str | None = None,
+        gateway: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[PaymentAdminItem], int]:
+        items = self.repo.list_payments(session, status=status, gateway=gateway, limit=limit, offset=offset)
+        total = self.repo.count_payments(session, status=status, gateway=gateway)
+        return items, total
+
+    def get_payment(self, session: Any, transaction_id: int) -> PaymentAdminItem:
+        txn = self.repo.get_payment_by_id(session, transaction_id)
+        if txn is None:
+            raise NotFoundError(f"payment transaction {transaction_id} not found")
+        return txn
+
+
+    def update_payment_status(
+        self, session: Any, admin_id: int, transaction_id: int, status: str,
+    ) -> PaymentAdminItem:
+        existing = self.repo.get_payment_by_id(session, transaction_id)
+        if existing is None:
+            raise NotFoundError(f"payment transaction {transaction_id} not found")
+        updated = self.repo.update_payment_status(session, transaction_id, status)
+        self.repo.record_audit(
+            session,
+            user_id=admin_id,
+            table_name="payment_transactions",
+            record_id=transaction_id,
+            action="update",
+            old_value={"status": existing.status},
+            new_value={"status": status},
+        )
+        return updated
