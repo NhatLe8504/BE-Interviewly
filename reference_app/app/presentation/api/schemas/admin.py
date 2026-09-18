@@ -116,6 +116,10 @@ class PaymentAdminOut(BaseModel):
     user_email: str | None = None
     user_name: str | None = None
     plan_name: str | None = None
+    bank_code: str | None = None
+    account_number: str | None = None
+    sender_bank: str | None = None
+    sender_account: str | None = None
 
 
 class PaymentListPageOut(BaseModel):
