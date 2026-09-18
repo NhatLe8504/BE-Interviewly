@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import timedelta
@@ -105,19 +105,21 @@ class AuthService:
         self.otp_store.delete(email, command.purpose)
         return True
 
-    def google_auth(self, session: Any, command: GoogleAuthCommand) -> tuple[str, AuthUser]:
+    def google_auth(self, session: Any, command: GoogleAuthCommand) -> tuple[str, AuthUser, bool]:
         if self.google_verifier is None:
             raise RuntimeError("Google OAuth service not configured")
         profile = self.google_verifier.verify(command.credential)
         email = normalize_email(profile.email)
         stored = self.users.find_by_email(session, email)
+        is_new_user = False
         if stored is None:
+            is_new_user = True
             name = validate_full_name(profile.full_name or email.partition("@")[0])
             random_password = f"google-oauth-{uuid.uuid4().hex}"
             stored = self.users.add(
                 session,
                 full_name=name,
                 email=email,
-                password_hash=self.hasher.hash(random_password),
+                password_hash=f"needs_setup:{self.hasher.hash(random_password)}",
             )
-        return self.tokens.issue(stored.user_id), to_auth_user(stored)
+        return self.tokens.issue(stored.user_id), to_auth_user(stored), is_new_user
