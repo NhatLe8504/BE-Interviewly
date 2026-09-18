@@ -33,6 +33,13 @@ class InterviewTurnRepoPort(Protocol):
         ...
 
 
+class ApprovedQuestionLookupPort(Protocol):
+    def find_available_question_ids(
+        self, session: Any, question_ids: list[int], language: str,
+    ) -> set[int]:
+        ...
+
+
 class LLMInterviewerPort(Protocol):
     def generate_first_question(
         self, role: str, level: str, language: str = "vi",

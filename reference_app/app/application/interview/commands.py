@@ -4,6 +4,16 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class StageConfigCommand:
+    stage_key: str
+    source_mode: str = "auto_random"  # auto_random | manual | mixed
+    min_turns: int = 1
+    max_turns: int = 2
+    selected_question_ids: list[int] | None = None
+    difficulty_filter: int | None = None
+
+
+@dataclass(frozen=True)
 class StartSessionCommand:
     user_id: int
     domain_id: int | None = None
@@ -12,6 +22,10 @@ class StartSessionCommand:
     level: str = "fresher"
     language: str = "vi"
     mode: str = "text"
+    barge_in_enabled: bool = False
+    stage_configs: list[StageConfigCommand] | None = None
+    selected_question_ids: list[int] | None = None
+    practice_id: int | None = None
 
 
 @dataclass(frozen=True)

@@ -16,6 +16,7 @@ from .session import (
     SpeechQualityAnalysis,
 )
 from .system import AuditLog, ModerationLog
+from .session_plan import InterviewSessionConfig, SessionQuestionSelection
 from .user import CandidateProfile, User
 
 __all__ = [
@@ -31,6 +32,8 @@ __all__ = [
     "PdfReport",
     "QuestionBank",
     "SessionProgressSummary",
+    "InterviewSessionConfig",
+    "SessionQuestionSelection",
     "SpeechQualityAnalysis",
     "StarGuidanceTemplate",
     "SubscriptionPlan",
