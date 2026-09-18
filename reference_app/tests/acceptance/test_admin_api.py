@@ -162,3 +162,40 @@ def test_admin_moderation_flow(client) -> None:
     body = list_res.json()
     assert body["total"] >= 1
     assert any(m["log_id"] == mod_id for m in body["items"])
+
+
+def test_admin_create_user(client) -> None:
+    _, admin_headers = create_admin_and_token(client)
+    email = unique_email("newuser")
+
+    res = client.post(
+        "/api/v1/admin/users",
+        json={
+            "full_name": "Created By Admin",
+            "email": email,
+            "password": "securepassword123",
+            "phone": "0987654321",
+            "role": "candidate",
+            "status": "active",
+            "preferred_language": "vi",
+        },
+        headers=admin_headers,
+    )
+    assert res.status_code == 201
+    data = res.json()
+    assert data["email"] == email
+    assert data["full_name"] == "Created By Admin"
+    assert data["role"] == "candidate"
+    assert data["status"] == "active"
+
+    # Verify duplicate email rejected
+    dup = client.post(
+        "/api/v1/admin/users",
+        json={
+            "full_name": "Duplicate",
+            "email": email,
+            "password": "securepassword123",
+        },
+        headers=admin_headers,
+    )
+    assert dup.status_code == 409

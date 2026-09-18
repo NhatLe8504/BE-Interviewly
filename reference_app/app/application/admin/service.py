@@ -42,6 +42,37 @@ class AdminService:
         total = self.repo.count_users(session, search=search, role=role, status=status)
         return items, total
 
+    def create_user(
+        self,
+        session: Any,
+        admin_id: int,
+        data: Any,
+        hasher: Any,
+    ) -> UserAdminSummary:
+        validate_user_role(data.role)
+        validate_user_status(data.status)
+        password_hash = hasher.hash(data.password)
+        created = self.repo.create_user(
+            session,
+            full_name=data.full_name,
+            email=data.email,
+            password_hash=password_hash,
+            phone=data.phone,
+            role=data.role,
+            status=data.status,
+            preferred_language=getattr(data, "preferred_language", "vi") or "vi",
+        )
+        self.repo.record_audit(
+            session,
+            user_id=admin_id,
+            table_name="users",
+            record_id=created.user_id,
+            action="insert",
+            old_value=None,
+            new_value={"full_name": created.full_name, "email": created.email, "role": created.role, "status": created.status},
+        )
+        return created
+
     def get_user(self, session: Any, user_id: int) -> UserAdminSummary:
         user = self.repo.get_user_by_id(session, user_id)
         if user is None:
