@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import datetime, timezone, timedelta
 
@@ -31,6 +31,22 @@ def _enum_val(val: Any) -> str | None:
 
 
 def _to_user_summary(row: User) -> UserAdminSummary:
+    onboarding_data = None
+    is_onboarded = False
+    if hasattr(row, "onboarding") and row.onboarding:
+        is_onboarded = bool(row.onboarding.is_completed)
+        onboarding_data = {
+            "response_id": row.onboarding.response_id,
+            "preferred_language": row.onboarding.preferred_language,
+            "acquisition_channel": row.onboarding.acquisition_channel,
+            "current_domain": row.onboarding.current_domain,
+            "current_role": row.onboarding.current_role,
+            "target_role": row.onboarding.target_role,
+            "target_level": row.onboarding.target_level,
+            "target_goal": row.onboarding.target_goal,
+            "is_completed": row.onboarding.is_completed,
+            "completed_at": row.onboarding.completed_at.isoformat() if row.onboarding.completed_at else None,
+        }
     return UserAdminSummary(
         user_id=row.user_id,
         full_name=row.full_name,
@@ -41,6 +57,8 @@ def _to_user_summary(row: User) -> UserAdminSummary:
         preferred_language=_enum_val(row.preferred_language) or "vi",
         created_at=row.created_at,
         updated_at=row.updated_at,
+        is_onboarded=is_onboarded,
+        onboarding=onboarding_data,
     )
 
 

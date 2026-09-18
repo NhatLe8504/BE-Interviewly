@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
@@ -16,6 +16,8 @@ class UserAdminOut(BaseModel):
     preferred_language: str
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    is_onboarded: bool = False
+    onboarding: dict | None = None
 
 
 class UserAdminCreateIn(BaseModel):

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -54,6 +54,8 @@ class UserAdminSummary:
     preferred_language: str
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    is_onboarded: bool = False
+    onboarding: dict | None = None
 
 
 @dataclass(frozen=True)
