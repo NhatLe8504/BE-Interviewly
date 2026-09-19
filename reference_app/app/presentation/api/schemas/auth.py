@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
@@ -20,6 +20,7 @@ class TokenOut(BaseModel):
     token_type: str = "bearer"
     is_new_user: bool = False
     needs_password: bool = False
+    avatar_url: str | None = None
     is_onboarded: bool = False
 
 
@@ -31,6 +32,7 @@ class UserOut(BaseModel):
     status: str
     is_onboarded: bool = False
     needs_password: bool = False
+    avatar_url: str | None = None
 
 
 class SetInitialPasswordIn(BaseModel):
