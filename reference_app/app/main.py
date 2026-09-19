@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 from contextlib import asynccontextmanager
@@ -6,7 +6,9 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
+import time
 from fastapi.middleware.cors import CORSMiddleware
+from .infrastructure.logging.server_log_store import global_server_log_store
 
 from .application.container import ServiceContainer
 from .bootstrap import build_services
@@ -26,6 +28,7 @@ from .presentation.api.routers import profile as profile_router
 from .presentation.api.routers import report as report_router
 from .presentation.api.routers import upload as upload_router
 from .presentation.api.routers import voice_ws as voice_router
+from .presentation.api.routers import onboarding as onboarding_router
 
 
 def export_openapi(app: FastAPI) -> Path:
@@ -66,6 +69,38 @@ def create_app(services: ServiceContainer | None = None) -> FastAPI:
     )
     app.state.services = services or build_services()
 
+    @app.middleware("http")
+    async def route_logger_middleware(request: Request, call_next):
+        start_time = time.perf_counter()
+        client_ip = request.client.host if request.client else "127.0.0.1"
+        user_agent = request.headers.get("user-agent", "-")
+        user_id = None
+        auth_header = request.headers.get("authorization", "")
+        if auth_header.startswith("Bearer "):
+            try:
+                token = auth_header[7:]
+                container = getattr(request.app.state, "services", None)
+                if container and container.auth_service and hasattr(container.auth_service, "tokens"):
+                    user_id = container.auth_service.tokens.parse(token)
+            except Exception:
+                pass
+
+        response = await call_next(request)
+        duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+
+        if not request.url.path.startswith("/ws"):
+            global_server_log_store.record_route_log(
+                method=request.method,
+                path=request.url.path,
+                query=str(request.query_params) if request.query_params else "",
+                status_code=response.status_code,
+                duration_ms=duration_ms,
+                client_ip=client_ip,
+                user_agent=user_agent,
+                user_id=user_id,
+            )
+        return response
+
     @app.get("/health", tags=["health"])
     async def health(request: Request) -> dict:
         container: ServiceContainer = request.app.state.services
@@ -89,6 +124,8 @@ def create_app(services: ServiceContainer | None = None) -> FastAPI:
     app.include_router(report_router.router)
     app.include_router(upload_router.router)
     app.include_router(voice_router.router)
+    app.include_router(onboarding_router.router)
+    app.include_router(onboarding_router.admin_router)
     register_error_handlers(app)
     return app
 

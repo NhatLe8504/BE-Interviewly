@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -49,6 +49,7 @@ class User(Base):
     questions_created: Mapped[list["QuestionBank"]] = relationship(back_populates="creator", foreign_keys="[QuestionBank.created_by]")
     moderation_actions: Mapped[list["ModerationLog"]] = relationship(back_populates="admin")
     audit_entries: Mapped[list["AuditLog"]] = relationship(back_populates="user")
+    onboarding: Mapped["OnboardingResponse | None"] = relationship(back_populates="user", uselist=False)
 
 
 class CandidateProfile(Base):
