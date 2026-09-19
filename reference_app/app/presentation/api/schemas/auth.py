@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
@@ -18,6 +18,9 @@ class LoginIn(BaseModel):
 class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    is_new_user: bool = False
+    needs_password: bool = False
+    is_onboarded: bool = False
 
 
 class UserOut(BaseModel):
@@ -26,6 +29,12 @@ class UserOut(BaseModel):
     email: str
     role: str
     status: str
+    is_onboarded: bool = False
+    needs_password: bool = False
+
+
+class SetInitialPasswordIn(BaseModel):
+    password: str = Field(min_length=8, max_length=128)
 
 
 class SendOtpIn(BaseModel):
