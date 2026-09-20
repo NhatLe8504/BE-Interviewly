@@ -131,12 +131,58 @@ class EvaluationPullQueueManager:
             voice_score = round((dur_sec / 5.0) * 15.0, 1)
 
         # Text STAR Score Calculation (35% max) via LLM
-        words = len(text.split())
-        text_score = 0.0
-        if words >= 20:
-            text_score = round(min(1.0, 0.5 + (words / 150.0) * 0.5) * 35.0, 1)
-        elif words > 0:
-            text_score = round((words / 20.0) * 12.0, 1)
+        # Clean prompt headers to extract ACTUAL candidate words
+        clean_text = re.sub(
+            r"•?\s*(Tình huống|Nhiệm vụ|Hành động|Kết quả|Situation|Task|Action|Result)\s*(\([^)]*\))?:?",
+            "",
+            text,
+            flags=re.IGNORECASE,
+        ).strip()
+        actual_words = len(re.findall(r"\w+", clean_text))
+
+        if actual_words == 0:
+            result = {
+                "text_score": 0.0,
+                "text_max": 35.0,
+                "feedback": "Bạn chưa nhập nội dung câu trả lời cho phần tự luận (chỉ có các tiêu đề mẫu gợi ý). Hãy diễn giải chi tiết tình huống thực tế của bạn theo khung STAR để được chấm điểm.",
+                "star_breakdown": {
+                    "situation_score": 0,
+                    "situation_feedback": "Chưa có nội dung tình huống.",
+                    "task_score": 0,
+                    "task_feedback": "Chưa có nội dung nhiệm vụ.",
+                    "action_score": 0,
+                    "action_feedback": "Chưa có nội dung hành động cụ thể.",
+                    "result_score": 0,
+                    "result_feedback": "Chưa có số liệu kết quả đo lường.",
+                },
+                "sample_better_answer": "",
+            }
+            self.update_task_status(task_id, "completed", result=result)
+            return
+
+        if actual_words < 15:
+            text_pct = min(0.25, actual_words / 60.0)
+            text_score = round(text_pct * 35.0, 1)
+            result = {
+                "text_score": text_score,
+                "text_max": 35.0,
+                "feedback": f"Câu trả lời tự luận quá ngắn ({actual_words} từ), chưa đủ thông tin để AI đánh giá chiều sâu năng lực theo khung STAR. Hãy trình bày chi tiết từ 100 - 300 từ.",
+                "star_breakdown": {
+                    "situation_score": 2,
+                    "situation_feedback": "Nội dung quá sơ sài.",
+                    "task_score": 2,
+                    "task_feedback": "Cần nêu rõ vai trò và nhiệm vụ cá nhân.",
+                    "action_score": 2,
+                    "action_feedback": "Cần nêu giải pháp kỹ thuật cụ thể.",
+                    "result_score": 1,
+                    "result_feedback": "Thiếu số liệu đo lường định lượng.",
+                },
+                "sample_better_answer": "",
+            }
+            self.update_task_status(task_id, "completed", result=result)
+            return
+
+        text_score = round(min(1.0, 0.4 + (actual_words / 150.0) * 0.6) * 35.0, 1)
 
         eval_data = None
         if text and container.evaluation_service and getattr(container.evaluation_service, "evaluator", None):
@@ -254,14 +300,76 @@ class EvaluationPullQueueManager:
         role = payload.get("role_name") or "Software Engineer"
         language = payload.get("language") or "vi"
 
-        words = len(text.split())
-        text_score = 0.0
-        if words >= 20:
-            text_score = round(min(1.0, 0.5 + (words / 150.0) * 0.5) * 35.0, 1)
-        elif words > 0:
-            text_score = round((words / 20.0) * 12.0, 1)
+        # Clean prompt headers to extract ACTUAL candidate words
+        clean_text = re.sub(
+            r"•?\s*(Tình huống|Nhiệm vụ|Hành động|Kết quả|Situation|Task|Action|Result)\s*(\([^)]*\))?:?",
+            "",
+            text,
+            flags=re.IGNORECASE,
+        ).strip()
+        actual_words = len(re.findall(r"\w+", clean_text))
+
+        if actual_words == 0:
+            result = {
+                "text_score": 0.0,
+                "text_max": 35.0,
+                "feedback": "Bạn chưa nhập nội dung câu trả lời cho phần tự luận (chỉ có các tiêu đề mẫu gợi ý). Hãy diễn giải chi tiết tình huống thực tế của bạn theo khung STAR để được chấm điểm.",
+                "star_breakdown": {
+                    "situation_score": 0,
+                    "situation_feedback": "Chưa có nội dung tình huống.",
+                    "task_score": 0,
+                    "task_feedback": "Chưa có nội dung nhiệm vụ.",
+                    "action_score": 0,
+                    "action_feedback": "Chưa có nội dung hành động cụ thể.",
+                    "result_score": 0,
+                    "result_feedback": "Chưa có số liệu kết quả đo lường.",
+                },
+                "sample_better_answer": "",
+            }
+            self.update_task_status(task_id, "completed", result=result)
+            return
+
+        if actual_words < 15:
+            text_pct = min(0.25, actual_words / 60.0)
+            text_score = round(text_pct * 35.0, 1)
+            result = {
+                "text_score": text_score,
+                "text_max": 35.0,
+                "feedback": f"Câu trả lời tự luận quá ngắn ({actual_words} từ), chưa đủ thông tin để AI đánh giá chiều sâu năng lực theo khung STAR. Hãy trình bày chi tiết từ 100 - 300 từ.",
+                "star_breakdown": {
+                    "situation_score": 2,
+                    "situation_feedback": "Nội dung quá sơ sài.",
+                    "task_score": 2,
+                    "task_feedback": "Cần nêu rõ vai trò và nhiệm vụ cá nhân.",
+                    "action_score": 2,
+                    "action_feedback": "Cần nêu giải pháp kỹ thuật cụ thể.",
+                    "result_score": 1,
+                    "result_feedback": "Thiếu số liệu đo lường định lượng.",
+                },
+                "sample_better_answer": "",
+            }
+            self.update_task_status(task_id, "completed", result=result)
+            return
+
+        text_score = round(min(1.0, 0.4 + (actual_words / 150.0) * 0.6) * 35.0, 1)
 
         eval_data = None
+        duration_ms = float(delivery.get("durationMs") or 0.0)
+        word_count = int(delivery.get("wordCount") or len(transcript.split()))
+
+        # If user did not record, or spoke 0 words, or audio is under 4 seconds
+        if duration_ms < 4000.0 or (word_count == 0 and not transcript):
+            empty_voice_result = {
+                "voice_score": 0.0,
+                "voice_max": 50.0,
+                "pace_label": "Chưa ghi âm",
+                "feedback": "Chưa thực hiện ghi âm câu trả lời bằng giọng nói (chiếm 50% số điểm của câu hỏi). Hãy sử dụng micro để luyện tập phát biểu trực tiếp.",
+                "strengths": [],
+                "improvements": ["Cần sử dụng micro để trả lời bằng giọng nói để đạt điểm thành phần phát âm."],
+            }
+            self.update_task_status(task_id, "completed", result=empty_voice_result)
+            return
+
         evaluator = getattr(container, "evaluation_service", None) and getattr(container.evaluation_service, "evaluator", None)
         if text and evaluator:
             try:
@@ -322,6 +430,22 @@ class EvaluationPullQueueManager:
         language = payload.get("language") or "vi"
         q_text = payload.get("question_text") or f"Câu hỏi #{qid}"
 
+        duration_ms = float(delivery.get("durationMs") or 0.0)
+        word_count = int(delivery.get("wordCount") or len(transcript.split()))
+
+        # If user did not record, or spoke 0 words, or audio is under 4 seconds
+        if duration_ms < 4000.0 or (word_count == 0 and not transcript):
+            empty_voice_result = {
+                "voice_score": 0.0,
+                "voice_max": 50.0,
+                "pace_label": "Chưa ghi âm",
+                "feedback": "Chưa thực hiện ghi âm câu trả lời bằng giọng nói (chiếm 50% số điểm của câu hỏi). Hãy sử dụng micro để luyện tập phát biểu trực tiếp.",
+                "strengths": [],
+                "improvements": ["Cần sử dụng micro để trả lời bằng giọng nói để đạt điểm thành phần phát âm."],
+            }
+            self.update_task_status(task_id, "completed", result=empty_voice_result)
+            return
+
         evaluator = getattr(container, "evaluation_service", None) and getattr(container.evaluation_service, "evaluator", None)
         if evaluator and hasattr(evaluator, "evaluate_voice_delivery"):
             try:
@@ -365,6 +489,22 @@ class EvaluationPullQueueManager:
         title = payload.get("session_title") or "Bài luyện tập phỏng vấn"
         questions = payload.get("evaluated_questions") or []
         language = payload.get("language") or "vi"
+
+        duration_ms = float(delivery.get("durationMs") or 0.0)
+        word_count = int(delivery.get("wordCount") or len(transcript.split()))
+
+        # If user did not record, or spoke 0 words, or audio is under 4 seconds
+        if duration_ms < 4000.0 or (word_count == 0 and not transcript):
+            empty_voice_result = {
+                "voice_score": 0.0,
+                "voice_max": 50.0,
+                "pace_label": "Chưa ghi âm",
+                "feedback": "Chưa thực hiện ghi âm câu trả lời bằng giọng nói (chiếm 50% số điểm của câu hỏi). Hãy sử dụng micro để luyện tập phát biểu trực tiếp.",
+                "strengths": [],
+                "improvements": ["Cần sử dụng micro để trả lời bằng giọng nói để đạt điểm thành phần phát âm."],
+            }
+            self.update_task_status(task_id, "completed", result=empty_voice_result)
+            return
 
         evaluator = getattr(container, "evaluation_service", None) and getattr(container.evaluation_service, "evaluator", None)
         if evaluator and hasattr(evaluator, "synthesize_overall_performance"):
