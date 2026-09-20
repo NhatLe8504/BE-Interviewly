@@ -334,9 +334,12 @@ class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPo
 BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT CHUỖI JSON HỢP LỆ (KHÔNG KÈM TEXT NGOÀI JSON):
 {{
   "text_score": <float 0.0 - 35.0>,
-  "text_feedback": "<Nhận xét súc tích về bài viết STAR>",
+  "text_feedback": "<Nhận xét súc tích, chi tiết về cấu trúc và giải pháp bài viết STAR>",
+  "feedback": "<Nhận xét giống text_feedback>",
   "text_improvements": ["<Gợi ý cải thiện 1>", "<Gợi ý cải thiện 2>"],
+  "improvements": ["<Gợi ý giống text_improvements>"],
   "text_strengths": ["<Khen ngợi nếu làm tốt>"],
+  "strengths": ["<Khen ngợi giống text_strengths>"],
   "star_breakdown": {{
     "situation_score": <int 0-10>,
     "situation_feedback": "<Nhận xét S>",
