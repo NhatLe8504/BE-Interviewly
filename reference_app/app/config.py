@@ -41,7 +41,8 @@ class Settings:
     sendgrid_from_email: str = DEFAULT_SENDGRID_FROM_EMAIL
     sendgrid_from_name: str = DEFAULT_SENDGRID_FROM_NAME
     openai_api_key: str = ""
-    openai_model: str = "gpt-4o-mini"
+    openai_model: str = "deepseek/deepseek-v4-flash-0731:free"
+    openai_base_url: str = "https://openrouter.ai/api/v1"
     redis_url: str = DEFAULT_REDIS_URL
     cloudinary_cloud_name: str = ""
     cloudinary_api_key: str = ""
@@ -83,8 +84,24 @@ class Settings:
             sendgrid_from_name=os.environ.get(
                 "SENDGRID_FROM_NAME", DEFAULT_SENDGRID_FROM_NAME,
             ),
-            openai_api_key=os.environ.get("OPENAI_API_KEY", ""),
-            openai_model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
+            openai_api_key=(
+                os.environ.get("OPEN_ROUTER_KEY")
+                or os.environ.get("OPENROUTER_API_KEY")
+                or os.environ.get("OPENAI_API_KEY", "")
+            ),
+            openai_model=os.environ.get(
+                "OPENAI_MODEL",
+                os.environ.get("OPENROUTER_MODEL", "deepseek/deepseek-v4-flash-0731:free"),
+            ),
+            openai_base_url=os.environ.get(
+                "OPENAI_BASE_URL",
+                os.environ.get(
+                    "OPENROUTER_BASE_URL",
+                    "https://openrouter.ai/api/v1"
+                    if (os.environ.get("OPEN_ROUTER_KEY") or os.environ.get("OPENROUTER_API_KEY") or (os.environ.get("OPENAI_API_KEY", "").startswith("sk-or-")))
+                    else "https://api.openai.com/v1",
+                ),
+            ),
             redis_url=os.environ.get("REDIS_URL", DEFAULT_REDIS_URL),
             cloudinary_cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME", ""),
             cloudinary_api_key=os.environ.get("CLOUDINARY_API_KEY", ""),

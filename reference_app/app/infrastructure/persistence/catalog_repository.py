@@ -15,6 +15,8 @@ from .models.catalog import JobDomain as JobDomainModel
 from .models.catalog import JobRole as JobRoleModel
 from .models.catalog import QuestionBank as QuestionBankModel
 from .models.catalog import StarGuidanceTemplate as StarGuidanceTemplateModel
+from .models.catalog import PracticeHistoryRecord as PracticeHistoryModel
+from .models.catalog import QuestionSetReview as QuestionSetReviewModel
 from .models.enums import ExperienceLevel, Language, QuestionType, QuestionModerationStatus
 
 
@@ -96,7 +98,7 @@ class SqlAlchemyCatalogRepository:
         return set(session.execute(stmt).scalars().all())
 
     def list_domains(self, session: Any) -> list[JobDomain]:
-        stmt = select(JobDomainModel).order_by(JobDomainModel.domain_name)
+        stmt = select(JobDomainModel).where(JobDomainModel.domain_name.not_like('Software Dev %')).order_by(JobDomainModel.domain_name)
         rows = session.execute(stmt).scalars().all()
         return [_to_domain(r) for r in rows]
 
@@ -305,6 +307,23 @@ class SqlAlchemyCatalogRepository:
         stmt = stmt.where(QuestionBankModel.moderation_status == QuestionModerationStatus.approved)
         return session.execute(stmt).scalar() or 0
 
+
+    def get_questions_by_ids(
+        self, session: Any, question_ids: list[int],
+    ) -> list[QuestionBankItem]:
+        if not question_ids:
+            return []
+        stmt = (
+            select(QuestionBankModel)
+            .where(
+                QuestionBankModel.question_id.in_(question_ids),
+                QuestionBankModel.is_active == True,
+            )
+        )
+        rows = session.execute(stmt).scalars().all()
+        row_dict = {r.question_id: _to_question(r) for r in rows}
+        return [row_dict[qid] for qid in question_ids if qid in row_dict]
+
     def get_question_by_id(
         self, session: Any, question_id: int,
     ) -> QuestionBankItem | None:
@@ -398,3 +417,50 @@ class SqlAlchemyCatalogRepository:
         if row:
             session.delete(row)
             session.commit()
+
+
+    def save_practice_history(
+        self, session: Any, record: PracticeHistoryModel,
+    ) -> PracticeHistoryModel:
+        session.add(record)
+        session.commit()
+        session.refresh(record)
+        return record
+
+    def list_practice_history(
+        self, session: Any, user_id: int | None = None, limit: int = 50,
+    ) -> list[PracticeHistoryModel]:
+        stmt = select(PracticeHistoryModel).order_by(PracticeHistoryModel.created_at.desc())
+        if user_id is not None:
+            stmt = stmt.where(PracticeHistoryModel.user_id == user_id)
+        stmt = stmt.limit(limit)
+        return list(session.execute(stmt).scalars().all())
+
+    def list_question_set_reviews(
+        self, session: Any, set_id: str,
+    ) -> list[QuestionSetReviewModel]:
+        stmt = (
+            select(QuestionSetReviewModel)
+            .where(QuestionSetReviewModel.set_id == str(set_id))
+            .order_by(QuestionSetReviewModel.created_at.desc())
+        )
+        return list(session.execute(stmt).scalars().all())
+
+    def add_question_set_review(
+        self, session: Any, review: QuestionSetReviewModel,
+    ) -> QuestionSetReviewModel:
+        session.add(review)
+        session.commit()
+        session.refresh(review)
+        return review
+
+    def get_question_set_leaderboard(
+        self, session: Any, set_id: str, limit: int = 10,
+    ) -> list[PracticeHistoryModel]:
+        stmt = (
+            select(PracticeHistoryModel)
+            .where(PracticeHistoryModel.source_id == str(set_id))
+            .order_by(PracticeHistoryModel.average_score.desc(), PracticeHistoryModel.duration_seconds.asc())
+            .limit(limit)
+        )
+        return list(session.execute(stmt).scalars().all())

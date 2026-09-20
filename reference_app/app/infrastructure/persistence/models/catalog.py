@@ -149,3 +149,43 @@ class QuestionBank(Base):
     role: Mapped["JobRole | None"] = relationship(back_populates="questions")
     star_template: Mapped["StarGuidanceTemplate | None"] = relationship(back_populates="questions")
     creator: Mapped["User | None"] = relationship(back_populates="questions_created", foreign_keys=[created_by])
+
+
+class PracticeHistoryRecord(Base):
+    __tablename__ = "practice_history"
+
+    history_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=True)
+    session_title: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(50), nullable=False, default="basket")
+    source_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    domain_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    domain_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    role_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    total_questions: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    evaluated_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    average_score: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, default=0.0)
+    quiz_score_avg: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+    text_score_avg: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+    voice_score_avg: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+    duration_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    questions_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+
+
+class QuestionSetReview(Base):
+    __tablename__ = "question_set_reviews"
+
+    review_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    set_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True)
+    user_name: Mapped[str] = mapped_column(String(150), nullable=False, default="Ứng viên")
+    avatar_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_pro: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    rating: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    comment: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
