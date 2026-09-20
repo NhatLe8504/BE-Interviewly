@@ -297,60 +297,76 @@ class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPo
         fillers = [f["text"] for f in delivery_metrics.get("fillers", []) if not f.get("isPossibleFiller")]
         pauses = delivery_metrics.get("longPauseCount", 0)
         reps = delivery_metrics.get("repetitionCount", 0)
+        clean_tr = (transcript or "").strip().lower()
+        word_count = len(clean_tr.split())
 
-        # Quantitative baseline formula (max 50 points)
-        base_score = 30.0
+        # Check for non-answers (candidate states they don't know, tests mic, or gives trivial text)
+        is_non_answer = bool(
+            re.search(r"\b(không biết|chưa biết|không hiểu|chịu|chịu thôi|không có kinh nghiệm|alo|thử mic|test|1 2 3|i don't know|no idea)\b", clean_tr)
+            or word_count < 6
+        )
+
+        if is_non_answer:
+            return {
+                "voice_score": round(min(5.0, max(1.0, word_count * 0.4)), 1),
+                "voice_max": 50.0,
+                "pace_label": f"{int(wpm)} WPM",
+                "feedback": "Ứng viên chưa trả lời vào trọng tâm câu hỏi (phát biểu không biết cách trả lời hoặc thử mic). Cần tự tin chia sẻ trải nghiệm thực tế hoặc suy luận giải pháp.",
+                "strengths": [],
+                "improvements": ["Hãy chủ động đưa ra hướng tiếp cận hoặc suy luận kỹ thuật cho câu hỏi thay vì từ chối trả lời."],
+            }
+
+        # Quantitative Delivery Score (max 25 points)
+        delivery_points = 12.0
         if 110 <= wpm <= 165:
-            base_score += 15.0
+            delivery_points += 8.0
         elif 85 <= wpm < 110:
-            base_score += 10.0
+            delivery_points += 5.0
         elif wpm > 165:
-            base_score += 7.0
-        else:
-            base_score += 4.0
+            delivery_points += 3.0
 
         if pauses <= 1:
-            base_score += 5.0
-        elif pauses <= 3:
-            base_score += 2.0
-        else:
-            base_score -= 2.0
+            delivery_points += 3.0
+        elif pauses > 3:
+            delivery_points -= 2.0
 
-        if filler_count == 0:
-            base_score += 5.0
-        elif filler_count <= 2:
-            base_score += 2.0
+        if filler_count <= 2:
+            delivery_points += 2.0
         elif filler_count > 4:
-            base_score -= min(6.0, filler_count * 1.0)
+            delivery_points -= min(4.0, filler_count * 0.8)
 
-        if reps > 0:
-            base_score -= min(4.0, reps * 1.0)
+        # Baseline Content Score (max 25 points)
+        content_points = min(25.0, 10.0 + (word_count / 80.0) * 15.0)
+        calc_score = round(max(5.0, min(50.0, delivery_points + content_points)), 1)
 
-        calc_score = round(max(10.0, min(50.0, base_score)), 1)
-
-        if not self.api_key or not transcript.strip():
+        if not self.api_key:
             return {
                 "voice_score": calc_score,
                 "voice_max": 50.0,
                 "pace_label": f"{int(wpm)} WPM (" + ("Chuẩn" if 110 <= wpm <= 165 else ("Nói nhanh" if wpm > 165 else "Cần lưu loát hơn")) + ")",
-                "feedback": f"Phát biểu trong {int(duration_sec)}s với tốc độ {int(wpm)} WPM. Phát hiện {filler_count} từ đệm.",
+                "feedback": f"Phát biểu {int(duration_sec)}s với tốc độ {int(wpm)} WPM. Phát hiện {filler_count} từ đệm.",
                 "strengths": [f"Tốc độ phát âm {int(wpm)} WPM tự nhiên."],
-                "improvements": ["Nên hít thở sâu và giảm dùng từ đệm khi chuyển ý."] if filler_count > 2 else ["Duy trì phong thái đĩnh đạc."],
+                "improvements": ["Nên hạn chế các từ đệm khi chuyển ý."] if filler_count > 2 else ["Duy trì phong thái đĩnh đạc."],
             }
 
-        prompt = f"""Bạn là giám khảo phỏng vấn chuyên gia. Đánh giá phát âm & ngữ điệu từ dữ liệu đo lường (Tối đa 50đ):
+        prompt = f"""Bạn là giám khảo phỏng vấn chuyên gia. Đánh giá phần thi NÓI & PHÁT ÂM của ứng viên (Thang điểm 50đ):
 Câu hỏi: {question}
-Nội dung ứng viên nói (STT): {transcript}
-Chỉ số phát âm: Tốc độ={wpm} WPM, Số từ đệm={filler_count} (Từ đệm: {', '.join(fillers[:4]) if fillers else 'Không có'}), Ngắt quãng dài={pauses}, Lặp từ={reps}.
-Quy tắc: 110-165 WPM là chuẩn (15đ); ít từ đệm (10đ); ngắt quãng hợp lý (10đ); nội dung tự tin chuyên nghiệp (15đ).
+Nội dung ứng viên đã phát biểu (STT Transcript): "{transcript}"
+Chỉ số phát âm: Tốc độ={wpm} WPM, Số từ đệm={filler_count} (Từ đệm: {', '.join(fillers[:4]) if fillers else 'Không có'}), Dừng lâu={pauses}, Lặp từ={reps}.
+
+TIÊU CHÍ CHẤM ĐIỂM (50đ):
+1. Nội dung câu trả lời (0 - 25đ):
+   - ĐẶC BIỆT: Nếu ứng viên nói không biết, từ chối trả lời, hoặc nói lạc đề -> Điểm nội dung = 0đ! Tổng điểm không được vượt quá 5/50đ!
+   - Nếu trả lời có nội dung chuyên môn thực tế -> 12 - 25đ.
+2. Kỹ năng phát âm & Ngữ điệu (0 - 25đ): Tốc độ 110-165 WPM là chuẩn (10đ); ít từ đệm (10đ); ngắt quãng tự nhiên (5đ).
 
 Trả về DUY NHẤT một JSON hợp lệ:
 {{
   "voice_score": {calc_score},
   "voice_max": 50.0,
   "pace_label": "{int(wpm)} WPM",
-  "feedback": "Nhận xét khách quan, mang tính xây dựng về giọng nói và tốc độ...",
-  "strengths": ["Điểm mạnh phát âm 1", "Điểm mạnh 2"],
+  "feedback": "Nhận xét khách quan về nội dung phát biểu và phong thái nói...",
+  "strengths": ["Điểm mạnh phát âm 1"],
   "improvements": ["Điểm cần cải thiện 1"]
 }}"""
 
@@ -366,7 +382,7 @@ Trả về DUY NHẤT một JSON hợp lệ:
             "voice_score": calc_score,
             "voice_max": 50.0,
             "pace_label": f"{int(wpm)} WPM",
-            "feedback": f"Phát biểu trong {int(duration_sec)}s với tốc độ {int(wpm)} WPM. Phát hiện {filler_count} từ đệm.",
+            "feedback": f"Phát biểu {int(duration_sec)}s với tốc độ {int(wpm)} WPM.",
             "strengths": [f"Tốc độ phát âm {int(wpm)} WPM tự nhiên."],
             "improvements": ["Duy trì nhịp thở và hạn chế từ đệm."],
         }
