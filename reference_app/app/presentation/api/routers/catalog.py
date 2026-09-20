@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, BackgroundTasks, HTTPException
+import time
 
 from ....application.container import ServiceContainer
 import json
@@ -28,12 +29,16 @@ from ..schemas.catalog import (
     QuestionSetReviewIn,
     QuestionSetReviewOut,
     QuestionSetReviewsPageOut,
+    EvaluationQueueIn,
+    EvaluationQueueOut,
+    EvaluationPullOut,
 )
 from ....infrastructure.persistence.models.catalog import (
     PracticeHistoryRecord as PracticeHistoryModel,
     QuestionSetReview as QuestionSetReviewModel,
 )
 
+from ....infrastructure.queue.eval_queue import eval_pull_queue
 router = APIRouter(prefix="/api/v1/catalog", tags=["catalog"])
 
 
@@ -711,4 +716,47 @@ def submit_question_set_review(
         rating=saved.rating,
         comment=saved.comment,
         created_at=saved.created_at,
+    )
+
+
+@router.post("/evaluations/queue", response_model=EvaluationQueueOut)
+async def enqueue_question_evaluation(
+    data: EvaluationQueueIn,
+    background_tasks: BackgroundTasks,
+    container: ServiceContainer = Depends(get_container),
+) -> EvaluationQueueOut:
+    """
+    Pipeline B: Asynchronous Background Enqueue for Question Evaluation.
+    Calculates instant Quiz score (0ms) and enqueues Text STAR & Voice analysis
+    into Redis / In-Memory Pull MQ without blocking the candidate's workspace.
+    """
+    quiz_score = 15.0 if data.is_quiz_correct is True else 0.0
+
+    # Enqueue task in Pull MQ
+    task_id = eval_pull_queue.enqueue(data.model_dump())
+
+    # Trigger background worker evaluation with LLM & Delivery telemetry
+    background_tasks.add_task(eval_pull_queue.process_task_async, task_id, container)
+
+    return EvaluationQueueOut(
+        task_id=task_id,
+        status="queued",
+        quiz_score=quiz_score,
+        created_at=time.time(),
+    )
+
+
+@router.get("/evaluations/pull/{task_id}", response_model=EvaluationPullOut)
+def pull_evaluation_result(task_id: str) -> EvaluationPullOut:
+    """
+    Client pulls evaluation result with minimal polling backoff.
+    """
+    task = eval_pull_queue.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Evaluation task not found")
+    return EvaluationPullOut(
+        task_id=task_id,
+        status=task.get("status", "queued"),
+        result=task.get("result"),
+        error=task.get("error"),
     )
