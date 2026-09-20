@@ -298,12 +298,16 @@ class QuestionSetReviewsPageOut(BaseModel):
 
 class EvaluationQueueIn(BaseModel):
     question_id: int
+    question_text: str | None = None
+    sample_answer: str | None = None
     quiz_answer: str | None = None
     text_answer: str | None = None
+    transcript: str | None = None
     delivery_metrics: dict[str, Any] | None = None
     language: str = "vi"
     is_quiz_correct: bool | None = None
     audio_duration_seconds: float | None = None
+    role_name: str | None = None
 
 
 class EvaluationQueueOut(BaseModel):
