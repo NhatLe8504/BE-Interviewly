@@ -1044,6 +1044,618 @@
         }
       }
     },
+    "/api/v1/catalog/practice-history": {
+      "post": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Save Practice History",
+        "operationId": "save_practice_history_api_v1_catalog_practice_history_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PracticeHistoryCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PracticeHistoryOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/catalog/practice-history/me": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Get My Practice History",
+        "operationId": "get_my_practice_history_api_v1_catalog_practice_history_me_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PracticeHistoryOut"
+                  },
+                  "title": "Response Get My Practice History Api V1 Catalog Practice History Me Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/question-sets/{set_id}/leaderboard": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Get Question Set Leaderboard",
+        "operationId": "get_question_set_leaderboard_api_v1_catalog_question_sets__set_id__leaderboard_get",
+        "parameters": [
+          {
+            "name": "set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Set Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 20,
+              "minimum": 1,
+              "default": 10,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LeaderboardItemOut"
+                  },
+                  "title": "Response Get Question Set Leaderboard Api V1 Catalog Question Sets  Set Id  Leaderboard Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/question-sets/{set_id}/reviews": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Get Question Set Reviews",
+        "operationId": "get_question_set_reviews_api_v1_catalog_question_sets__set_id__reviews_get",
+        "parameters": [
+          {
+            "name": "set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Set Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestionSetReviewsPageOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Submit Question Set Review",
+        "operationId": "submit_question_set_review_api_v1_catalog_question_sets__set_id__reviews_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Set Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuestionSetReviewIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestionSetReviewOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/evaluations/queue": {
+      "post": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Enqueue Question Evaluation",
+        "description": "Pipeline B: Asynchronous Background Enqueue for Question Evaluation.\nCalculates instant Quiz score (0ms) and enqueues Text STAR & Voice analysis\ninto Redis / In-Memory Pull MQ without blocking the candidate's workspace.",
+        "operationId": "enqueue_question_evaluation_api_v1_catalog_evaluations_queue_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvaluationQueueIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationQueueOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/evaluations/pull/{task_id}": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Pull Evaluation Result",
+        "description": "Client pulls evaluation result with minimal polling backoff.",
+        "operationId": "pull_evaluation_result_api_v1_catalog_evaluations_pull__task_id__get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationPullOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/question-sets": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "List Question Sets",
+        "operationId": "list_question_sets_api_v1_catalog_question_sets_get",
+        "parameters": [
+          {
+            "name": "domain_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Domain Id"
+            }
+          },
+          {
+            "name": "level",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Level"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestionSetPageOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/question-sets/{set_id}": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Get Question Set Detail",
+        "operationId": "get_question_set_detail_api_v1_catalog_question_sets__set_id__get",
+        "parameters": [
+          {
+            "name": "set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Set Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestionSetDetailOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/evaluations/text-queue": {
+      "post": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Enqueue Text Evaluation",
+        "description": "Decoupled Endpoint: Enqueues Written Essay (35% STAR) to Background Pull MQ.",
+        "operationId": "enqueue_text_evaluation_api_v1_catalog_evaluations_text_queue_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TextEvaluationQueueIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationQueueOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/evaluations/voice-queue": {
+      "post": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Enqueue Voice Evaluation",
+        "description": "Decoupled Endpoint: Enqueues Spoken STT Transcript + Telemetry (50%) to Background Pull MQ.",
+        "operationId": "enqueue_voice_evaluation_api_v1_catalog_evaluations_voice_queue_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoiceEvaluationQueueIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationQueueOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/evaluations/overall-synthesis": {
+      "post": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Enqueue Overall Synthesis",
+        "description": "Final Overall Synthesis: Summarizes all N evaluated questions into overarching assessment.",
+        "operationId": "enqueue_overall_synthesis_api_v1_catalog_evaluations_overall_synthesis_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OverallSynthesisIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationQueueOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/users": {
       "get": {
         "tags": [
@@ -4628,6 +5240,155 @@
         "type": "object",
         "title": "DomainUpdateIn"
       },
+      "EvaluationPullOut": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "status"
+        ],
+        "title": "EvaluationPullOut"
+      },
+      "EvaluationQueueIn": {
+        "properties": {
+          "question_id": {
+            "type": "integer",
+            "title": "Question Id"
+          },
+          "quiz_answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiz Answer"
+          },
+          "text_answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text Answer"
+          },
+          "delivery_metrics": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivery Metrics"
+          },
+          "language": {
+            "type": "string",
+            "title": "Language",
+            "default": "vi"
+          },
+          "is_quiz_correct": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Quiz Correct"
+          },
+          "audio_duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Duration Seconds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question_id"
+        ],
+        "title": "EvaluationQueueIn"
+      },
+      "EvaluationQueueOut": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "quiz_score": {
+            "type": "number",
+            "title": "Quiz Score"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "status",
+          "quiz_score"
+        ],
+        "title": "EvaluationQueueOut"
+      },
       "GoogleAuthIn": {
         "properties": {
           "credential": {
@@ -4819,6 +5580,73 @@
           "total_turns"
         ],
         "title": "HistorySessionItemOut"
+      },
+      "LeaderboardItemOut": {
+        "properties": {
+          "rank": {
+            "type": "integer",
+            "title": "Rank"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "User Id"
+          },
+          "user_name": {
+            "type": "string",
+            "title": "User Name"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "is_pro": {
+            "type": "boolean",
+            "title": "Is Pro",
+            "default": false
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "duration_seconds": {
+            "type": "integer",
+            "title": "Duration Seconds"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rank",
+          "user_id",
+          "user_name",
+          "score",
+          "duration_seconds"
+        ],
+        "title": "LeaderboardItemOut"
       },
       "LoginIn": {
         "properties": {
@@ -5159,6 +5987,38 @@
         ],
         "title": "OnboardingSubmitIn"
       },
+      "OverallSynthesisIn": {
+        "properties": {
+          "session_title": {
+            "type": "string",
+            "title": "Session Title"
+          },
+          "total_questions": {
+            "type": "integer",
+            "title": "Total Questions"
+          },
+          "evaluated_questions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Evaluated Questions",
+            "default": []
+          },
+          "language": {
+            "type": "string",
+            "title": "Language",
+            "default": "vi"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_title",
+          "total_questions"
+        ],
+        "title": "OverallSynthesisIn"
+      },
       "PaymentAdminOut": {
         "properties": {
           "transaction_id": {
@@ -5495,6 +6355,292 @@
           "is_active"
         ],
         "title": "PlanOut"
+      },
+      "PracticeHistoryCreateIn": {
+        "properties": {
+          "session_title": {
+            "type": "string",
+            "title": "Session Title"
+          },
+          "source_type": {
+            "type": "string",
+            "title": "Source Type",
+            "default": "basket"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "domain_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain Id"
+          },
+          "domain_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain Name"
+          },
+          "role_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role Name"
+          },
+          "total_questions": {
+            "type": "integer",
+            "title": "Total Questions",
+            "default": 1
+          },
+          "evaluated_count": {
+            "type": "integer",
+            "title": "Evaluated Count",
+            "default": 0
+          },
+          "average_score": {
+            "type": "number",
+            "title": "Average Score",
+            "default": 0.0
+          },
+          "quiz_score_avg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiz Score Avg"
+          },
+          "text_score_avg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text Score Avg"
+          },
+          "voice_score_avg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Score Avg"
+          },
+          "duration_seconds": {
+            "type": "integer",
+            "title": "Duration Seconds",
+            "default": 0
+          },
+          "questions_summary": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Questions Summary",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_title"
+        ],
+        "title": "PracticeHistoryCreateIn"
+      },
+      "PracticeHistoryOut": {
+        "properties": {
+          "history_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "History Id"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "session_title": {
+            "type": "string",
+            "title": "Session Title"
+          },
+          "source_type": {
+            "type": "string",
+            "title": "Source Type"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "domain_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain Id"
+          },
+          "domain_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain Name"
+          },
+          "role_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role Name"
+          },
+          "total_questions": {
+            "type": "integer",
+            "title": "Total Questions"
+          },
+          "evaluated_count": {
+            "type": "integer",
+            "title": "Evaluated Count"
+          },
+          "average_score": {
+            "type": "number",
+            "title": "Average Score"
+          },
+          "quiz_score_avg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiz Score Avg"
+          },
+          "text_score_avg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text Score Avg"
+          },
+          "voice_score_avg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Score Avg"
+          },
+          "duration_seconds": {
+            "type": "integer",
+            "title": "Duration Seconds"
+          },
+          "questions_summary": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Questions Summary",
+            "default": []
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "history_id",
+          "session_title",
+          "source_type",
+          "total_questions",
+          "evaluated_count",
+          "average_score",
+          "duration_seconds"
+        ],
+        "title": "PracticeHistoryOut"
       },
       "ProfileOut": {
         "properties": {
@@ -6018,6 +7164,57 @@
                 "type": "null"
               }
             ]
+          },
+          "quiz_data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiz Data"
+          },
+          "sample_answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Answer"
+          },
+          "follow_up_questions": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Follow Up Questions"
+          },
+          "tips": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tips"
           }
         },
         "type": "object",
@@ -6310,6 +7507,461 @@
           "offset"
         ],
         "title": "QuestionPageOut"
+      },
+      "QuestionSetDetailOut": {
+        "properties": {
+          "set_id": {
+            "type": "integer",
+            "title": "Set Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "domain_id": {
+            "type": "integer",
+            "title": "Domain Id"
+          },
+          "domain_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain Name"
+          },
+          "role_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role Id"
+          },
+          "role_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role Name"
+          },
+          "experience_level": {
+            "type": "string",
+            "title": "Experience Level",
+            "default": "junior"
+          },
+          "tech_stack": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tech Stack",
+            "default": []
+          },
+          "language": {
+            "type": "string",
+            "title": "Language",
+            "default": "vi"
+          },
+          "target_difficulty": {
+            "type": "integer",
+            "title": "Target Difficulty",
+            "default": 3
+          },
+          "estimated_duration_minutes": {
+            "type": "integer",
+            "title": "Estimated Duration Minutes",
+            "default": 20
+          },
+          "is_curated": {
+            "type": "boolean",
+            "title": "Is Curated",
+            "default": true
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
+          },
+          "question_count": {
+            "type": "integer",
+            "title": "Question Count",
+            "default": 0
+          },
+          "practice_count": {
+            "type": "integer",
+            "title": "Practice Count",
+            "default": 0
+          },
+          "avg_score": {
+            "type": "number",
+            "title": "Avg Score",
+            "default": 0.0
+          },
+          "pass_rate": {
+            "type": "number",
+            "title": "Pass Rate",
+            "default": 0.0
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionDetailOut"
+            },
+            "type": "array",
+            "title": "Questions",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "set_id",
+          "title",
+          "description",
+          "domain_id"
+        ],
+        "title": "QuestionSetDetailOut"
+      },
+      "QuestionSetOut": {
+        "properties": {
+          "set_id": {
+            "type": "integer",
+            "title": "Set Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "domain_id": {
+            "type": "integer",
+            "title": "Domain Id"
+          },
+          "domain_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain Name"
+          },
+          "role_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role Id"
+          },
+          "role_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role Name"
+          },
+          "experience_level": {
+            "type": "string",
+            "title": "Experience Level",
+            "default": "junior"
+          },
+          "tech_stack": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tech Stack",
+            "default": []
+          },
+          "language": {
+            "type": "string",
+            "title": "Language",
+            "default": "vi"
+          },
+          "target_difficulty": {
+            "type": "integer",
+            "title": "Target Difficulty",
+            "default": 3
+          },
+          "estimated_duration_minutes": {
+            "type": "integer",
+            "title": "Estimated Duration Minutes",
+            "default": 20
+          },
+          "is_curated": {
+            "type": "boolean",
+            "title": "Is Curated",
+            "default": true
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
+          },
+          "question_count": {
+            "type": "integer",
+            "title": "Question Count",
+            "default": 0
+          },
+          "practice_count": {
+            "type": "integer",
+            "title": "Practice Count",
+            "default": 0
+          },
+          "avg_score": {
+            "type": "number",
+            "title": "Avg Score",
+            "default": 0.0
+          },
+          "pass_rate": {
+            "type": "number",
+            "title": "Pass Rate",
+            "default": 0.0
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "set_id",
+          "title",
+          "description",
+          "domain_id"
+        ],
+        "title": "QuestionSetOut"
+      },
+      "QuestionSetPageOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionSetOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "QuestionSetPageOut"
+      },
+      "QuestionSetReviewIn": {
+        "properties": {
+          "rating": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Rating"
+          },
+          "comment": {
+            "type": "string",
+            "minLength": 2,
+            "title": "Comment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rating",
+          "comment"
+        ],
+        "title": "QuestionSetReviewIn"
+      },
+      "QuestionSetReviewOut": {
+        "properties": {
+          "review_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Review Id"
+          },
+          "set_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Set Id"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "user_name": {
+            "type": "string",
+            "title": "User Name"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "is_pro": {
+            "type": "boolean",
+            "title": "Is Pro",
+            "default": false
+          },
+          "rating": {
+            "type": "integer",
+            "title": "Rating"
+          },
+          "comment": {
+            "type": "string",
+            "title": "Comment"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "review_id",
+          "set_id",
+          "user_name",
+          "rating",
+          "comment"
+        ],
+        "title": "QuestionSetReviewOut"
+      },
+      "QuestionSetReviewsPageOut": {
+        "properties": {
+          "set_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Set Id"
+          },
+          "average_rating": {
+            "type": "number",
+            "title": "Average Rating"
+          },
+          "total_reviews": {
+            "type": "integer",
+            "title": "Total Reviews"
+          },
+          "reviews": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionSetReviewOut"
+            },
+            "type": "array",
+            "title": "Reviews"
+          }
+        },
+        "type": "object",
+        "required": [
+          "set_id",
+          "average_rating",
+          "total_reviews",
+          "reviews"
+        ],
+        "title": "QuestionSetReviewsPageOut"
       },
       "QuestionUpdateIn": {
         "properties": {
@@ -7569,6 +9221,46 @@
         ],
         "title": "SystemStatsOut"
       },
+      "TextEvaluationQueueIn": {
+        "properties": {
+          "question_id": {
+            "type": "integer",
+            "title": "Question Id"
+          },
+          "question_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Text"
+          },
+          "answer_text": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Answer Text"
+          },
+          "role_name": {
+            "type": "string",
+            "title": "Role Name",
+            "default": "Software Engineer"
+          },
+          "language": {
+            "type": "string",
+            "title": "Language",
+            "default": "vi"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question_id",
+          "answer_text"
+        ],
+        "title": "TextEvaluationQueueIn"
+      },
       "TokenOut": {
         "properties": {
           "access_token": {
@@ -8322,6 +10014,46 @@
           "transaction_ref"
         ],
         "title": "VerifyPaymentOut"
+      },
+      "VoiceEvaluationQueueIn": {
+        "properties": {
+          "question_id": {
+            "type": "integer",
+            "title": "Question Id"
+          },
+          "question_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Text"
+          },
+          "transcript": {
+            "type": "string",
+            "title": "Transcript",
+            "default": ""
+          },
+          "delivery_metrics": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Delivery Metrics"
+          },
+          "language": {
+            "type": "string",
+            "title": "Language",
+            "default": "vi"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question_id",
+          "delivery_metrics"
+        ],
+        "title": "VoiceEvaluationQueueIn"
       },
       "WeakPointRecommendationOut": {
         "properties": {
