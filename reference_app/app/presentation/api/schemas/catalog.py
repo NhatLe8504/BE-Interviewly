@@ -255,3 +255,26 @@ class QuestionSetReviewsPageOut(BaseModel):
     average_rating: float
     total_reviews: int
     reviews: list[QuestionSetReviewOut]
+
+class EvaluationQueueIn(BaseModel):
+    question_id: int
+    quiz_answer: str | None = None
+    text_answer: str | None = None
+    delivery_metrics: dict[str, Any] | None = None
+    language: str = "vi"
+    is_quiz_correct: bool | None = None
+    audio_duration_seconds: float | None = None
+
+
+class EvaluationQueueOut(BaseModel):
+    task_id: str
+    status: str
+    quiz_score: float
+    created_at: float | None = None
+
+
+class EvaluationPullOut(BaseModel):
+    task_id: str
+    status: str
+    result: dict[str, Any] | None = None
+    error: str | None = None
