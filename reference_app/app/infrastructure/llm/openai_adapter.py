@@ -282,3 +282,150 @@ class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPo
                                 yield delta
                         except Exception:
                             continue
+
+
+    def evaluate_voice_delivery(
+        self,
+        question: str,
+        transcript: str,
+        delivery_metrics: dict[str, Any],
+        language: str = "vi",
+    ) -> dict[str, Any]:
+        duration_sec = delivery_metrics.get("durationMs", 0) / 1000.0
+        wpm = delivery_metrics.get("activeSpeechWpm", 0)
+        filler_count = delivery_metrics.get("fillerCount", 0)
+        fillers = [f["text"] for f in delivery_metrics.get("fillers", []) if not f.get("isPossibleFiller")]
+        pauses = delivery_metrics.get("longPauseCount", 0)
+        reps = delivery_metrics.get("repetitionCount", 0)
+
+        # Quantitative baseline formula (max 50 points)
+        base_score = 30.0
+        if 110 <= wpm <= 165:
+            base_score += 15.0
+        elif 85 <= wpm < 110:
+            base_score += 10.0
+        elif wpm > 165:
+            base_score += 7.0
+        else:
+            base_score += 4.0
+
+        if pauses <= 1:
+            base_score += 5.0
+        elif pauses <= 3:
+            base_score += 2.0
+        else:
+            base_score -= 2.0
+
+        if filler_count == 0:
+            base_score += 5.0
+        elif filler_count <= 2:
+            base_score += 2.0
+        elif filler_count > 4:
+            base_score -= min(6.0, filler_count * 1.0)
+
+        if reps > 0:
+            base_score -= min(4.0, reps * 1.0)
+
+        calc_score = round(max(10.0, min(50.0, base_score)), 1)
+
+        if not self.api_key or not transcript.strip():
+            return {
+                "voice_score": calc_score,
+                "voice_max": 50.0,
+                "pace_label": f"{int(wpm)} WPM (" + ("Chuẩn" if 110 <= wpm <= 165 else ("Nói nhanh" if wpm > 165 else "Cần lưu loát hơn")) + ")",
+                "feedback": f"Phát biểu trong {int(duration_sec)}s với tốc độ {int(wpm)} WPM. Phát hiện {filler_count} từ đệm.",
+                "strengths": [f"Tốc độ phát âm {int(wpm)} WPM tự nhiên."],
+                "improvements": ["Nên hít thở sâu và giảm dùng từ đệm khi chuyển ý."] if filler_count > 2 else ["Duy trì phong thái đĩnh đạc."],
+            }
+
+        prompt = f"""Bạn là giám khảo phỏng vấn chuyên gia. Đánh giá phát âm & ngữ điệu từ dữ liệu đo lường (Tối đa 50đ):
+Câu hỏi: {question}
+Nội dung ứng viên nói (STT): {transcript}
+Chỉ số phát âm: Tốc độ={wpm} WPM, Số từ đệm={filler_count} (Từ đệm: {', '.join(fillers[:4]) if fillers else 'Không có'}), Ngắt quãng dài={pauses}, Lặp từ={reps}.
+Quy tắc: 110-165 WPM là chuẩn (15đ); ít từ đệm (10đ); ngắt quãng hợp lý (10đ); nội dung tự tin chuyên nghiệp (15đ).
+
+Trả về DUY NHẤT một JSON hợp lệ:
+{{
+  "voice_score": {calc_score},
+  "voice_max": 50.0,
+  "pace_label": "{int(wpm)} WPM",
+  "feedback": "Nhận xét khách quan, mang tính xây dựng về giọng nói và tốc độ...",
+  "strengths": ["Điểm mạnh phát âm 1", "Điểm mạnh 2"],
+  "improvements": ["Điểm cần cải thiện 1"]
+}}"""
+
+        try:
+            resp = self._chat_completion([{"role": "user", "content": prompt}])
+            data = _extract_json_data(resp)
+            if data and "voice_score" in data:
+                return data
+        except Exception:
+            pass
+
+        return {
+            "voice_score": calc_score,
+            "voice_max": 50.0,
+            "pace_label": f"{int(wpm)} WPM",
+            "feedback": f"Phát biểu trong {int(duration_sec)}s với tốc độ {int(wpm)} WPM. Phát hiện {filler_count} từ đệm.",
+            "strengths": [f"Tốc độ phát âm {int(wpm)} WPM tự nhiên."],
+            "improvements": ["Duy trì nhịp thở và hạn chế từ đệm."],
+        }
+
+    def synthesize_overall_performance(
+        self,
+        session_title: str,
+        evaluated_questions: list[dict[str, Any]],
+        language: str = "vi",
+    ) -> dict[str, Any]:
+        scores = [float(q.get("total_score") or q.get("score") or 0.0) for q in evaluated_questions]
+        avg_score = round(sum(scores) / len(scores), 1) if scores else 0.0
+
+        if not self.api_key:
+            return {
+                "session_title": session_title,
+                "average_score": avg_score,
+                "overall_feedback": f"Bạn đã hoàn thành tốt bài luyện tập '{session_title}' với điểm trung bình {avg_score}/100đ. Phong thái trả lời tự tin, nắm chắc kiến thức chuyên môn.",
+                "strengths": ["Tư duy logic theo cấu trúc STAR mạch lạc.", "Hoàn thành đầy đủ các hình thức kiểm tra."],
+                "improvements": ["Bổ sung thêm số liệu định lượng về tác động dự án.", "Rèn luyện phát âm lưu loát hơn."],
+                "career_readiness_verdict": "Sẵn sàng phỏng vấn (Interview Ready)" if avg_score >= 70 else "Cần rèn luyện thêm",
+            }
+
+        summary_lines = []
+        for idx, q in enumerate(evaluated_questions, 1):
+            summary_lines.append(
+                f"Câu {idx}: {q.get('question_text', '')} | Điểm: {q.get('total_score', q.get('score', 0))}/100 "
+                f"(Quiz: {q.get('quiz_score', 0)}, Text: {q.get('text_score', 0)}, Voice: {q.get('voice_score', 0)})"
+            )
+
+        prompt = f"""Bạn là Huấn luyện viên Phỏng vấn AI cao cấp (Interview Coach). Hãy tổng kết bài thi phỏng vấn:
+Bài thi: {session_title}
+Điểm trung bình: {avg_score}/100
+Chi tiết từng câu:
+{chr(10).join(summary_lines)}
+
+Trả về DUY NHẤT một JSON hợp lệ:
+{{
+  "session_title": "{session_title}",
+  "average_score": {avg_score},
+  "overall_feedback": "Nhận xét tổng thể 2-3 câu về năng lực chuyên môn, phong thái và độ sẵn sàng nhận việc...",
+  "strengths": ["Điểm mạnh nổi bật 1", "Điểm mạnh nổi bật 2"],
+  "improvements": ["Điểm cần rèn luyện thêm 1", "Điểm cần rèn luyện thêm 2"],
+  "career_readiness_verdict": "Sẵn sàng nhận việc (Job Ready)"
+}}"""
+
+        try:
+            resp = self._chat_completion([{"role": "user", "content": prompt}])
+            data = _extract_json_data(resp)
+            if data and "overall_feedback" in data:
+                return data
+        except Exception:
+            pass
+
+        return {
+            "session_title": session_title,
+            "average_score": avg_score,
+            "overall_feedback": f"Bạn đã hoàn thành bài luyện tập '{session_title}' với điểm trung bình {avg_score}/100đ.",
+            "strengths": ["Cấu trúc trả lời mạch lạc."],
+            "improvements": ["Bổ sung số liệu định lượng vào kết quả."],
+            "career_readiness_verdict": "Đạt chuẩn phỏng vấn" if avg_score >= 70 else "Cần rèn luyện thêm",
+        }

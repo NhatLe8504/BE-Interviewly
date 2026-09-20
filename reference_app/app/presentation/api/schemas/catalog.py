@@ -318,3 +318,35 @@ class EvaluationPullOut(BaseModel):
     status: str
     result: dict[str, Any] | None = None
     error: str | None = None
+
+
+class TextEvaluationQueueIn(BaseModel):
+    question_id: int
+    question_text: str | None = None
+    answer_text: str = Field(..., min_length=1)
+    role_name: str = "Software Engineer"
+    language: str = "vi"
+
+
+class VoiceEvaluationQueueIn(BaseModel):
+    question_id: int
+    question_text: str | None = None
+    transcript: str = ""
+    delivery_metrics: dict[str, Any]
+    language: str = "vi"
+
+
+class OverallSynthesisIn(BaseModel):
+    session_title: str
+    total_questions: int
+    evaluated_questions: list[dict[str, Any]] = []
+    language: str = "vi"
+
+
+class OverallSynthesisOut(BaseModel):
+    session_title: str
+    average_score: float
+    overall_feedback: str
+    strengths: list[str]
+    improvements: list[str]
+    career_readiness_verdict: str

@@ -35,6 +35,9 @@ from ..schemas.catalog import (
     EvaluationQueueIn,
     EvaluationQueueOut,
     EvaluationPullOut,
+    TextEvaluationQueueIn,
+    VoiceEvaluationQueueIn,
+    OverallSynthesisIn,
 )
 from ....infrastructure.persistence.models.catalog import (
     QuestionBank as QuestionBankModel,
@@ -911,4 +914,64 @@ def get_question_set_detail(
         pass_rate=float(s.pass_rate),
         created_at=s.created_at,
         questions=q_outs,
+    )
+
+
+@router.post("/evaluations/text-queue", response_model=EvaluationQueueOut)
+async def enqueue_text_evaluation(
+    data: TextEvaluationQueueIn,
+    background_tasks: BackgroundTasks,
+    container: ServiceContainer = Depends(get_container),
+) -> EvaluationQueueOut:
+    """
+    Decoupled Endpoint: Enqueues Written Essay (35% STAR) to Background Pull MQ.
+    """
+    task_id = eval_pull_queue.enqueue(data.model_dump())
+    background_tasks.add_task(eval_pull_queue.process_text_task_async, task_id, container)
+
+    return EvaluationQueueOut(
+        task_id=task_id,
+        status="queued",
+        quiz_score=0.0,
+        created_at=time.time(),
+    )
+
+
+@router.post("/evaluations/voice-queue", response_model=EvaluationQueueOut)
+async def enqueue_voice_evaluation(
+    data: VoiceEvaluationQueueIn,
+    background_tasks: BackgroundTasks,
+    container: ServiceContainer = Depends(get_container),
+) -> EvaluationQueueOut:
+    """
+    Decoupled Endpoint: Enqueues Spoken STT Transcript + Telemetry (50%) to Background Pull MQ.
+    """
+    task_id = eval_pull_queue.enqueue(data.model_dump())
+    background_tasks.add_task(eval_pull_queue.process_voice_task_async, task_id, container)
+
+    return EvaluationQueueOut(
+        task_id=task_id,
+        status="queued",
+        quiz_score=0.0,
+        created_at=time.time(),
+    )
+
+
+@router.post("/evaluations/overall-synthesis", response_model=EvaluationQueueOut)
+async def enqueue_overall_synthesis(
+    data: OverallSynthesisIn,
+    background_tasks: BackgroundTasks,
+    container: ServiceContainer = Depends(get_container),
+) -> EvaluationQueueOut:
+    """
+    Final Overall Synthesis: Summarizes all N evaluated questions into overarching assessment.
+    """
+    task_id = eval_pull_queue.enqueue(data.model_dump())
+    background_tasks.add_task(eval_pull_queue.process_synthesis_task_async, task_id, container)
+
+    return EvaluationQueueOut(
+        task_id=task_id,
+        status="queued",
+        quiz_score=0.0,
+        created_at=time.time(),
     )
