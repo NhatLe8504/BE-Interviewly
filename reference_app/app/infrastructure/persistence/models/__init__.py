@@ -7,7 +7,7 @@ from . import system as system
 from . import user as user
 from . import onboarding as onboarding
 from .billing import PaymentTransaction, SubscriptionPlan, UserSubscription
-from .catalog import JobDomain, JobRole, QuestionBank, StarGuidanceTemplate, PracticeHistoryRecord, QuestionSetReview
+from .catalog import JobDomain, JobRole, QuestionBank, StarGuidanceTemplate, PracticeHistoryRecord, QuestionSetReview, QuestionSet, QuestionSetItem
 from .session import (
     AnswerEvaluation,
     InterviewSession,
@@ -30,6 +30,8 @@ __all__ = [
     "JobRole",
     "PracticeHistoryRecord",
     "QuestionSetReview",
+    "QuestionSet",
+    "QuestionSetItem",
     "ModerationLog",
     "PaymentTransaction",
     "PdfReport",

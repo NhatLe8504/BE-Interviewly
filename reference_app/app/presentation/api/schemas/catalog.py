@@ -89,6 +89,10 @@ class QuestionOut(BaseModel):
 
 class QuestionDetailOut(QuestionOut):
     star_template: StarTemplateOut | None = None
+    quiz_data: dict[str, Any] | None = None
+    sample_answer: str | None = None
+    follow_up_questions: list[str] | None = None
+    tips: list[str] | None = None
 
 
 class QuestionCreateIn(BaseModel):
@@ -123,6 +127,42 @@ class QuestionPageOut(BaseModel):
     limit: int
     offset: int
 
+
+
+
+class QuestionSetOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    set_id: int
+    title: str
+    description: str
+    domain_id: int
+    domain_name: str | None = None
+    role_id: int | None = None
+    role_name: str | None = None
+    experience_level: str = "junior"
+    tech_stack: list[str] = []
+    language: str = "vi"
+    target_difficulty: int = 3
+    estimated_duration_minutes: int = 20
+    is_curated: bool = True
+    is_active: bool = True
+    question_count: int = 0
+    practice_count: int = 0
+    avg_score: float = 0.0
+    pass_rate: float = 0.0
+    created_at: datetime | str | None = None
+
+
+class QuestionSetDetailOut(QuestionSetOut):
+    questions: list[QuestionDetailOut] = []
+
+
+class QuestionSetPageOut(BaseModel):
+    items: list[QuestionSetOut]
+    total: int
+    limit: int
+    offset: int
 
 class QuestionBatchIn(BaseModel):
     ids: list[int]
