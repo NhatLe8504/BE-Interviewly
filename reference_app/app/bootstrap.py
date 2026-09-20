@@ -202,6 +202,7 @@ def build_services(
     llm_adapter = OpenAILLMAdapter(
         api_key=settings.openai_api_key,
         model=settings.openai_model,
+        base_url=settings.openai_base_url,
     )
     session_repo = SqlAlchemySessionRepository()
     eval_repo = SqlAlchemyEvaluationRepository()

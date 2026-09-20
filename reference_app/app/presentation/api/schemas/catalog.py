@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Any
 
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
@@ -72,7 +73,9 @@ class QuestionOut(BaseModel):
 
     question_id: int
     domain_id: int
+    domain_name: str | None = None
     role_id: int | None = None
+    role_name: str | None = None
     experience_level: str | None = None
     language: str = "vi"
     question_type: str
@@ -119,3 +122,136 @@ class QuestionPageOut(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class QuestionBatchIn(BaseModel):
+    ids: list[int]
+
+
+class QuestionEvaluateIn(BaseModel):
+    mode: str = Field("all", pattern="^(quiz|text|voice|all)$")
+    answer_text: str | None = None
+    selected_option_id: str | None = None
+    is_quiz_correct: bool | None = None
+    language: str = Field("vi", pattern="^(vi|en)$")
+    audio_duration_seconds: float | None = None
+
+
+class StarBreakdownOut(BaseModel):
+    situation_score: int = 8
+    situation_feedback: str = ""
+    task_score: int = 8
+    task_feedback: str = ""
+    action_score: int = 8
+    action_feedback: str = ""
+    result_score: int = 8
+    result_feedback: str = ""
+
+
+class RubricScoreItemOut(BaseModel):
+    criterion_id: str
+    criterion_name: str
+    score: int
+    max_score: int = 10
+    level_label: str
+    feedback: str
+
+
+
+class MultiModalBreakdownOut(BaseModel):
+    quiz_score: float = 0.0
+    quiz_max: float = 15.0
+    text_score: float = 0.0
+    text_max: float = 35.0
+    voice_score: float = 0.0
+    voice_max: float = 50.0
+    total_score: float = 0.0
+
+class QuestionEvaluationResultOut(BaseModel):
+    score: int
+    passed: bool
+    general_feedback: str
+    star_breakdown: StarBreakdownOut
+    rubric_scores: list[RubricScoreItemOut]
+    strengths: list[str]
+    improvements: list[str]
+    modal_breakdown: MultiModalBreakdownOut | None = None
+
+
+
+class PracticeHistoryCreateIn(BaseModel):
+    session_title: str
+    source_type: str = "basket"  # "set" | "basket" | "single"
+    source_id: str | None = None
+    domain_id: int | None = None
+    domain_name: str | None = None
+    role_name: str | None = None
+    total_questions: int = 1
+    evaluated_count: int = 0
+    average_score: float = 0.0
+    quiz_score_avg: float | None = None
+    text_score_avg: float | None = None
+    voice_score_avg: float | None = None
+    duration_seconds: int = 0
+    questions_summary: list[dict[str, Any]] = []
+
+
+class PracticeHistoryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    history_id: int | str
+    user_id: int | None = None
+    session_title: str
+    source_type: str
+    source_id: str | None = None
+    domain_id: int | None = None
+    domain_name: str | None = None
+    role_name: str | None = None
+    total_questions: int
+    evaluated_count: int
+    average_score: float
+    quiz_score_avg: float | None = None
+    text_score_avg: float | None = None
+    voice_score_avg: float | None = None
+    duration_seconds: int
+    questions_summary: list[dict[str, Any]] = []
+    created_at: datetime | str | None = None
+
+
+class LeaderboardItemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    rank: int
+    user_id: int | str
+    user_name: str
+    avatar_url: str | None = None
+    is_pro: bool = False
+    score: float
+    duration_seconds: int
+    completed_at: str | None = None
+
+
+class QuestionSetReviewIn(BaseModel):
+    rating: int = Field(..., ge=1, le=5)
+    comment: str = Field(..., min_length=2)
+
+
+class QuestionSetReviewOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    review_id: int | str
+    set_id: int | str
+    user_id: int | None = None
+    user_name: str
+    avatar_url: str | None = None
+    is_pro: bool = False
+    rating: int
+    comment: str
+    created_at: datetime | str | None = None
+
+
+class QuestionSetReviewsPageOut(BaseModel):
+    set_id: int | str
+    average_rating: float
+    total_reviews: int
+    reviews: list[QuestionSetReviewOut]

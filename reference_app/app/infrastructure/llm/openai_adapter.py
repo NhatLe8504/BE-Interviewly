@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from typing import AsyncIterator
 import httpx
 
@@ -16,6 +17,28 @@ from .prompt_templates import (
 )
 
 
+
+def _extract_json_data(text: str) -> dict:
+    if not text:
+        return {}
+    clean = text.strip()
+    try:
+        return json.loads(clean)
+    except Exception:
+        pass
+    m = re.search(r"`(?:json)?\s*(\{.*?\})\s*`", clean, re.DOTALL)
+    if m:
+        try:
+            return json.loads(m.group(1))
+        except Exception:
+            pass
+    m = re.search(r"(\{.*\})", clean, re.DOTALL)
+    if m:
+        try:
+            return json.loads(m.group(1))
+        except Exception:
+            pass
+    return {}
 class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPort):
     def __init__(
         self,
@@ -87,6 +110,8 @@ class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPo
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
+            "HTTP-Referer": "https://interviewly.ai",
+            "X-Title": "Interviewly AI Coach",
         }
         messages = []
         if system_prompt:
@@ -185,21 +210,30 @@ class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPo
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
+            "HTTP-Referer": "https://interviewly.ai",
+            "X-Title": "Interviewly AI Coach",
         }
         payload = {
             "model": self.model,
             "messages": messages,
             "temperature": 0.7,
         }
-        if response_format:
+        if response_format and "openrouter.ai" not in self.base_url:
             payload["response_format"] = response_format
 
-        with httpx.Client(timeout=30.0) as client:
+        with httpx.Client(timeout=45.0) as client:
             resp = client.post(
                 f"{self.base_url}/chat/completions",
                 headers=headers,
                 json=payload,
             )
+            if resp.status_code == 400 and "response_format" in payload:
+                del payload["response_format"]
+                resp = client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers=headers,
+                    json=payload,
+                )
             resp.raise_for_status()
             data = resp.json()
             return data["choices"][0]["message"]["content"].strip()
