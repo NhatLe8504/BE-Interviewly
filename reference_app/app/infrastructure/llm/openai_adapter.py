@@ -47,15 +47,8 @@ class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPo
         base_url: str = "https://api.groq.com/openai/v1",
     ) -> None:
         self.api_key = api_key
-        self.model = model
-        if api_key.startswith("gsk_"):
-            self.base_url = "https://api.groq.com/openai/v1"
-            if not model or "deepseek" in model:
-                self.model = "openai/gpt-oss-120b"
-        elif api_key.startswith("sk-or-") or "deepseek" in model:
-            self.base_url = "https://openrouter.ai/api/v1"
-        else:
-            self.base_url = base_url.rstrip("/")
+        self.model = model or "openai/gpt-oss-120b"
+        self.base_url = "https://api.groq.com/openai/v1" if api_key.startswith("gsk_") else base_url.rstrip("/")
 
     def generate_first_question(
         self, role: str, level: str, language: str = "vi",
@@ -219,16 +212,14 @@ class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPo
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "HTTP-Referer": "https://interviewly.ai",
-            "X-Title": "Interviewly AI Coach",
         }
         payload = {
-            "model": "openai/gpt-oss-120b" if self.api_key.startswith("gsk_") and ("deepseek" in self.model or not self.model) else (self.model.replace(":free", "") if "deepseek-v4-flash-0731" in self.model else self.model),
+            "model": "openai/gpt-oss-120b" if self.api_key.startswith("gsk_") else self.model,
             "messages": messages,
             "temperature": 0.1,
-            "max_tokens": 2000,
+            "max_tokens": 1200,
         }
-        if response_format and "openrouter.ai" not in self.base_url:
+        if response_format:
             payload["response_format"] = response_format
 
         with httpx.Client(timeout=45.0) as client:

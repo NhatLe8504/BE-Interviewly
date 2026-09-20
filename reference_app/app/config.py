@@ -52,10 +52,7 @@ DEFAULT_GROQ_KEY = "dummy-groq-key-configured-in-env"
 DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
 DEFAULT_GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 
-# OpenRouter DeepSeek Configuration
-DEFAULT_OPENROUTER_KEY = "dummy-openrouter-key-configured-in-env"
-DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash-0731"
-DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
 
 # xGate Payment Gateway Config
 DEFAULT_XGATE_API_KEY = "xgate_86c34581a1efc75cf97ab04f51eae3845030"
@@ -76,8 +73,8 @@ class Settings:
     sendgrid_from_email: str = DEFAULT_SENDGRID_FROM_EMAIL
     sendgrid_from_name: str = DEFAULT_SENDGRID_FROM_NAME
     openai_api_key: str = ""
-    openai_model: str = "deepseek/deepseek-v4-flash-0731:free"
-    openai_base_url: str = "https://openrouter.ai/api/v1"
+    openai_model: str = "openai/gpt-oss-120b"
+    openai_base_url: str = "https://api.groq.com/openai/v1"
     redis_url: str = DEFAULT_REDIS_URL
     cloudinary_cloud_name: str = ""
     cloudinary_api_key: str = ""
@@ -122,24 +119,10 @@ class Settings:
             openai_api_key=(
                 os.environ.get("GROQ_KEY")
                 or os.environ.get("GROQ_API_KEY")
-                or os.environ.get("OPEN_ROUTER_KEY")
-                or os.environ.get("OPENROUTER_API_KEY")
                 or DEFAULT_GROQ_KEY
             ),
-            openai_model=os.environ.get(
-                "GROQ_MODEL",
-                os.environ.get(
-                    "OPENROUTER_MODEL",
-                    DEFAULT_GROQ_MODEL if (os.environ.get("GROQ_KEY") or os.environ.get("GROQ_API_KEY") or DEFAULT_GROQ_KEY) else DEFAULT_OPENROUTER_MODEL,
-                ),
-            ),
-            openai_base_url=os.environ.get(
-                "GROQ_BASE_URL",
-                os.environ.get(
-                    "OPENROUTER_BASE_URL",
-                    DEFAULT_GROQ_BASE_URL if (os.environ.get("GROQ_KEY") or os.environ.get("GROQ_API_KEY") or DEFAULT_GROQ_KEY) else DEFAULT_OPENROUTER_BASE_URL,
-                ),
-            ),
+            openai_model=os.environ.get("GROQ_MODEL", DEFAULT_GROQ_MODEL),
+            openai_base_url=os.environ.get("GROQ_BASE_URL", DEFAULT_GROQ_BASE_URL),
             redis_url=os.environ.get("REDIS_URL", DEFAULT_REDIS_URL),
             cloudinary_cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME", ""),
             cloudinary_api_key=os.environ.get("CLOUDINARY_API_KEY", ""),
