@@ -84,6 +84,87 @@ class EvaluationPullQueueManager:
                 pass
         self._memory_store[task_id] = task
 
+
+    async def process_task_async(self, task_id: str, container: Any) -> None:
+        """
+        Unified Multi-Modal Evaluation Worker:
+        Evaluates Written STAR Essay and Voice Delivery in 1 single LLM call,
+        incorporating benchmark sample_answer and real speech delivery metrics.
+        """
+        task = self.get_task(task_id)
+        if not task:
+            return
+
+        self.update_task_status(task_id, "processing")
+        payload = task.get("payload", {})
+        qid = payload.get("question_id")
+        q_text = payload.get("question_text") or f"Câu hỏi #{qid}"
+        sample_answer = payload.get("sample_answer") or ""
+        text_answer = (payload.get("text_answer") or "").strip()
+        transcript = (payload.get("transcript") or "").strip()
+        delivery = payload.get("delivery_metrics") or {}
+        role = payload.get("role_name") or "Software Engineer"
+        language = payload.get("language") or "vi"
+        is_quiz_correct = payload.get("is_quiz_correct")
+        quiz_score = 15.0 if is_quiz_correct is True else 0.0
+
+        evaluator = getattr(container, "evaluation_service", None) and getattr(container.evaluation_service, "evaluator", None)
+
+        llm_res = None
+        if evaluator and hasattr(evaluator, "evaluate_multi_modal_question"):
+            try:
+                llm_res = evaluator.evaluate_multi_modal_question(
+                    question_text=q_text,
+                    sample_answer=sample_answer,
+                    text_answer=text_answer,
+                    transcript=transcript,
+                    delivery_metrics=delivery,
+                    role_name=role,
+                    level="junior",
+                    language=language,
+                )
+            except Exception as err:
+                print("Multi-modal evaluation worker error:", err)
+
+        if not llm_res:
+            llm_res = {}
+
+        text_score = float(llm_res.get("text_score", 0.0))
+        voice_score = float(llm_res.get("voice_score", 0.0))
+        total_score = min(100, int(round(quiz_score + text_score + voice_score)))
+        passed = total_score >= 70
+
+        result = {
+            "score": total_score,
+            "passed": passed,
+            "general_feedback": llm_res.get("text_feedback", ""),
+            "text_score": text_score,
+            "text_max": 35.0,
+            "text_feedback": llm_res.get("text_feedback", ""),
+            "text_improvements": llm_res.get("text_improvements", []),
+            "text_strengths": llm_res.get("text_strengths", []),
+            "star_breakdown": llm_res.get("star_breakdown", {}),
+            "voice_score": voice_score,
+            "voice_max": 50.0,
+            "voice_feedback": llm_res.get("voice_feedback", ""),
+            "voice_improvements": llm_res.get("voice_improvements", []),
+            "voice_strengths": llm_res.get("voice_strengths", []),
+            "sample_better_answer": llm_res.get("sample_better_answer", ""),
+            "modal_breakdown": {
+                "quiz_score": quiz_score,
+                "quiz_max": 15.0,
+                "text_score": text_score,
+                "text_max": 35.0,
+                "voice_score": voice_score,
+                "voice_max": 50.0,
+                "total_score": float(total_score),
+            },
+            "transcript": transcript,
+            "delivery_metrics": delivery,
+        }
+
+        self.update_task_status(task_id, "completed", result=result)
+
     async def process_text_task_async(self, task_id: str, container: Any) -> None:
         """
         Background Worker for Written STAR Essay Evaluation (35% max).

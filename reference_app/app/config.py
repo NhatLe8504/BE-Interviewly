@@ -3,6 +3,29 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+
+def _load_env_file() -> None:
+    for candidate in [
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"),
+        os.path.join(os.getcwd(), ".env"),
+    ]:
+        if os.path.exists(candidate):
+            try:
+                with open(candidate, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            k, v = line.split("=", 1)
+                            k, v = k.strip(), v.strip()
+                            if k:
+                                os.environ[k] = v
+            except Exception:
+                pass
+
+
+_load_env_file()
+from dataclasses import dataclass
+
 API_TITLE = "BE-Interviewly"
 API_VERSION = "0.1.0"
 API_DESCRIPTION = "BE Interview Coach API."
@@ -21,6 +44,12 @@ DEFAULT_VNPAY_TMN_CODE = "INTERVIE"
 DEFAULT_VNPAY_HASH_SECRET = "SANDBOXSECRETKEY1234567890ABCDEF"
 DEFAULT_VNPAY_PAYMENT_URL = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html"
 DEFAULT_VNPAY_RETURN_URL = "http://localhost:3000/subscription/result/success"
+
+
+# OpenRouter DeepSeek Configuration
+DEFAULT_OPENROUTER_KEY = "dummy-openrouter-key-configured-in-env"
+DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash-0731"
+DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 # xGate Payment Gateway Config
 DEFAULT_XGATE_API_KEY = "xgate_86c34581a1efc75cf97ab04f51eae3845030"
@@ -87,20 +116,15 @@ class Settings:
             openai_api_key=(
                 os.environ.get("OPEN_ROUTER_KEY")
                 or os.environ.get("OPENROUTER_API_KEY")
-                or os.environ.get("OPENAI_API_KEY", "")
+                or DEFAULT_OPENROUTER_KEY
             ),
             openai_model=os.environ.get(
-                "OPENAI_MODEL",
-                os.environ.get("OPENROUTER_MODEL", "deepseek/deepseek-v4-flash-0731:free"),
+                "OPENROUTER_MODEL",
+                os.environ.get("OPENAI_MODEL", DEFAULT_OPENROUTER_MODEL),
             ),
             openai_base_url=os.environ.get(
-                "OPENAI_BASE_URL",
-                os.environ.get(
-                    "OPENROUTER_BASE_URL",
-                    "https://openrouter.ai/api/v1"
-                    if (os.environ.get("OPEN_ROUTER_KEY") or os.environ.get("OPENROUTER_API_KEY") or (os.environ.get("OPENAI_API_KEY", "").startswith("sk-or-")))
-                    else "https://api.openai.com/v1",
-                ),
+                "OPENROUTER_BASE_URL",
+                os.environ.get("OPENAI_BASE_URL", DEFAULT_OPENROUTER_BASE_URL),
             ),
             redis_url=os.environ.get("REDIS_URL", DEFAULT_REDIS_URL),
             cloudinary_cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME", ""),

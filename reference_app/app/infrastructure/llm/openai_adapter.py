@@ -43,12 +43,15 @@ class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPo
     def __init__(
         self,
         api_key: str = "",
-        model: str = "gpt-4o-mini",
-        base_url: str = "https://api.openai.com/v1",
+        model: str = "deepseek/deepseek-v4-flash-0731:free",
+        base_url: str = "https://openrouter.ai/api/v1",
     ) -> None:
         self.api_key = api_key
         self.model = model
-        self.base_url = base_url.rstrip("/")
+        if api_key.startswith("sk-or-") or "deepseek" in model:
+            self.base_url = "https://openrouter.ai/api/v1"
+        else:
+            self.base_url = base_url.rstrip("/")
 
     def generate_first_question(
         self, role: str, level: str, language: str = "vi",
@@ -119,7 +122,7 @@ class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPo
         messages.append({"role": "user", "content": prompt})
 
         payload = {
-            "model": self.model,
+            "model": self.model.replace(":free", "") if "deepseek-v4-flash-0731" in self.model else self.model,
             "messages": messages,
             "stream": True,
             "temperature": 0.7,
@@ -214,7 +217,7 @@ class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPo
             "X-Title": "Interviewly AI Coach",
         }
         payload = {
-            "model": self.model,
+            "model": self.model.replace(":free", "") if "deepseek-v4-flash-0731" in self.model else self.model,
             "messages": messages,
             "temperature": 0.7,
         }
@@ -257,7 +260,7 @@ class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPo
             "Content-Type": "application/json",
         }
         payload = {
-            "model": self.model,
+            "model": self.model.replace(":free", "") if "deepseek-v4-flash-0731" in self.model else self.model,
             "messages": messages,
             "stream": True,
             "temperature": 0.7,
@@ -385,6 +388,146 @@ Trả về DUY NHẤT một JSON hợp lệ:
             "feedback": f"Phát biểu {int(duration_sec)}s với tốc độ {int(wpm)} WPM.",
             "strengths": [f"Tốc độ phát âm {int(wpm)} WPM tự nhiên."],
             "improvements": ["Duy trì nhịp thở và hạn chế từ đệm."],
+        }
+
+
+    def evaluate_multi_modal_question(
+        self,
+        question_text: str,
+        sample_answer: str,
+        text_answer: str,
+        transcript: str,
+        delivery_metrics: dict[str, Any],
+        role_name: str = "Software Engineer",
+        level: str = "junior",
+        language: str = "vi",
+    ) -> dict[str, Any]:
+        """
+        Comprehensive Multi-Modal Evaluation via Single LLM Call:
+        Compares written text and spoken transcript against benchmark sample_answer,
+        incorporating real speech delivery metrics (WPM, fillers, pauses, repetitions).
+        """
+        wpm = delivery_metrics.get("activeSpeechWpm") or delivery_metrics.get("elapsedWpm") or 0
+        filler_count = delivery_metrics.get("fillerCount", 0)
+        fillers = [f["text"] for f in delivery_metrics.get("fillers", []) if not f.get("isPossibleFiller")]
+        fillers_str = ", ".join([f'"{f}"' for f in fillers[:5]]) if fillers else "Không có"
+        pauses = delivery_metrics.get("longPauseCount", 0)
+        pause_list = [f"{(p/1000.0):.1f}s" for p in delivery_metrics.get("pauseDurationsMs", []) if p >= 1200]
+        pauses_str = ", ".join(pause_list[:5]) if pause_list else "Không có"
+        reps = delivery_metrics.get("repetitionCount", 0)
+        reps_list = delivery_metrics.get("repeatedPhrases", [])
+        reps_str = ", ".join([f'"{r}"' for r in reps_list[:3]]) if reps_list else "Không có"
+        duration_sec = int(delivery_metrics.get("durationMs", 0) / 1000.0)
+
+        prompt = f"""Bạn là Giám khảo Phỏng vấn AI chuyên gia cấp cao (AI Interview Coach). Hãy chấm điểm và đưa ra nhận xét chuyên môn sắc sảo cho bài làm của ứng viên:
+
+【THÔNG TIN CÂU HỎI & ĐÁP ÁN MẪU CHUẨN MỰC】
+- Vị trí: {role_name} (Cấp độ: {level})
+- Câu hỏi phỏng vấn: {question_text}
+- Câu trả lời mẫu chuẩn benchmark theo khung STAR:
+"{sample_answer or 'Áp dụng khung STAR: Nêu rõ bối cảnh tình huống (S), nhiệm vụ cụ thể (T), hành động kỹ thuật trực tiếp (A) và kết quả định lượng cụ thể (R).'}"
+
+【BÀI LÀM THỰC TẾ CỦA ỨNG VIÊN】
+1. Phần Tự luận STAR (Text):
+"{text_answer or '(Ứng viên chưa viết câu trả lời)'}"
+
+2. Phần Ghi âm giọng nói (Speech):
+- Nội dung ứng viên đã phát biểu (STT Transcript):
+"{transcript or '(Ứng viên chưa phát biểu hoặc micro không thu được tiếng)'}"
+- Dữ liệu đo lường phát âm & lỗi ngập ngừng từ microphone:
+  + Tốc độ nói: {wpm} WPM (Chuẩn phỏng vấn: 110 - 165 WPM)
+  + Từ đệm / ậm ừ phát hiện: {filler_count} lần ({fillers_str})
+  + Khoảng dừng suy nghĩ lâu (>1.2s): {pauses} lần ({pauses_str})
+  + Lặp từ / nói lắp: {reps} lần ({reps_str})
+  + Thời lượng phát biểu: {duration_sec} giây
+
+【QUY TẮC CHẤM ĐIỂM NGHIÊM TÚC CỦA GIÁM KHẢO】
+A. PHẦN TỰ LUẬN STAR (Thang điểm: 0.0 - 35.0đ):
+   - So sánh ngữ nghĩa với câu trả lời mẫu benchmark:
+     + NẾU ứng viên chưa điền nội dung, chỉ để lại tiêu đề mẫu (Situation, Task, Action, Result) hoặc viết quá ngắn/vô nghĩa (< 15 từ) -> Điểm Tự luận BẮT BUỘC từ 0.0 - 5.0đ!
+     + NẾU bài viết có bối cảnh (S), nhiệm vụ (T), hành động kỹ thuật (A) và kết quả số liệu rõ ràng -> Chấm điểm tương xứng từ 15.0 - 35.0đ.
+   - Bóc tách 4 thành tố STAR (thang điểm 0 - 10đ cho mỗi thành tố).
+   - Nhận xét tự luận: Nhận xét ngắn gọn, chỉ ra điểm mạnh (nếu làm tốt) hoặc gợi ý cải thiện kỹ thuật (nếu điểm < 28đ). TUYỆT ĐỐI KHÔNG nhận xét về giọng nói hay nhịp thở ở phần này.
+
+B. PHẦN GHI ÂM GIỌNG NÓI (Thang điểm: 0.0 - 50.0đ):
+   - 1. Ngữ nghĩa nội dung phát biểu (0 - 25đ):
+     + ĐẶC BIỆT CHÚ Ý: Nếu transcript cho thấy ứng viên nói "không biết", "không biết trả lời", "alo", "thử mic", "test", hoặc câu nói không có nội dung chuyên môn trả lời câu hỏi -> Điểm nội dung BẮT BUỘC = 0đ! Tổng điểm phần nói không được vượt quá 5.0/50.0đ!
+     + Nếu ứng viên thực sự chia sẻ nội dung chuyên môn bám sát câu hỏi -> 12.0 - 25.0đ.
+   - 2. Kỹ năng phát âm & Nhịp điệu (0 - 25đ):
+     + Đánh giá dựa trên tốc độ WPM thực tế, mật độ từ đệm (fillers), các khoảng dừng suy nghĩ lâu và lặp từ.
+   - Nhận xét giọng nói: Nhận xét trực tiếp về nội dung phát biểu và phong thái nói, chỉ rõ các lỗi ậm ừ/ngập ngừng hoặc khen ngợi sự lưu loát.
+
+BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT CHUỖI JSON HỢP LỆ (KHÔNG KÈM TEXT NGOÀI JSON):
+{{
+  "text_score": <float 0.0 - 35.0>,
+  "text_feedback": "<Nhận xét súc tích về bài viết STAR>",
+  "text_improvements": ["<Gợi ý cải thiện tự luận nếu điểm < 28đ>"],
+  "text_strengths": ["<Khen ngợi tự luận nếu làm tốt>"],
+  "star_breakdown": {{
+    "situation_score": <int 0-10>,
+    "situation_feedback": "<Nhận xét S>",
+    "task_score": <int 0-10>,
+    "task_feedback": "<Nhận xét T>",
+    "action_score": <int 0-10>,
+    "action_feedback": "<Nhận xét A>",
+    "result_score": <int 0-10>,
+    "result_feedback": "<Nhận xét R>"
+  }},
+  "voice_score": <float 0.0 - 50.0>,
+  "voice_feedback": "<Nhận xét trực tiếp về nội dung phát biểu và phong thái nói, chỉ rõ lỗi ngập ngừng hoặc khen ngợi>",
+  "voice_improvements": ["<Gợi ý cải thiện phát âm/nhịp điệu>"],
+  "voice_strengths": ["<Khen ngợi phát âm nếu có>"],
+  "sample_better_answer": "<Gợi ý câu trả lời mẫu tối ưu>"
+}}"""
+
+        if not self.api_key:
+            # Fallback when no API key configured
+            return {
+                "text_score": 0.0 if len(text_answer.split()) < 15 else 20.0,
+                "text_feedback": "Bài tự luận quá ngắn." if len(text_answer.split()) < 15 else "Bài viết có cấu trúc STAR.",
+                "text_improvements": ["Cần viết chi tiết hơn."] if len(text_answer.split()) < 15 else [],
+                "text_strengths": ["Đã áp dụng cấu trúc STAR."] if len(text_answer.split()) >= 15 else [],
+                "star_breakdown": {
+                    "situation_score": 2 if len(text_answer.split()) < 15 else 7,
+                    "situation_feedback": "Nội dung ngắn.",
+                    "task_score": 2 if len(text_answer.split()) < 15 else 7,
+                    "task_feedback": "Nhiệm vụ cơ bản.",
+                    "action_score": 2 if len(text_answer.split()) < 15 else 7,
+                    "action_feedback": "Hành động cơ bản.",
+                    "result_score": 1 if len(text_answer.split()) < 15 else 6,
+                    "result_feedback": "Thiếu số liệu.",
+                },
+                "voice_score": 0.0 if not transcript.strip() else 3.0 if "không biết" in transcript.lower() else 30.0,
+                "voice_feedback": "Chưa ghi âm câu trả lời." if not transcript.strip() else "Phát biểu đã được ghi nhận.",
+                "voice_improvements": ["Cần tự tin trả lời."] if "không biết" in transcript.lower() else [],
+                "voice_strengths": [],
+                "sample_better_answer": "",
+            }
+
+        try:
+            resp_text = self._chat_completion([{"role": "user", "content": prompt}])
+            data = _extract_json_data(resp_text)
+            if data and "text_score" in data and "voice_score" in data:
+                return data
+        except Exception as err:
+            print("Multi-modal evaluation LLM error:", err)
+
+        return {
+            "text_score": 0.0 if len(text_answer.split()) < 15 else 18.0,
+            "text_feedback": "Bài viết chưa đủ nội dung theo khung STAR." if len(text_answer.split()) < 15 else "Bài viết có cấu trúc.",
+            "text_improvements": ["Bổ sung dẫn chứng thực tế."],
+            "text_strengths": [],
+            "star_breakdown": {
+                "situation_score": 2, "situation_feedback": "Quá ngắn.",
+                "task_score": 2, "task_feedback": "Quá ngắn.",
+                "action_score": 2, "action_feedback": "Quá ngắn.",
+                "result_score": 1, "result_feedback": "Thiếu số liệu.",
+            },
+            "voice_score": 2.0 if "không biết" in transcript.lower() else (0.0 if not transcript.strip() else 25.0),
+            "voice_feedback": "Ứng viên chưa trả lời câu hỏi chuyên môn." if "không biết" in transcript.lower() else "Đã ghi nhận phát biểu.",
+            "voice_improvements": ["Tự tin chia sẻ kinh nghiệm."],
+            "voice_strengths": [],
+            "sample_better_answer": "",
         }
 
     def synthesize_overall_performance(

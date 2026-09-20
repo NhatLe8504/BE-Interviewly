@@ -5287,6 +5287,28 @@
             "type": "integer",
             "title": "Question Id"
           },
+          "question_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Text"
+          },
+          "sample_answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Answer"
+          },
           "quiz_answer": {
             "anyOf": [
               {
@@ -5308,6 +5330,17 @@
               }
             ],
             "title": "Text Answer"
+          },
+          "transcript": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript"
           },
           "delivery_metrics": {
             "anyOf": [
@@ -5347,6 +5380,17 @@
               }
             ],
             "title": "Audio Duration Seconds"
+          },
+          "role_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role Name"
           }
         },
         "type": "object",
