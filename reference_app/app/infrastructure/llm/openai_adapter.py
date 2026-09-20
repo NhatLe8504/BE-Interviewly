@@ -287,11 +287,117 @@ class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPo
                             continue
 
 
+
+    def evaluate_text_essay(
+        self,
+        question_text: str,
+        sample_answer: str,
+        answer_text: str,
+        role_name: str = "Software Engineer",
+        level: str = "junior",
+        language: str = "vi",
+    ) -> dict[str, Any]:
+        """
+        Pure Text Essay Evaluation (35% max) via OpenRouter DeepSeek:
+        Compares candidate written answer against benchmark sample_answer using STAR framework.
+        """
+        clean_text = re.sub(
+            r"•?\s*(Tình huống|Nhiệm vụ|Hành động|Kết quả|Situation|Task|Action|Result)\s*(\([^)]*\))?:?",
+            "",
+            answer_text,
+            flags=re.IGNORECASE,
+        ).strip()
+        actual_words = len(re.findall(r"\w+", clean_text))
+
+        prompt = f"""Bạn là Giám khảo Phỏng vấn AI chuyên gia cấp cao. Hãy chấm điểm PHẦN THI TỰ LUẬN THEO KHUNG STAR (Thang điểm: 0.0 - 35.0đ):
+
+【THÔNG TIN CÂU HỎI & ĐÁP ÁN MẪU BENCHMARK】
+- Vị trí: {role_name} (Level: {level})
+- Câu hỏi phỏng vấn: {question_text}
+- Câu trả lời mẫu chuẩn benchmark theo khung STAR:
+"{sample_answer or 'Áp dụng khung STAR: Bối cảnh tình huống (S), nhiệm vụ cụ thể (T), hành động kỹ thuật (A), và kết quả số liệu định lượng (R).'}"
+
+【BÀI VIẾT THỰC TẾ CỦA ỨNG VIÊN】
+"{answer_text}"
+(Số từ thực tế loại bỏ tiêu đề mẫu: {actual_words} từ)
+
+【QUY TẮC CHẤM ĐIỂM TỰ LUẬN (0.0 - 35.0đ)】:
+1. So sánh trực tiếp với câu trả lời mẫu benchmark:
+   - ĐẶC BIỆT: Nếu ứng viên chưa nhập nội dung, chỉ để lại tiêu đề mẫu gợi ý (Situation, Task, Action, Result) hoặc viết quá ngắn/vô nghĩa (< 15 từ) -> Điểm Tự luận BẮT BUỘC từ 0.0 - 5.0đ!
+   - Nếu bài viết có bối cảnh (S), nhiệm vụ (T), hành động kỹ thuật (A) và kết quả số liệu (R) -> 18.0 - 35.0đ.
+2. Bóc tách 4 thành tố STAR (thang điểm 0 - 10đ cho mỗi thành tố).
+3. Nhận xét tự luận: Nhận xét sắc sảo về logic và chuyên môn.
+   - Nếu điểm < 28đ: Đưa ra 2-3 gợi ý cải thiện kỹ thuật cụ thể.
+   - Nếu điểm >= 28đ: Khen ngợi cấu trúc và dẫn chứng.
+   - TUYỆT ĐỐI KHÔNG nhận xét về giọng nói, phát âm hay nhịp thở ở phần này.
+
+BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT CHUỖI JSON HỢP LỆ (KHÔNG KÈM TEXT NGOÀI JSON):
+{{
+  "text_score": <float 0.0 - 35.0>,
+  "text_feedback": "<Nhận xét súc tích về bài viết STAR>",
+  "text_improvements": ["<Gợi ý cải thiện 1>", "<Gợi ý cải thiện 2>"],
+  "text_strengths": ["<Khen ngợi nếu làm tốt>"],
+  "star_breakdown": {{
+    "situation_score": <int 0-10>,
+    "situation_feedback": "<Nhận xét S>",
+    "task_score": <int 0-10>,
+    "task_feedback": "<Nhận xét T>",
+    "action_score": <int 0-10>,
+    "action_feedback": "<Nhận xét A>",
+    "result_score": <int 0-10>,
+    "result_feedback": "<Nhận xét R>"
+  }},
+  "sample_better_answer": "<Gợi ý câu trả lời mẫu tối ưu>"
+}}"""
+
+        if not self.api_key:
+            return {
+                "text_score": 0.0 if actual_words == 0 else min(35.0, max(2.0, actual_words * 0.4)),
+                "text_feedback": "Chưa nhập nội dung tự luận." if actual_words == 0 else "Bài viết có cấu trúc STAR.",
+                "text_improvements": ["Cần trình bày chi tiết theo khung STAR."] if actual_words < 20 else [],
+                "text_strengths": ["Đã bước đầu áp dụng khung STAR."] if actual_words >= 15 else [],
+                "star_breakdown": {
+                    "situation_score": 0 if actual_words == 0 else 5,
+                    "situation_feedback": "Chưa có nội dung." if actual_words == 0 else "Bối cảnh cơ bản.",
+                    "task_score": 0 if actual_words == 0 else 5,
+                    "task_feedback": "Chưa có nội dung." if actual_words == 0 else "Nhiệm vụ cơ bản.",
+                    "action_score": 0 if actual_words == 0 else 5,
+                    "action_feedback": "Chưa có nội dung." if actual_words == 0 else "Hành động cơ bản.",
+                    "result_score": 0 if actual_words == 0 else 5,
+                    "result_feedback": "Chưa có nội dung." if actual_words == 0 else "Kết quả cơ bản.",
+                },
+                "sample_better_answer": "",
+            }
+
+        try:
+            resp_text = self._chat_completion([{"role": "user", "content": prompt}])
+            data = _extract_json_data(resp_text)
+            if data and "text_score" in data:
+                return data
+        except Exception as err:
+            print("Text essay evaluation error:", err)
+
+        return {
+            "text_score": 0.0 if actual_words == 0 else min(35.0, max(2.0, actual_words * 0.35)),
+            "text_feedback": "Chưa có nội dung tự luận đầy đủ." if actual_words < 15 else "Bài viết có phân đoạn ý.",
+            "text_improvements": ["Bổ sung dẫn chứng số liệu định lượng."],
+            "text_strengths": [],
+            "star_breakdown": {
+                "situation_score": 1, "situation_feedback": "Quá ngắn.",
+                "task_score": 1, "task_feedback": "Quá ngắn.",
+                "action_score": 1, "action_feedback": "Quá ngắn.",
+                "result_score": 0, "result_feedback": "Thiếu số liệu.",
+            },
+            "sample_better_answer": "",
+        }
+
     def evaluate_voice_delivery(
         self,
         question: str,
         transcript: str,
         delivery_metrics: dict[str, Any],
+        sample_answer: str = "",
+        role_name: str = "Software Engineer",
         language: str = "vi",
     ) -> dict[str, Any]:
         duration_sec = delivery_metrics.get("durationMs", 0) / 1000.0
@@ -352,9 +458,14 @@ class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPo
                 "improvements": ["Nên hạn chế các từ đệm khi chuyển ý."] if filler_count > 2 else ["Duy trì phong thái đĩnh đạc."],
             }
 
-        prompt = f"""Bạn là giám khảo phỏng vấn chuyên gia. Đánh giá phần thi NÓI & PHÁT ÂM của ứng viên (Thang điểm 50đ):
-Câu hỏi: {question}
-Nội dung ứng viên đã phát biểu (STT Transcript): "{transcript}"
+        prompt = f"""Bạn là giám khảo phỏng vấn chuyên gia cấp cao. Đánh giá phần thi NÓI & PHÁT ÂM của ứng viên (Thang điểm 50đ):
+【CÂU HỎI & CHUẨN ĐỐI SÁNH】
+- Vị trí: {role_name}
+- Câu hỏi phỏng vấn: {question}
+- Câu trả lời mẫu chuẩn benchmark: "{sample_answer}"
+
+【BẢN GHI ÂM CỦA ỨNG VIÊN】
+- Nội dung ứng viên đã phát biểu (STT Transcript): "{transcript}"
 Chỉ số phát âm: Tốc độ={wpm} WPM, Số từ đệm={filler_count} (Từ đệm: {', '.join(fillers[:4]) if fillers else 'Không có'}), Dừng lâu={pauses}, Lặp từ={reps}.
 
 TIÊU CHÍ CHẤM ĐIỂM (50đ):

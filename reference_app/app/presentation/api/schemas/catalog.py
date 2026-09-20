@@ -327,6 +327,7 @@ class EvaluationPullOut(BaseModel):
 class TextEvaluationQueueIn(BaseModel):
     question_id: int
     question_text: str | None = None
+    sample_answer: str | None = None
     answer_text: str = Field(..., min_length=1)
     role_name: str = "Software Engineer"
     language: str = "vi"
@@ -335,8 +336,10 @@ class TextEvaluationQueueIn(BaseModel):
 class VoiceEvaluationQueueIn(BaseModel):
     question_id: int
     question_text: str | None = None
+    sample_answer: str | None = None
     transcript: str = ""
     delivery_metrics: dict[str, Any]
+    role_name: str = "Software Engineer"
     language: str = "vi"
 
 

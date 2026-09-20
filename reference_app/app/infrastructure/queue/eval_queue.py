@@ -244,19 +244,23 @@ class EvaluationPullQueueManager:
             return
 
         # Case 3: Candidate wrote substantial text -> Evaluate with AI LLM
+        sample_answer = payload.get("sample_answer") or ""
         eval_data = None
         evaluator = getattr(container, "evaluation_service", None) and getattr(container.evaluation_service, "evaluator", None)
-        if evaluator and hasattr(evaluator, "evaluate"):
+        if evaluator and hasattr(evaluator, "evaluate_text_essay"):
             try:
-                eval_data = evaluator.evaluate(
-                    question=q_text,
-                    answer=clean_text,
-                    role=role,
+                res = evaluator.evaluate_text_essay(
+                    question_text=q_text,
+                    sample_answer=sample_answer,
+                    answer_text=text,
+                    role_name=role,
                     level="junior",
                     language=language,
                 )
-            except Exception:
-                eval_data = None
+                self.update_task_status(task_id, "completed", result=res)
+                return
+            except Exception as err:
+                print("evaluate_text_essay error:", err)
 
         if eval_data is not None:
             clarity = float(eval_data.clarity_score)
@@ -316,6 +320,7 @@ class EvaluationPullQueueManager:
         transcript = (payload.get("transcript") or "").strip()
         delivery = payload.get("delivery_metrics") or {}
         language = payload.get("language") or "vi"
+        role = payload.get("role_name") or "Software Engineer"
         q_text = payload.get("question_text") or f"Câu hỏi #{qid}"
 
         duration_ms = float(delivery.get("durationMs") or 0.0)
@@ -334,6 +339,7 @@ class EvaluationPullQueueManager:
             self.update_task_status(task_id, "completed", result=empty_voice_result)
             return
 
+        sample_answer = payload.get("sample_answer") or ""
         evaluator = getattr(container, "evaluation_service", None) and getattr(container.evaluation_service, "evaluator", None)
         if evaluator and hasattr(evaluator, "evaluate_voice_delivery"):
             try:
@@ -341,12 +347,14 @@ class EvaluationPullQueueManager:
                     question=q_text,
                     transcript=transcript,
                     delivery_metrics=delivery,
+                    sample_answer=sample_answer,
+                    role_name=role,
                     language=language,
                 )
                 self.update_task_status(task_id, "completed", result=res)
                 return
-            except Exception:
-                pass
+            except Exception as err:
+                print("evaluate_voice_delivery error:", err)
 
         # Fallback calculation based on WPM, fillers, and duration
         wpm = float(delivery.get("activeSpeechWpm") or 0.0)
