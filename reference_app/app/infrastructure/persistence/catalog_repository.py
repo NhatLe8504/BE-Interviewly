@@ -17,6 +17,8 @@ from .models.catalog import QuestionBank as QuestionBankModel
 from .models.catalog import StarGuidanceTemplate as StarGuidanceTemplateModel
 from .models.catalog import PracticeHistoryRecord as PracticeHistoryModel
 from .models.catalog import QuestionSetReview as QuestionSetReviewModel
+from .models.catalog import QuestionSet as QuestionSetModel
+from .models.catalog import QuestionSetItem as QuestionSetItemModel
 from .models.enums import ExperienceLevel, Language, QuestionType, QuestionModerationStatus
 
 
@@ -464,3 +466,47 @@ class SqlAlchemyCatalogRepository:
             .limit(limit)
         )
         return list(session.execute(stmt).scalars().all())
+
+    def list_question_sets(
+        self,
+        session: Any,
+        *,
+        domain_id: int | None = None,
+        level: str | None = None,
+        search: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[QuestionSetModel], int]:
+        stmt = select(QuestionSetModel).where(QuestionSetModel.is_active == True)
+        count_stmt = select(func.count(QuestionSetModel.set_id)).where(QuestionSetModel.is_active == True)
+        if domain_id is not None:
+            stmt = stmt.where(QuestionSetModel.domain_id == domain_id)
+            count_stmt = count_stmt.where(QuestionSetModel.domain_id == domain_id)
+        if level is not None and level != "all":
+            stmt = stmt.where(QuestionSetModel.experience_level == level)
+            count_stmt = count_stmt.where(QuestionSetModel.experience_level == level)
+        if search and search.strip():
+            kw = f"%{search.strip().lower()}%"
+            stmt = stmt.where(QuestionSetModel.title.ilike(kw))
+            count_stmt = count_stmt.where(QuestionSetModel.title.ilike(kw))
+
+        total = session.execute(count_stmt).scalar() or 0
+        items = list(session.execute(stmt.order_by(QuestionSetModel.created_at.desc()).offset(offset).limit(limit)).scalars().all())
+        return items, total
+
+    def get_question_set_by_id(self, session: Any, set_id: int) -> QuestionSetModel | None:
+        return session.get(QuestionSetModel, set_id)
+
+    def get_question_set_questions(self, session: Any, set_id: int) -> list[QuestionBankModel]:
+        item_stmt = (
+            select(QuestionSetItemModel)
+            .where(QuestionSetItemModel.set_id == set_id)
+            .order_by(QuestionSetItemModel.order_index.asc())
+        )
+        items = list(session.execute(item_stmt).scalars().all())
+        if not items:
+            return []
+        qids = [it.question_id for it in items]
+        q_rows = list(session.execute(select(QuestionBankModel).where(QuestionBankModel.question_id.in_(qids))).scalars().all())
+        q_dict = {q.question_id: q for q in q_rows}
+        return [q_dict[qid] for qid in qids if qid in q_dict]

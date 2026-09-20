@@ -24,6 +24,9 @@ from ..schemas.catalog import (
     RubricScoreItemOut,
     StarBreakdownOut,
     PracticeHistoryCreateIn,
+    QuestionSetOut,
+    QuestionSetDetailOut,
+    QuestionSetPageOut,
     PracticeHistoryOut,
     LeaderboardItemOut,
     QuestionSetReviewIn,
@@ -34,6 +37,9 @@ from ..schemas.catalog import (
     EvaluationPullOut,
 )
 from ....infrastructure.persistence.models.catalog import (
+    QuestionBank as QuestionBankModel,
+    QuestionSet as QuestionSetModel,
+    QuestionSetItem as QuestionSetItemModel,
     PracticeHistoryRecord as PracticeHistoryModel,
     QuestionSetReview as QuestionSetReviewModel,
 )
@@ -189,6 +195,10 @@ def get_questions_batch(
                 "created_at": q.created_at,
                 "updated_at": q.updated_at,
                 "star_template": tmpl_out,
+                "quiz_data": getattr(session.get(QuestionBankModel, q.question_id), "quiz_data", None),
+                "sample_answer": getattr(session.get(QuestionBankModel, q.question_id), "sample_answer", None),
+                "follow_up_questions": getattr(session.get(QuestionBankModel, q.question_id), "follow_up_questions", None),
+                "tips": getattr(session.get(QuestionBankModel, q.question_id), "tips", None),
             })
         )
     return results
@@ -232,6 +242,10 @@ def post_questions_batch(
                 "created_at": q.created_at,
                 "updated_at": q.updated_at,
                 "star_template": tmpl_out,
+                "quiz_data": getattr(session.get(QuestionBankModel, q.question_id), "quiz_data", None),
+                "sample_answer": getattr(session.get(QuestionBankModel, q.question_id), "sample_answer", None),
+                "follow_up_questions": getattr(session.get(QuestionBankModel, q.question_id), "follow_up_questions", None),
+                "tips": getattr(session.get(QuestionBankModel, q.question_id), "tips", None),
             })
         )
     return results
@@ -254,10 +268,28 @@ def get_question_detail(
         except Exception:
             tmpl_out = None
 
+    raw_row = session.get(QuestionBankModel, question_id)
+    domain_name = None
+    if q.domain_id:
+        try:
+            d = container.catalog_service.get_domain(session, q.domain_id)
+            domain_name = d.domain_name
+        except Exception:
+            pass
+    role_name = None
+    if q.role_id:
+        try:
+            r = container.catalog_service.get_role(session, q.role_id)
+            role_name = r.role_name
+        except Exception:
+            pass
+
     base_dict = {
         "question_id": q.question_id,
         "domain_id": q.domain_id,
+        "domain_name": domain_name,
         "role_id": q.role_id,
+        "role_name": role_name,
         "experience_level": q.experience_level,
         "language": q.language,
         "question_type": q.question_type,
@@ -268,6 +300,10 @@ def get_question_detail(
         "created_at": q.created_at,
         "updated_at": q.updated_at,
         "star_template": tmpl_out,
+        "quiz_data": getattr(raw_row, "quiz_data", None) if raw_row else None,
+        "sample_answer": getattr(raw_row, "sample_answer", None) if raw_row else None,
+        "follow_up_questions": getattr(raw_row, "follow_up_questions", None) if raw_row else None,
+        "tips": getattr(raw_row, "tips", None) if raw_row else None,
     }
     return QuestionDetailOut.model_validate(base_dict)
 
@@ -759,4 +795,120 @@ def pull_evaluation_result(task_id: str) -> EvaluationPullOut:
         status=task.get("status", "queued"),
         result=task.get("result"),
         error=task.get("error"),
+    )
+
+
+@router.get("/question-sets", response_model=QuestionSetPageOut)
+def list_question_sets(
+    domain_id: int | None = Query(None),
+    level: str | None = Query(None),
+    search: str | None = Query(None),
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> QuestionSetPageOut:
+    items, total = container.catalog_service.repo.list_question_sets(
+        session, domain_id=domain_id, level=level, search=search, limit=limit, offset=offset,
+    )
+    domain_map = {d.domain_id: d.domain_name for d in container.catalog_service.get_domains(session)}
+    role_map = {r.role_id: r.role_name for r in container.catalog_service.get_roles(session)}
+
+    outs: list[QuestionSetOut] = []
+    for s in items:
+        q_count = len(container.catalog_service.repo.get_question_set_questions(session, s.set_id))
+        outs.append(
+            QuestionSetOut(
+                set_id=s.set_id,
+                title=s.title,
+                description=s.description,
+                domain_id=s.domain_id,
+                domain_name=domain_map.get(s.domain_id),
+                role_id=s.role_id,
+                role_name=role_map.get(s.role_id) if s.role_id else None,
+                experience_level=s.experience_level or "junior",
+                tech_stack=s.tech_stack or [],
+                language=s.language or "vi",
+                target_difficulty=s.target_difficulty or 3,
+                estimated_duration_minutes=s.estimated_duration_minutes or 20,
+                is_curated=s.is_curated,
+                is_active=s.is_active,
+                question_count=q_count,
+                practice_count=s.practice_count,
+                avg_score=float(s.avg_score),
+                pass_rate=float(s.pass_rate),
+                created_at=s.created_at,
+            )
+        )
+    return QuestionSetPageOut(items=outs, total=total, limit=limit, offset=offset)
+
+
+@router.get("/question-sets/{set_id}", response_model=QuestionSetDetailOut)
+def get_question_set_detail(
+    set_id: int,
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> QuestionSetDetailOut:
+    s = container.catalog_service.repo.get_question_set_by_id(session, set_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Question set not found")
+
+    domain_map = {d.domain_id: d.domain_name for d in container.catalog_service.get_domains(session)}
+    role_map = {r.role_id: r.role_name for r in container.catalog_service.get_roles(session)}
+    q_rows = container.catalog_service.repo.get_question_set_questions(session, set_id)
+
+    q_outs: list[QuestionDetailOut] = []
+    for q in q_rows:
+        tmpl_out = None
+        if q.star_template_id:
+            try:
+                tmpl = container.catalog_service.get_star_template(session, q.star_template_id)
+                tmpl_out = StarTemplateOut.model_validate(tmpl)
+            except Exception:
+                pass
+        q_outs.append(
+            QuestionDetailOut(
+                question_id=q.question_id,
+                domain_id=q.domain_id,
+                domain_name=domain_map.get(q.domain_id),
+                role_id=q.role_id,
+                role_name=role_map.get(q.role_id) if q.role_id else None,
+                experience_level=q.experience_level.value if hasattr(q.experience_level, "value") else q.experience_level,
+                language=q.language.value if hasattr(q.language, "value") else (q.language or "vi"),
+                question_type=q.question_type.value if hasattr(q.question_type, "value") else str(q.question_type),
+                question_text=q.question_text,
+                star_template_id=q.star_template_id,
+                is_active=q.is_active,
+                created_by=q.created_by,
+                created_at=q.created_at,
+                updated_at=q.updated_at,
+                star_template=tmpl_out,
+                quiz_data=q.quiz_data,
+                sample_answer=q.sample_answer,
+                follow_up_questions=q.follow_up_questions,
+                tips=q.tips,
+            )
+        )
+
+    return QuestionSetDetailOut(
+        set_id=s.set_id,
+        title=s.title,
+        description=s.description,
+        domain_id=s.domain_id,
+        domain_name=domain_map.get(s.domain_id),
+        role_id=s.role_id,
+        role_name=role_map.get(s.role_id) if s.role_id else None,
+        experience_level=s.experience_level or "junior",
+        tech_stack=s.tech_stack or [],
+        language=s.language or "vi",
+        target_difficulty=s.target_difficulty or 3,
+        estimated_duration_minutes=s.estimated_duration_minutes or 20,
+        is_curated=s.is_curated,
+        is_active=s.is_active,
+        question_count=len(q_outs),
+        practice_count=s.practice_count,
+        avg_score=float(s.avg_score),
+        pass_rate=float(s.pass_rate),
+        created_at=s.created_at,
+        questions=q_outs,
     )
