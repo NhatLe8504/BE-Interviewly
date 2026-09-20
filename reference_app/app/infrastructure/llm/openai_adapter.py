@@ -43,12 +43,16 @@ class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPo
     def __init__(
         self,
         api_key: str = "",
-        model: str = "deepseek/deepseek-v4-flash-0731:free",
-        base_url: str = "https://openrouter.ai/api/v1",
+        model: str = "openai/gpt-oss-120b",
+        base_url: str = "https://api.groq.com/openai/v1",
     ) -> None:
         self.api_key = api_key
         self.model = model
-        if api_key.startswith("sk-or-") or "deepseek" in model:
+        if api_key.startswith("gsk_"):
+            self.base_url = "https://api.groq.com/openai/v1"
+            if not model or "deepseek" in model:
+                self.model = "openai/gpt-oss-120b"
+        elif api_key.startswith("sk-or-") or "deepseek" in model:
             self.base_url = "https://openrouter.ai/api/v1"
         else:
             self.base_url = base_url.rstrip("/")
@@ -113,6 +117,7 @@ class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPo
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "HTTP-Referer": "https://interviewly.ai",
             "X-Title": "Interviewly AI Coach",
         }
@@ -122,7 +127,7 @@ class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPo
         messages.append({"role": "user", "content": prompt})
 
         payload = {
-            "model": self.model.replace(":free", "") if "deepseek-v4-flash-0731" in self.model else self.model,
+            "model": "openai/gpt-oss-120b" if self.api_key.startswith("gsk_") and ("deepseek" in self.model or not self.model) else (self.model.replace(":free", "") if "deepseek-v4-flash-0731" in self.model else self.model),
             "messages": messages,
             "stream": True,
             "temperature": 0.7,
@@ -213,13 +218,15 @@ class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPo
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "HTTP-Referer": "https://interviewly.ai",
             "X-Title": "Interviewly AI Coach",
         }
         payload = {
-            "model": self.model.replace(":free", "") if "deepseek-v4-flash-0731" in self.model else self.model,
+            "model": "openai/gpt-oss-120b" if self.api_key.startswith("gsk_") and ("deepseek" in self.model or not self.model) else (self.model.replace(":free", "") if "deepseek-v4-flash-0731" in self.model else self.model),
             "messages": messages,
-            "temperature": 0.7,
+            "temperature": 0.1,
+            "max_tokens": 2000,
         }
         if response_format and "openrouter.ai" not in self.base_url:
             payload["response_format"] = response_format
@@ -260,7 +267,7 @@ class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPo
             "Content-Type": "application/json",
         }
         payload = {
-            "model": self.model.replace(":free", "") if "deepseek-v4-flash-0731" in self.model else self.model,
+            "model": "openai/gpt-oss-120b" if self.api_key.startswith("gsk_") and ("deepseek" in self.model or not self.model) else (self.model.replace(":free", "") if "deepseek-v4-flash-0731" in self.model else self.model),
             "messages": messages,
             "stream": True,
             "temperature": 0.7,
@@ -372,8 +379,12 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT CHUỖI JSON HỢP LỆ (KHÔNG KÈM TE
                 "sample_better_answer": "",
             }
 
+        system_prompt = "Bạn là Giám khảo Phỏng vấn AI cấp cao. Do NOT generate long thinking or reasoning tokens. BẮT BUỘC chỉ sử dụng TIẾNG VIỆT CHUẨN MỰC 100%, ngữ pháp tự nhiên. TUYỆT ĐỐI KHÔNG sử dụng chữ Hán, từ ngoại lai hay ký tự lạ."
         try:
-            resp_text = self._chat_completion([{"role": "user", "content": prompt}])
+            resp_text = self._chat_completion([
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ])
             data = _extract_json_data(resp_text)
             if data and "text_score" in data:
                 return data
@@ -487,8 +498,12 @@ Trả về DUY NHẤT một JSON hợp lệ:
   "improvements": ["Điểm cần cải thiện 1"]
 }}"""
 
+        system_prompt = "Bạn là Giám khảo Phỏng vấn AI cấp cao. Do NOT generate long thinking or reasoning tokens. BẮT BUỘC chỉ sử dụng TIẾNG VIỆT CHUẨN MỰC 100%, ngữ pháp tự nhiên. TUYỆT ĐỐI KHÔNG sử dụng chữ Hán, từ ngoại lai hay ký tự lạ."
         try:
-            resp = self._chat_completion([{"role": "user", "content": prompt}])
+            resp = self._chat_completion([
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ])
             data = _extract_json_data(resp)
             if data and "voice_score" in data:
                 return data
@@ -618,8 +633,12 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT CHUỖI JSON HỢP LỆ (KHÔNG KÈM TE
                 "sample_better_answer": "",
             }
 
+        system_prompt = "Bạn là Giám khảo Phỏng vấn AI cấp cao. Do NOT generate long thinking or reasoning tokens. BẮT BUỘC chỉ sử dụng TIẾNG VIỆT CHUẨN MỰC 100%, ngữ pháp tự nhiên. TUYỆT ĐỐI KHÔNG sử dụng chữ Hán, từ ngoại lai hay ký tự lạ."
         try:
-            resp_text = self._chat_completion([{"role": "user", "content": prompt}])
+            resp_text = self._chat_completion([
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ])
             data = _extract_json_data(resp_text)
             if data and "text_score" in data and "voice_score" in data:
                 return data
@@ -686,8 +705,12 @@ Trả về DUY NHẤT một JSON hợp lệ:
   "career_readiness_verdict": "Sẵn sàng nhận việc (Job Ready)"
 }}"""
 
+        system_prompt = "Bạn là Giám khảo Phỏng vấn AI cấp cao. Do NOT generate long thinking or reasoning tokens. BẮT BUỘC chỉ sử dụng TIẾNG VIỆT CHUẨN MỰC 100%, ngữ pháp tự nhiên. TUYỆT ĐỐI KHÔNG sử dụng chữ Hán, từ ngoại lai hay ký tự lạ."
         try:
-            resp = self._chat_completion([{"role": "user", "content": prompt}])
+            resp = self._chat_completion([
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ])
             data = _extract_json_data(resp)
             if data and "overall_feedback" in data:
                 return data
