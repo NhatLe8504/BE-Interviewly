@@ -46,6 +46,12 @@ DEFAULT_VNPAY_PAYMENT_URL = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html"
 DEFAULT_VNPAY_RETURN_URL = "http://localhost:3000/subscription/result/success"
 
 
+
+# Groq Ultra-Fast LPU Configuration
+DEFAULT_GROQ_KEY = "dummy-groq-key-configured-in-env"
+DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
+DEFAULT_GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+
 # OpenRouter DeepSeek Configuration
 DEFAULT_OPENROUTER_KEY = "dummy-openrouter-key-configured-in-env"
 DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash-0731"
@@ -114,17 +120,25 @@ class Settings:
                 "SENDGRID_FROM_NAME", DEFAULT_SENDGRID_FROM_NAME,
             ),
             openai_api_key=(
-                os.environ.get("OPEN_ROUTER_KEY")
+                os.environ.get("GROQ_KEY")
+                or os.environ.get("GROQ_API_KEY")
+                or os.environ.get("OPEN_ROUTER_KEY")
                 or os.environ.get("OPENROUTER_API_KEY")
-                or DEFAULT_OPENROUTER_KEY
+                or DEFAULT_GROQ_KEY
             ),
             openai_model=os.environ.get(
-                "OPENROUTER_MODEL",
-                os.environ.get("OPENAI_MODEL", DEFAULT_OPENROUTER_MODEL),
+                "GROQ_MODEL",
+                os.environ.get(
+                    "OPENROUTER_MODEL",
+                    DEFAULT_GROQ_MODEL if (os.environ.get("GROQ_KEY") or os.environ.get("GROQ_API_KEY") or DEFAULT_GROQ_KEY) else DEFAULT_OPENROUTER_MODEL,
+                ),
             ),
             openai_base_url=os.environ.get(
-                "OPENROUTER_BASE_URL",
-                os.environ.get("OPENAI_BASE_URL", DEFAULT_OPENROUTER_BASE_URL),
+                "GROQ_BASE_URL",
+                os.environ.get(
+                    "OPENROUTER_BASE_URL",
+                    DEFAULT_GROQ_BASE_URL if (os.environ.get("GROQ_KEY") or os.environ.get("GROQ_API_KEY") or DEFAULT_GROQ_KEY) else DEFAULT_OPENROUTER_BASE_URL,
+                ),
             ),
             redis_url=os.environ.get("REDIS_URL", DEFAULT_REDIS_URL),
             cloudinary_cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME", ""),

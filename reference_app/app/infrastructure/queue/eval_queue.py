@@ -190,7 +190,7 @@ class EvaluationPullQueueManager:
             text,
             flags=re.IGNORECASE,
         ).strip()
-        actual_words = len(re.findall(r"\b\w+\b", clean_text))
+        actual_words = len(clean_text.split())
 
         # Case 1: Candidate wrote NO actual content (0 words)
         if actual_words == 0:
