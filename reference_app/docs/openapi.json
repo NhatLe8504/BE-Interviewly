@@ -9282,6 +9282,17 @@
             ],
             "title": "Question Text"
           },
+          "sample_answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Answer"
+          },
           "answer_text": {
             "type": "string",
             "minLength": 1,
@@ -10076,6 +10087,17 @@
             ],
             "title": "Question Text"
           },
+          "sample_answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Answer"
+          },
           "transcript": {
             "type": "string",
             "title": "Transcript",
@@ -10085,6 +10107,11 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Delivery Metrics"
+          },
+          "role_name": {
+            "type": "string",
+            "title": "Role Name",
+            "default": "Software Engineer"
           },
           "language": {
             "type": "string",
