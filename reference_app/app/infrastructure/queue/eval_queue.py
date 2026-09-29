@@ -341,16 +341,16 @@ class EvaluationPullQueueManager:
 
         # If audio was recorded for >=3.5s but transcript was sparse or unclear
         if not transcript:
-            dur_sec = max(4.0, duration_ms / 1000.0)
-            wpm = float(delivery.get("activeSpeechWpm") or 115.0)
-            base_score = min(40.0, max(25.0, 20.0 + min(dur_sec, 30.0) * 0.7))
+            dur_sec = max(1.0, duration_ms / 1000.0)
+            wpm = float(delivery.get("activeSpeechWpm") or 0.0)
+            base_score = round(min(12.0, max(5.0, 5.0 + min(dur_sec, 15.0) * 0.3)), 1)
             sparse_voice_result = {
-                "voice_score": round(base_score, 1),
+                "voice_score": base_score,
                 "voice_max": 50.0,
                 "pace_label": f"{int(wpm)} WPM",
-                "feedback": f"Đã ghi nhận phát biểu {int(dur_sec)}s với nhịp điệu ~{int(wpm)} WPM. Câu từ chưa được bóc băng hoàn chỉnh do phát âm nhỏ hoặc chưa rõ chữ. Hãy nói to và gần micro hơn để hệ thống phân tích chi tiết.",
-                "strengths": [f"Đã thực hiện ghi âm {int(dur_sec)}s thể hiện nỗ lực phát biểu."],
-                "improvements": ["Nói to, rõ chữ và hạn chế tạp âm để hệ thống nhận diện từ vựng chính xác."],
+                "feedback": f"Thời lượng ghi âm {int(dur_sec)}s nhưng hệ thống không thu nhận được câu từ có nghĩa rõ ràng. Hãy kiểm tra microphone và phát biểu to, rõ chữ để AI đánh giá nội dung chuyên môn.",
+                "strengths": [],
+                "improvements": ["Phát biểu to, rõ ràng và tập trung trả lời đúng trọng tâm câu hỏi phỏng vấn."],
             }
             self.update_task_status(task_id, "completed", result=sparse_voice_result)
             return
