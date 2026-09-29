@@ -186,6 +186,12 @@ class CatalogService:
         )
         return items, total
 
+
+    def get_questions_by_ids(
+        self, session: Any, question_ids: list[int],
+    ) -> list[QuestionBankItem]:
+        return self.repo.get_questions_by_ids(session, question_ids)
+
     def get_question(self, session: Any, question_id: int) -> QuestionBankItem:
         q = self.repo.get_question_by_id(session, question_id)
         if q is None:

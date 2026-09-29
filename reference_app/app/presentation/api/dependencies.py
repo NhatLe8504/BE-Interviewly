@@ -58,3 +58,16 @@ def get_current_user(
 
 def get_storage(container: ServiceContainer = Depends(get_container)) -> Any:
     return container.storage_service
+
+
+
+def get_optional_user_id(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    container: ServiceContainer = Depends(get_container),
+) -> int | None:
+    if credentials is None or not credentials.credentials:
+        return None
+    try:
+        return container.auth_service.tokens.parse(credentials.credentials)
+    except Exception:
+        return None

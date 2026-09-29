@@ -3,6 +3,29 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+
+def _load_env_file() -> None:
+    for candidate in [
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"),
+        os.path.join(os.getcwd(), ".env"),
+    ]:
+        if os.path.exists(candidate):
+            try:
+                with open(candidate, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            k, v = line.split("=", 1)
+                            k, v = k.strip(), v.strip()
+                            if k:
+                                os.environ[k] = v
+            except Exception:
+                pass
+
+
+_load_env_file()
+from dataclasses import dataclass
+
 API_TITLE = "BE-Interviewly"
 API_VERSION = "0.1.0"
 API_DESCRIPTION = "BE Interview Coach API."
@@ -21,6 +44,15 @@ DEFAULT_VNPAY_TMN_CODE = "INTERVIE"
 DEFAULT_VNPAY_HASH_SECRET = "SANDBOXSECRETKEY1234567890ABCDEF"
 DEFAULT_VNPAY_PAYMENT_URL = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html"
 DEFAULT_VNPAY_RETURN_URL = "http://localhost:3000/subscription/result/success"
+
+
+
+# Groq Ultra-Fast LPU Configuration
+DEFAULT_GROQ_KEY = "dummy-groq-key-configured-in-env"
+DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
+DEFAULT_GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+
+
 
 # xGate Payment Gateway Config
 DEFAULT_XGATE_API_KEY = "xgate_86c34581a1efc75cf97ab04f51eae3845030"
@@ -41,7 +73,8 @@ class Settings:
     sendgrid_from_email: str = DEFAULT_SENDGRID_FROM_EMAIL
     sendgrid_from_name: str = DEFAULT_SENDGRID_FROM_NAME
     openai_api_key: str = ""
-    openai_model: str = "gpt-4o-mini"
+    openai_model: str = "openai/gpt-oss-120b"
+    openai_base_url: str = "https://api.groq.com/openai/v1"
     redis_url: str = DEFAULT_REDIS_URL
     cloudinary_cloud_name: str = ""
     cloudinary_api_key: str = ""
@@ -83,8 +116,13 @@ class Settings:
             sendgrid_from_name=os.environ.get(
                 "SENDGRID_FROM_NAME", DEFAULT_SENDGRID_FROM_NAME,
             ),
-            openai_api_key=os.environ.get("OPENAI_API_KEY", ""),
-            openai_model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
+            openai_api_key=(
+                os.environ.get("GROQ_KEY")
+                or os.environ.get("GROQ_API_KEY")
+                or DEFAULT_GROQ_KEY
+            ),
+            openai_model=os.environ.get("GROQ_MODEL", DEFAULT_GROQ_MODEL),
+            openai_base_url=os.environ.get("GROQ_BASE_URL", DEFAULT_GROQ_BASE_URL),
             redis_url=os.environ.get("REDIS_URL", DEFAULT_REDIS_URL),
             cloudinary_cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME", ""),
             cloudinary_api_key=os.environ.get("CLOUDINARY_API_KEY", ""),
