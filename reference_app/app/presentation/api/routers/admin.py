@@ -41,7 +41,12 @@ from ..schemas.catalog import (
     DomainUpdateIn,
     QuestionCreateIn,
     QuestionOut,
+    QuestionDetailOut,
     QuestionUpdateIn,
+    QuestionSetOut,
+    QuestionSetDetailOut,
+    QuestionSetCreateIn,
+    QuestionSetUpdateIn,
     RoleCreateIn,
     RoleOut,
     RoleUpdateIn,
@@ -442,13 +447,13 @@ def create_star_template(
     return StarTemplateOut.model_validate(tmpl)
 
 
-@router.post("/questions", response_model=QuestionOut, status_code=201)
+@router.post("/questions", response_model=QuestionDetailOut, status_code=201)
 def create_question(
     data: QuestionCreateIn,
     admin_id: int = Depends(require_admin),
     session: Any = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
-) -> QuestionOut:
+) -> QuestionDetailOut:
     q = container.catalog_service.create_question(
         session,
         CreateQuestionCommand(
@@ -460,6 +465,10 @@ def create_question(
             experience_level=data.experience_level,
             star_template_id=data.star_template_id,
             created_by=admin_id,
+            quiz_data=data.quiz_data,
+            sample_answer=data.sample_answer,
+            follow_up_questions=data.follow_up_questions,
+            tips=data.tips,
         ),
     )
     container.admin_service.repo.record_audit(
@@ -471,21 +480,22 @@ def create_question(
         new_value={"question_text": q.question_text, "domain_id": q.domain_id},
     )
     invalidate_cache(container, "catalog:")
-    return QuestionOut.model_validate(q)
+    return QuestionDetailOut.model_validate(q)
 
 
-@router.put("/questions/{question_id}", response_model=QuestionOut)
+@router.put("/questions/{question_id}", response_model=QuestionDetailOut)
 def update_question(
     question_id: int,
     data: QuestionUpdateIn,
     admin_id: int = Depends(require_admin),
     session: Any = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
-) -> QuestionOut:
+) -> QuestionDetailOut:
     q = container.catalog_service.update_question(
         session,
         question_id,
         UpdateQuestionCommand(
+            domain_id=data.domain_id,
             question_text=data.question_text,
             question_type=data.question_type,
             language=data.language,
@@ -493,6 +503,10 @@ def update_question(
             experience_level=data.experience_level,
             star_template_id=data.star_template_id,
             is_active=data.is_active,
+            quiz_data=data.quiz_data,
+            sample_answer=data.sample_answer,
+            follow_up_questions=data.follow_up_questions,
+            tips=data.tips,
             fields_set=frozenset(data.model_fields_set),
         ),
     )
@@ -505,7 +519,7 @@ def update_question(
         new_value={"question_id": q.question_id},
     )
     invalidate_cache(container, "catalog:")
-    return QuestionOut.model_validate(q)
+    return QuestionDetailOut.model_validate(q)
 
 
 @router.delete("/questions/{question_id}", status_code=204)
@@ -521,6 +535,92 @@ def delete_question(
         user_id=admin_id,
         table_name="question_bank",
         record_id=question_id,
+        action="delete",
+    )
+    invalidate_cache(container, "catalog:")
+
+
+@router.post("/question-sets", response_model=QuestionSetDetailOut, status_code=201)
+def create_question_set(
+    data: QuestionSetCreateIn,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> QuestionSetDetailOut:
+    s = container.catalog_service.create_question_set(
+        session,
+        title=data.title,
+        description=data.description,
+        domain_id=data.domain_id,
+        role_id=data.role_id,
+        experience_level=data.experience_level or "junior",
+        tech_stack=data.tech_stack or [],
+        language=data.language,
+        target_difficulty=data.target_difficulty,
+        estimated_duration_minutes=data.estimated_duration_minutes,
+        is_curated=data.is_curated,
+        is_active=data.is_active,
+        question_ids=data.question_ids,
+    )
+    container.admin_service.repo.record_audit(
+        session,
+        user_id=admin_id,
+        table_name="question_sets",
+        record_id=s.set_id,
+        action="insert",
+        new_value={"title": s.title, "domain_id": s.domain_id},
+    )
+    invalidate_cache(container, "catalog:")
+    return container.catalog_service.repo.get_question_set_by_id(session, s.set_id)  # type: ignore
+
+
+@router.put("/question-sets/{set_id}", response_model=QuestionSetDetailOut)
+def update_question_set(
+    set_id: int,
+    data: QuestionSetUpdateIn,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> QuestionSetDetailOut:
+    up_kwargs = data.model_dump(exclude_unset=True)
+    q_ids = up_kwargs.pop("question_ids", None)
+    s = container.catalog_service.update_question_set(
+        session,
+        set_id,
+        question_ids=q_ids,
+        **up_kwargs,
+    )
+    if not s:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Question set not found")
+    container.admin_service.repo.record_audit(
+        session,
+        user_id=admin_id,
+        table_name="question_sets",
+        record_id=s.set_id,
+        action="update",
+        new_value={"set_id": s.set_id},
+    )
+    invalidate_cache(container, "catalog:")
+    return s
+
+
+@router.delete("/question-sets/{set_id}", status_code=204)
+def delete_question_set(
+    set_id: int,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> None:
+    success = container.catalog_service.delete_question_set(session, set_id)
+    if not success:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Question set not found")
+    container.admin_service.repo.record_audit(
+        session,
+        user_id=admin_id,
+        table_name="question_sets",
+        record_id=set_id,
         action="delete",
     )
     invalidate_cache(container, "catalog:")

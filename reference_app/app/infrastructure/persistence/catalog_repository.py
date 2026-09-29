@@ -344,6 +344,10 @@ class SqlAlchemyCatalogRepository:
         experience_level: str | None = None,
         star_template_id: int | None = None,
         created_by: int | None = None,
+        quiz_data: dict[str, Any] | None = None,
+        sample_answer: str | None = None,
+        follow_up_questions: list[str] | None = None,
+        tips: list[str] | None = None,
     ) -> QuestionBankItem:
         row = QuestionBankModel(
             domain_id=domain_id,
@@ -355,6 +359,10 @@ class SqlAlchemyCatalogRepository:
             star_template_id=star_template_id,
             is_active=True,
             created_by=created_by,
+            quiz_data=quiz_data,
+            sample_answer=sample_answer,
+            follow_up_questions=follow_up_questions,
+            tips=tips,
         )
         session.add(row)
         session.commit()
@@ -366,6 +374,7 @@ class SqlAlchemyCatalogRepository:
         session: Any,
         question_id: int,
         *,
+        domain_id: int | None = None,
         question_text: str | None = None,
         question_type: str | None = None,
         language: str | None = None,
@@ -373,6 +382,10 @@ class SqlAlchemyCatalogRepository:
         experience_level: str | None = None,
         star_template_id: int | None = None,
         is_active: bool | None = None,
+        quiz_data: dict[str, Any] | None = None,
+        sample_answer: str | None = None,
+        follow_up_questions: list[str] | None = None,
+        tips: list[str] | None = None,
         fields_set: frozenset[str] | None = None,
     ) -> QuestionBankItem:
         row = session.get(QuestionBankModel, question_id)
@@ -409,6 +422,16 @@ class SqlAlchemyCatalogRepository:
                 row.star_template_id = star_template_id
             if "is_active" in fields_set and is_active is not None:
                 row.is_active = is_active
+            if "domain_id" in fields_set and domain_id is not None:
+                row.domain_id = domain_id
+            if "quiz_data" in fields_set:
+                row.quiz_data = quiz_data
+            if "sample_answer" in fields_set:
+                row.sample_answer = sample_answer
+            if "follow_up_questions" in fields_set:
+                row.follow_up_questions = follow_up_questions
+            if "tips" in fields_set:
+                row.tips = tips
 
         session.commit()
         session.refresh(row)
@@ -510,3 +533,127 @@ class SqlAlchemyCatalogRepository:
         q_rows = list(session.execute(select(QuestionBankModel).where(QuestionBankModel.question_id.in_(qids))).scalars().all())
         q_dict = {q.question_id: q for q in q_rows}
         return [q_dict[qid] for qid in qids if qid in q_dict]
+
+    def create_question_set(
+        self,
+        session: Any,
+        *,
+        title: str,
+        description: str,
+        domain_id: int,
+        role_id: int | None = None,
+        experience_level: str = "junior",
+        tech_stack: list[str] | None = None,
+        language: str = "vi",
+        target_difficulty: int = 3,
+        estimated_duration_minutes: int = 20,
+        is_curated: bool = True,
+        is_active: bool = True,
+        question_ids: list[int] | None = None,
+    ) -> QuestionSetModel:
+        s = QuestionSetModel(
+            title=title,
+            description=description,
+            domain_id=domain_id,
+            role_id=role_id,
+            experience_level=experience_level,
+            tech_stack=tech_stack or [],
+            language=language,
+            target_difficulty=target_difficulty,
+            estimated_duration_minutes=estimated_duration_minutes,
+            is_curated=is_curated,
+            is_active=is_active,
+        )
+        session.add(s)
+        session.flush()
+
+        if question_ids:
+            for idx, qid in enumerate(question_ids):
+                item = QuestionSetItemModel(
+                    set_id=s.set_id,
+                    question_id=qid,
+                    order_index=idx,
+                )
+                session.add(item)
+
+        session.commit()
+        session.refresh(s)
+        return s
+
+    def update_question_set(
+        self,
+        session: Any,
+        set_id: int,
+        *,
+        title: str | None = None,
+        description: str | None = None,
+        domain_id: int | None = None,
+        role_id: int | None = None,
+        experience_level: str | None = None,
+        tech_stack: list[str] | None = None,
+        language: str | None = None,
+        target_difficulty: int | None = None,
+        estimated_duration_minutes: int | None = None,
+        is_curated: bool | None = None,
+        is_active: bool | None = None,
+        question_ids: list[int] | None = None,
+    ) -> QuestionSetModel | None:
+        s = session.get(QuestionSetModel, set_id)
+        if not s:
+            return None
+
+        if title is not None:
+            s.title = title
+        if description is not None:
+            s.description = description
+        if domain_id is not None:
+            s.domain_id = domain_id
+        if role_id is not None:
+            s.role_id = role_id
+        if experience_level is not None:
+            s.experience_level = experience_level
+        if tech_stack is not None:
+            s.tech_stack = tech_stack
+        if language is not None:
+            s.language = language
+        if target_difficulty is not None:
+            s.target_difficulty = target_difficulty
+        if estimated_duration_minutes is not None:
+            s.estimated_duration_minutes = estimated_duration_minutes
+        if is_curated is not None:
+            s.is_curated = is_curated
+        if is_active is not None:
+            s.is_active = is_active
+
+        if question_ids is not None:
+            existing = session.execute(
+                select(QuestionSetItemModel).where(QuestionSetItemModel.set_id == set_id)
+            ).scalars().all()
+            for it in existing:
+                session.delete(it)
+            session.flush()
+
+            for idx, qid in enumerate(question_ids):
+                item = QuestionSetItemModel(
+                    set_id=s.set_id,
+                    question_id=qid,
+                    order_index=idx,
+                )
+                session.add(item)
+
+        session.commit()
+        session.refresh(s)
+        return s
+
+    def delete_question_set(self, session: Any, set_id: int) -> bool:
+        s = session.get(QuestionSetModel, set_id)
+        if not s:
+            return False
+        items = session.execute(
+            select(QuestionSetItemModel).where(QuestionSetItemModel.set_id == set_id)
+        ).scalars().all()
+        for it in items:
+            session.delete(it)
+        session.delete(s)
+        session.commit()
+        return True
