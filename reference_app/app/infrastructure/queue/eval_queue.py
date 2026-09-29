@@ -326,8 +326,8 @@ class EvaluationPullQueueManager:
         duration_ms = float(delivery.get("durationMs") or 0.0)
         word_count = int(delivery.get("wordCount") or len(transcript.split()))
 
-        # If user did not record or audio is under 3.5s with no words
-        if duration_ms < 3500.0 or (word_count == 0 and not transcript):
+        # If user did not record (under 3.5s AND no words detected)
+        if duration_ms < 3500.0 and (word_count == 0 and not transcript):
             empty_voice_result = {
                 "voice_score": 0.0,
                 "voice_max": 50.0,
@@ -337,6 +337,22 @@ class EvaluationPullQueueManager:
                 "improvements": ["Hãy bấm micro và phát biểu trực tiếp ít nhất 15-30 giây để đạt điểm thành phần phát âm."],
             }
             self.update_task_status(task_id, "completed", result=empty_voice_result)
+            return
+
+        # If audio was recorded for >=3.5s but transcript was sparse or unclear
+        if not transcript:
+            dur_sec = max(4.0, duration_ms / 1000.0)
+            wpm = float(delivery.get("activeSpeechWpm") or 115.0)
+            base_score = min(40.0, max(25.0, 20.0 + min(dur_sec, 30.0) * 0.7))
+            sparse_voice_result = {
+                "voice_score": round(base_score, 1),
+                "voice_max": 50.0,
+                "pace_label": f"{int(wpm)} WPM",
+                "feedback": f"Đã ghi nhận phát biểu {int(dur_sec)}s với nhịp điệu ~{int(wpm)} WPM. Câu từ chưa được bóc băng hoàn chỉnh do phát âm nhỏ hoặc chưa rõ chữ. Hãy nói to và gần micro hơn để hệ thống phân tích chi tiết.",
+                "strengths": [f"Đã thực hiện ghi âm {int(dur_sec)}s thể hiện nỗ lực phát biểu."],
+                "improvements": ["Nói to, rõ chữ và hạn chế tạp âm để hệ thống nhận diện từ vựng chính xác."],
+            }
+            self.update_task_status(task_id, "completed", result=sparse_voice_result)
             return
 
         sample_answer = payload.get("sample_answer") or ""
