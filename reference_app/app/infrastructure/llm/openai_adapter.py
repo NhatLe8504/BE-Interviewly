@@ -412,7 +412,8 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT CHUỖI JSON HỢP LỆ (KHÔNG KÈM TE
         pauses = delivery_metrics.get("longPauseCount", 0)
         reps = delivery_metrics.get("repetitionCount", 0)
         clean_tr = (transcript or "").strip()
-        word_count = len(clean_tr.split())
+        words = [w for w in clean_tr.lower().split() if w]
+        word_count = len(words)
 
         # 1. Build Verbal Descriptions for 4 Speech & Rhythm Metrics
         pace_label = f"{int(wpm)} WPM"
@@ -452,63 +453,83 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT CHUỖI JSON HỢP LỆ (KHÔNG KÈM TE
             f"• Lặp từ ngữ: {rep_desc}"
         )
 
-        # 2. Heuristic Content Scoring & Check
-        has_substantive = any(k in clean_tr.lower() for k in [
-            "báo", "sếp", "lỗi", "production", "fix", "bước", "sửa", "giải quyết",
-            "xử lý", "code", "khách hàng", "test", "server", "hệ thống", "critical"
-        ])
-        is_pure_refusal = (
-            word_count < 6 and any(k in clean_tr.lower() for k in ["không biết", "chịu", "thử mic", "alo", "1 2 3"])
+        # 2. Strict Check for Test Mic, Counting Numbers, or Empty Gibberish
+        test_words = {
+            "alo", "test", "mic", "thử", "nghe", "rõ", "không", "biết", "chịu", "chưa", "học", "chơi",
+            "một", "hai", "ba", "bốn", "năm", "sáu", "bảy", "tám", "chín", "mười",
+            "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"
+        }
+        test_word_matches = sum(1 for w in words if w.isdigit() or w in test_words)
+        test_ratio = (test_word_matches / word_count) if word_count > 0 else 1.0
+
+        substantive_pattern = r"(sự cố|lỗi|production|fix|bug|bước|khắc phục|giải quyết|xử lý|sếp|team|log|rollback|incident|database|server|báo cáo|thông báo|khách hàng|hệ thống)"
+        import re
+        has_substantive = bool(re.search(substantive_pattern, clean_tr.lower()))
+
+        # If transcript is counting numbers, testing mic, or pure refusal
+        is_test_mic_or_refusal = (
+            word_count == 0
+            or (test_ratio >= 0.50 and not has_substantive)
+            or (word_count < 7 and not has_substantive)
         )
 
-        if is_pure_refusal:
-            calc_score = 5.0
-            content_desc = "Ứng viên chưa trả lời vào câu hỏi phỏng vấn (phát biểu không biết cách làm hoặc thử mic). Cần tự tin chia sẻ trải nghiệm thực tế hoặc suy luận giải pháp theo khung STAR."
-        elif has_substantive:
-            calc_score = round(min(45.0, max(24.0, 18.0 + min(duration_sec, 30) * 0.4 + (5.0 if 110 <= wpm <= 165 else 0.0) - min(4.0, pauses * 1.0))), 1)
-            content_desc = (
-                "Ứng viên đã phản xạ nêu được những bước xử lý ban đầu quan trọng (báo cáo với cấp trên và định hướng sửa lỗi Production). "
-                "Tuy nhiên, phần mở đầu còn vấp và thử mic ('Alo 1 2 3', 'không biết trả lời'). Để trả lời thuyết phục hơn, "
-                "bạn nên đi thẳng vào vấn đề: quy trình cô lập lỗi, bật chế độ bảo trì/rollback, kiểm tra log hệ thống và phân tích nguyên nhân gốc rễ (Root Cause Analysis)."
-            )
-        else:
-            calc_score = round(min(35.0, max(15.0, 15.0 + min(duration_sec, 25) * 0.3)), 1)
-            content_desc = "Nội dung phát biểu còn ngắn và mang tính khái quát, cần đưa ra các dẫn chứng thực tế theo khung STAR."
+        if is_test_mic_or_refusal:
+            return {
+                "voice_score": 0.0,
+                "voice_max": 50.0,
+                "pace_label": pace_label,
+                "feedback": (
+                    f"Nội dung phát biểu không đáp ứng yêu cầu câu hỏi phỏng vấn: Ứng viên chỉ thực hiện kiểm tra micro hoặc đếm số ('Alo', số đếm...), "
+                    f"hoàn toàn không chia sẻ tình huống sự cố thực tế hay quy trình xử lý kỹ thuật nào. Do đó điểm nội dung bằng 0.\n\n"
+                    f"Đánh giá chỉ số phát biểu & nhịp điệu:\n{metrics_verbal_review}\n\n"
+                    f"Lưu ý: Kỹ năng phát âm không được tính điểm khi ứng viên không trả lời vào câu hỏi phỏng vấn."
+                ),
+                "strengths": [],
+                "improvements": [
+                    "Cần trả lời trực tiếp vào câu hỏi phỏng vấn, không sử dụng thời gian thi để đếm số hoặc thử mic.",
+                    "Chuẩn bị tình huống thực tế và trình bày các bước giải quyết theo cấu trúc rõ ràng: Bối cảnh -> Hành động xử lý -> Kết quả."
+                ],
+            }
 
-        fallback_feedback = content_desc + "\n\nĐánh giá chỉ số phát biểu & nhịp điệu:\n" + metrics_verbal_review
-
-        # 3. Call Groq LLM if configured
+        # 3. Call Groq LLM for In-depth Technical, Structure & Speech Evaluation
         if self.api_key and word_count >= 5:
-            prompt = f"""Bạn là Giám khảo Phỏng vấn AI cấp cao. Hãy đánh giá phần thi NÓI & PHÁT BIỂU của ứng viên cho vị trí {role_name}:
-【CÂU HỎI PHỎNG VẤN】: {question}
-【CÂU TRẢ LỜI MẪU BENCHMARK】: "{sample_answer}"
-【TRANSCRIPT PHÁT BIỂU CỦA ỨNG VIÊN】: "{clean_tr}"
-【CHỈ SỐ PHÁT BIỂU THỰC TẾ ĐO ĐƯỢC】:
+            prompt = f"""Bạn là Giám khảo Phỏng vấn Kỹ thuật AI cấp cao. Hãy chấm điểm và đưa ra nhận xét chuyên môn sắc sảo cho phần thi NÓI & TRẢ LỜI PHỎNG VẤN (Thang điểm 50đ):
+
+【CÂU HỎI PHỎNG VẤN】:
+{question}
+
+【CÂU TRẢ LỜI MẪU THAM CHIẾU (BENCHMARK STAR)】:
+"{sample_answer}"
+
+【TRANSCRIPT ỨNG VIÊN PHÁT BIỂU THỰC TẾ】:
+"{clean_tr}"
+
+【CHỈ SỐ PHÁT BIỂU ĐO ĐƯỢC】:
 - Thời lượng: {int(duration_sec)}s
 - Tốc độ: {int(wpm)} WPM
 - Từ đệm: {filler_count} lần
 - Dừng lâu (>3s): {pauses} lần
 - Lặp từ: {reps} lần
 
-YÊU CẦU ĐÁNH GIÁ CHUYÊN MÔN:
-1. Đánh giá chất lượng nội dung câu trả lời:
-   - Ghi nhận những ý đúng hoặc hướng tiếp cận mà ứng viên đã nêu (ví dụ: báo cáo cấp trên, khắc phục lỗi).
-   - Chỉ ra điểm còn thiếu (ví dụ: mở đầu còn ngập ngừng/thử mic, chưa nêu quy trình kiểm tra log/monitoring, rollback hay root cause analysis).
-2. BẮT BUỘC đánh giá chi tiết bằng lời văn cho 4 chỉ số phát biểu & nhịp điệu:
-   - Tốc độ {int(wpm)} WPM
-   - Quãng dừng lâu (>3s) {pauses} lần
-   - Từ đệm {filler_count} lần
-   - Lặp từ {reps} lần
-3. Đưa ra điểm số giọng nói công bằng trên thang điểm 50đ.
+【NGUYÊN TẮC CHẤM ĐIỂM & ĐÁNH GIÁ (BẮT BUỘC TUÂN THỦ)】:
+1. ĐỐI CHIẾU CÂU HỎI VÀ CÂU TRẢ LỜI MẪU:
+   - Câu trả lời mẫu là chuẩn mực về độ sâu chuyên môn và cấu trúc STAR.
+   - ỨNG VIÊN KHÔNG BẮT BUỘC phải gặp đúng sự cố giống câu trả lời mẫu. Nếu ứng viên chia sẻ một sự cố thực tế khác (như lỗi database, tràn ram, nghẽn mạng, lỗi thanh toán...), nhưng đúng trọng tâm câu hỏi và có hướng giải quyết hợp lý -> Hãy cho điểm tốt theo chất lượng thực tế (từ 25 đến 45/50đ).
+2. ĐÁNH GIÁ FORMAT VÀ ĐỘ CHUYÊN NGHIỆP CỦA CÂU TRẢ LỜI:
+   - Format tốt: Có mở đầu (bối cảnh sự cố), thân bài (các bước xử lý kỹ thuật logic, thông báo đội ngũ, rollback/hotfix), kết bài (kết quả và biện pháp phòng ngừa).
+   - Format kém / nói linh tinh: Nếu nói lan man, không có quy trình kỹ thuật, nhảy cóc, câu từ ngô nghê -> Cho điểm thấp (dưới 15/50đ).
+3. QUY TẮC TEST MIC / ĐẾM SỐ:
+   - Nếu ứng viên chỉ đếm số hoặc thử mic mà không trả lời -> Điểm = 0đ! Tuyệt đối không cộng điểm phát âm cho bài đếm số.
+4. BẮT BUỘC ĐÁNH GIÁ CHI TIẾT BẰNG LỜI VĂN CHO 4 CHỈ SỐ NHỊP ĐIỆU (Tốc độ {int(wpm)} WPM, Dừng lâu {pauses} lần, Từ đệm {filler_count} lần, Lặp từ {reps} lần).
 
-BẮT BUỘC TRẢ VỀ DUY NHẤT 1 JSON HỢP LỆ THEO CẤU TRÚC:
+BẮT BUỘC TRẢ VỀ DUY NHẤT 1 JSON HỢP LỆ THEO CẤU TRÚC (KHÔNG BỌC MARKDOWN):
 {{
-  "voice_score": {calc_score},
+  "voice_score": 25.0,
   "voice_max": 50.0,
   "pace_label": "{pace_label}",
-  "feedback": "Đoạn văn nhận xét chi tiết gồm cả chất lượng nội dung và đánh giá bằng lời văn cho từng chỉ số nhịp điệu...",
-  "strengths": ["Điểm mạnh 1", "Điểm mạnh 2"],
-  "improvements": ["Điểm cần cải thiện 1", "Điểm cần cải thiện 2"]
+  "feedback": "Đoạn văn nhận xét chi tiết gồm: 1. Đánh giá nội dung và format câu trả lời (so sánh với yêu cầu câu hỏi & mẫu); 2. Đánh giá bằng lời văn cho 4 chỉ số nhịp điệu phát biểu.",
+  "strengths": ["Điểm sáng chuyên môn hoặc phát âm 1", "Điểm sáng 2"],
+  "improvements": ["Điểm cần cải thiện về format hoặc kỹ thuật 1", "Điểm cần cải thiện 2"]
 }}"""
             system_prompt = "Bạn là Giám khảo Phỏng vấn AI cấp cao. BẮT BUỘC chỉ trả về duy nhất 1 JSON hợp lệ, sử dụng 100% tiếng Việt tự nhiên và chuẩn mực."
             try:
@@ -522,19 +543,27 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT 1 JSON HỢP LỆ THEO CẤU TRÚC:
             except Exception as e:
                 pass
 
+        # Fallback Calculation
+        calc_score = round(min(40.0, max(15.0, 18.0 + min(duration_sec, 30) * 0.4 + (5.0 if 110 <= wpm <= 165 else 0.0) - min(4.0, pauses * 1.0))), 1)
+        fallback_content = (
+            "Ứng viên đã phản xạ trả lời câu hỏi và nêu được những bước xử lý ban đầu. "
+            "Để câu trả lời thuyết phục hơn, bạn nên xây dựng format rõ ràng theo khung STAR: "
+            "nêu bối cảnh sự cố, các bước cô lập và sửa lỗi, kết quả định lượng và bài học rút ra."
+        )
+
         return {
             "voice_score": calc_score,
             "voice_max": 50.0,
             "pace_label": pace_label,
-            "feedback": fallback_feedback,
+            "feedback": f"{fallback_content}\n\nĐánh giá chỉ số phát biểu & nhịp điệu:\n{metrics_verbal_review}",
             "strengths": [
                 f"Tốc độ phát biểu {int(wpm)} WPM rõ ràng.",
-                "Có ý thức phản xạ xử lý vấn đề Production."
-            ] if has_substantive else ["Đã hoàn thành lượt ghi âm phát biểu."],
+                "Có ý thức phản xạ giải quyết vấn đề."
+            ],
             "improvements": [
-                "Giảm tốc độ nói về mức 120-160 WPM để phát biểu trầm ổn, tự tin hơn.",
-                "Hạn chế quãng lặng >3s bằng cách phác thảo ý trước khi nói."
-            ] if pauses > 0 else ["Duy trì phong thái nói lưu loát."],
+                "Chuẩn bị format câu trả lời theo đúng khung STAR (Tình huống -> Nhiệm vụ -> Hành động -> Kết quả).",
+                "Hạn chế quãng ngắt quãng và kiểm soát nhịp thở tự tin hơn."
+            ],
         }
 
     def evaluate_multi_modal_question(
