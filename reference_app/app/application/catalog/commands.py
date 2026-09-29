@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from dataclasses import dataclass, field
 
 
@@ -51,10 +53,15 @@ class CreateQuestionCommand:
     experience_level: str | None = None
     star_template_id: int | None = None
     created_by: int | None = None
+    quiz_data: dict[str, Any] | None = None
+    sample_answer: str | None = None
+    follow_up_questions: list[str] | None = None
+    tips: list[str] | None = None
 
 
 @dataclass(frozen=True)
 class UpdateQuestionCommand:
+    domain_id: int | None = None
     question_text: str | None = None
     question_type: str | None = None
     language: str | None = None
@@ -62,4 +69,8 @@ class UpdateQuestionCommand:
     experience_level: str | None = None
     star_template_id: int | None = None
     is_active: bool | None = None
+    quiz_data: dict[str, Any] | None = None
+    sample_answer: str | None = None
+    follow_up_questions: list[str] | None = None
+    tips: list[str] | None = None
     fields_set: frozenset[str] = field(default_factory=frozenset)

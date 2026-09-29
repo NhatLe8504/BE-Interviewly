@@ -248,6 +248,10 @@ class CatalogService:
             experience_level=cmd.experience_level,
             star_template_id=cmd.star_template_id,
             created_by=cmd.created_by,
+            quiz_data=cmd.quiz_data,
+            sample_answer=cmd.sample_answer,
+            follow_up_questions=cmd.follow_up_questions,
+            tips=cmd.tips,
         )
 
     def update_question(
@@ -273,6 +277,7 @@ class CatalogService:
         return self.repo.update_question(
             session,
             question_id,
+            domain_id=cmd.domain_id,
             question_text=cmd.question_text,
             question_type=cmd.question_type,
             language=cmd.language,
@@ -280,6 +285,10 @@ class CatalogService:
             experience_level=cmd.experience_level,
             star_template_id=cmd.star_template_id,
             is_active=cmd.is_active,
+            quiz_data=cmd.quiz_data,
+            sample_answer=cmd.sample_answer,
+            follow_up_questions=cmd.follow_up_questions,
+            tips=cmd.tips,
             fields_set=cmd.fields_set if cmd.fields_set else None,
         )
 
@@ -288,3 +297,12 @@ class CatalogService:
         if existing is None:
             raise NotFoundError(f"question {question_id} not found")
         self.repo.delete_question(session, question_id)
+
+    def create_question_set(self, session: Any, **kwargs: Any) -> Any:
+        return self.repo.create_question_set(session, **kwargs)
+
+    def update_question_set(self, session: Any, set_id: int, **kwargs: Any) -> Any:
+        return self.repo.update_question_set(session, set_id, **kwargs)
+
+    def delete_question_set(self, session: Any, set_id: int) -> bool:
+        return self.repo.delete_question_set(session, set_id)

@@ -105,9 +105,14 @@ class QuestionCreateIn(BaseModel):
         None, pattern="^(intern|fresher|junior|mid|middle|senior)$",
     )
     star_template_id: int | None = None
+    quiz_data: dict[str, Any] | None = None
+    sample_answer: str | None = None
+    follow_up_questions: list[str] | None = None
+    tips: list[str] | None = None
 
 
 class QuestionUpdateIn(BaseModel):
+    domain_id: int | None = None
     question_text: str | None = Field(None, min_length=1)
     question_type: str | None = Field(
         None, pattern="^(behavioral|technical|situational)$",
@@ -119,6 +124,10 @@ class QuestionUpdateIn(BaseModel):
     )
     star_template_id: int | None = None
     is_active: bool | None = None
+    quiz_data: dict[str, Any] | None = None
+    sample_answer: str | None = None
+    follow_up_questions: list[str] | None = None
+    tips: list[str] | None = None
 
 
 class QuestionPageOut(BaseModel):
@@ -156,6 +165,36 @@ class QuestionSetOut(BaseModel):
 
 class QuestionSetDetailOut(QuestionSetOut):
     questions: list[QuestionDetailOut] = []
+
+
+class QuestionSetCreateIn(BaseModel):
+    title: str = Field(..., min_length=1, max_length=255)
+    description: str = Field(..., min_length=1)
+    domain_id: int
+    role_id: int | None = None
+    experience_level: str | None = Field("junior", pattern="^(intern|fresher|junior|mid|middle|senior)$")
+    tech_stack: list[str] | None = None
+    language: str = Field("vi", pattern="^(vi|en)$")
+    target_difficulty: int = Field(3, ge=1, le=5)
+    estimated_duration_minutes: int = Field(20, ge=1, le=180)
+    is_curated: bool = True
+    is_active: bool = True
+    question_ids: list[int] | None = None
+
+
+class QuestionSetUpdateIn(BaseModel):
+    title: str | None = Field(None, min_length=1, max_length=255)
+    description: str | None = None
+    domain_id: int | None = None
+    role_id: int | None = None
+    experience_level: str | None = Field(None, pattern="^(intern|fresher|junior|mid|middle|senior)$")
+    tech_stack: list[str] | None = None
+    language: str | None = Field(None, pattern="^(vi|en)$")
+    target_difficulty: int | None = Field(None, ge=1, le=5)
+    estimated_duration_minutes: int | None = Field(None, ge=1, le=180)
+    is_curated: bool | None = None
+    is_active: bool | None = None
+    question_ids: list[int] | None = None
 
 
 class QuestionSetPageOut(BaseModel):
