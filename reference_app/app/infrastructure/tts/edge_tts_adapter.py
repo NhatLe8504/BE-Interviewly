@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import asyncio
 from typing import AsyncIterator
-import edge_tts
+try:
+    import edge_tts
+except ImportError:
+    edge_tts = None
 
 from ...application.voice.ports import TTSPort
 
@@ -53,6 +56,9 @@ class EdgeTTSAdapter(TTSPort):
         target_voice = self.resolve_voice(voice)
 
         try:
+            if edge_tts is None:
+                yield SILENT_MP3_FRAME
+                return
             communicate = edge_tts.Communicate(cleaned, target_voice)
             chunks_yielded = 0
             async for chunk in communicate.stream():
