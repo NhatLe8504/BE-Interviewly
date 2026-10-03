@@ -2552,21 +2552,73 @@
       }
     },
     "/api/v1/admin/domains": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List Admin Domains",
+        "operationId": "list_admin_domains_api_v1_admin_domains_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(active|archived|all)$",
+              "default": "active",
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DomainAdminSummaryPageOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
         "tags": [
           "admin"
         ],
         "summary": "Create Domain",
         "operationId": "create_domain_api_v1_admin_domains_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/DomainCreateIn"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "201": {
@@ -2589,15 +2641,66 @@
               }
             }
           }
-        },
+        }
+      }
+    },
+    "/api/v1/admin/domains/{domain_id}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Get Admin Domain Detail",
+        "operationId": "get_admin_domain_detail_api_v1_admin_domains__domain_id__get",
         "security": [
           {
             "HTTPBearer": []
           }
-        ]
-      }
-    },
-    "/api/v1/admin/domains/{domain_id}": {
+        ],
+        "parameters": [
+          {
+            "name": "domain_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Domain Id"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(active|archived|all)$",
+              "default": "all",
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DomainAdminDetailOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "put": {
         "tags": [
           "admin"
@@ -2678,6 +2781,63 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/domains/{domain_id}/status": {
+      "patch": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Update Domain Status",
+        "operationId": "update_domain_status_api_v1_admin_domains__domain_id__status_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "domain_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Domain Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogStatusUpdateIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DomainOut"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -2819,6 +2979,63 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/roles/{role_id}/status": {
+      "patch": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Update Role Status",
+        "operationId": "update_role_status_api_v1_admin_roles__role_id__status_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "role_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Role Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogStatusUpdateIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleOut"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -5181,6 +5398,19 @@
         ],
         "title": "CandidateKpiStatsOut"
       },
+      "CatalogStatusUpdateIn": {
+        "properties": {
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          }
+        },
+        "type": "object",
+        "required": [
+          "is_active"
+        ],
+        "title": "CatalogStatusUpdateIn"
+      },
       "ChangePasswordIn": {
         "properties": {
           "current_password": {
@@ -5284,6 +5514,128 @@
         ],
         "title": "CheckoutUrlOut"
       },
+      "DomainAdminDetailOut": {
+        "properties": {
+          "domain": {
+            "$ref": "#/components/schemas/DomainAdminSummaryOut"
+          },
+          "roles": {
+            "items": {
+              "$ref": "#/components/schemas/RoleAdminSummaryOut"
+            },
+            "type": "array",
+            "title": "Roles"
+          }
+        },
+        "type": "object",
+        "required": [
+          "domain",
+          "roles"
+        ],
+        "title": "DomainAdminDetailOut"
+      },
+      "DomainAdminSummaryOut": {
+        "properties": {
+          "domain_id": {
+            "type": "integer",
+            "title": "Domain Id"
+          },
+          "domain_name": {
+            "type": "string",
+            "title": "Domain Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "role_count": {
+            "type": "integer",
+            "title": "Role Count",
+            "default": 0
+          },
+          "active_role_count": {
+            "type": "integer",
+            "title": "Active Role Count",
+            "default": 0
+          },
+          "question_count": {
+            "type": "integer",
+            "title": "Question Count",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "domain_id",
+          "domain_name"
+        ],
+        "title": "DomainAdminSummaryOut"
+      },
+      "DomainAdminSummaryPageOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DomainAdminSummaryOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "active_domains": {
+            "type": "integer",
+            "title": "Active Domains"
+          },
+          "archived_domains": {
+            "type": "integer",
+            "title": "Archived Domains"
+          },
+          "active_roles": {
+            "type": "integer",
+            "title": "Active Roles"
+          },
+          "total_questions": {
+            "type": "integer",
+            "title": "Total Questions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "active_domains",
+          "archived_domains",
+          "active_roles",
+          "total_questions"
+        ],
+        "title": "DomainAdminSummaryPageOut"
+      },
       "DomainCreateIn": {
         "properties": {
           "domain_name": {
@@ -5330,6 +5682,11 @@
               }
             ],
             "title": "Description"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
           },
           "created_at": {
             "anyOf": [
@@ -8733,6 +9090,62 @@
         ],
         "title": "RegisterIn"
       },
+      "RoleAdminSummaryOut": {
+        "properties": {
+          "role_id": {
+            "type": "integer",
+            "title": "Role Id"
+          },
+          "domain_id": {
+            "type": "integer",
+            "title": "Domain Id"
+          },
+          "role_name": {
+            "type": "string",
+            "title": "Role Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
+          },
+          "question_count": {
+            "type": "integer",
+            "title": "Question Count",
+            "default": 0
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role_id",
+          "domain_id",
+          "role_name"
+        ],
+        "title": "RoleAdminSummaryOut"
+      },
       "RoleCreateIn": {
         "properties": {
           "domain_id": {
@@ -8788,6 +9201,11 @@
               }
             ],
             "title": "Description"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
           },
           "created_at": {
             "anyOf": [
