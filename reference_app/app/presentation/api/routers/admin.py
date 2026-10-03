@@ -37,6 +37,9 @@ from ..schemas.admin import (
 )
 from ..schemas.catalog import (
     DomainCreateIn,
+    DomainAdminDetailOut,
+    DomainAdminSummaryOut,
+    DomainAdminSummaryPageOut,
     DomainOut,
     DomainUpdateIn,
     QuestionCreateIn,
@@ -48,8 +51,10 @@ from ..schemas.catalog import (
     QuestionSetCreateIn,
     QuestionSetUpdateIn,
     RoleCreateIn,
+    RoleAdminSummaryOut,
     RoleOut,
     RoleUpdateIn,
+    CatalogStatusUpdateIn,
     StarTemplateCreateIn,
     StarTemplateOut,
 )
@@ -284,6 +289,48 @@ def create_moderation_action(
 # --- Catalog Management Endpoints ---
 
 
+@router.get("/domains", response_model=DomainAdminSummaryPageOut)
+def list_admin_domains(
+    status: str = Query("active", pattern="^(active|archived|all)$"),
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> DomainAdminSummaryPageOut:
+    status_filter = {"active": True, "archived": False, "all": None}[status]
+    items = container.catalog_service.get_domain_summaries(session, is_active=status_filter)
+    all_items = container.catalog_service.get_domain_summaries(session, is_active=None)
+    return DomainAdminSummaryPageOut(
+        items=[DomainAdminSummaryOut.model_validate(item) for item in items],
+        total=len(items),
+        active_domains=sum(1 for item in all_items if item["is_active"]),
+        archived_domains=sum(1 for item in all_items if not item["is_active"]),
+        active_roles=sum(item["active_role_count"] for item in all_items),
+        total_questions=sum(item["question_count"] for item in all_items),
+    )
+
+
+@router.get("/domains/{domain_id}", response_model=DomainAdminDetailOut)
+def get_admin_domain_detail(
+    domain_id: int,
+    status: str = Query("all", pattern="^(active|archived|all)$"),
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> DomainAdminDetailOut:
+    domain_items = container.catalog_service.get_domain_summaries(session, is_active=None)
+    domain = next((item for item in domain_items if item["domain_id"] == domain_id), None)
+    if domain is None:
+        container.catalog_service.get_domain(session, domain_id)
+    status_filter = {"active": True, "archived": False, "all": None}[status]
+    roles = container.catalog_service.get_role_summaries(
+        session, domain_id=domain_id, is_active=status_filter,
+    )
+    return DomainAdminDetailOut(
+        domain=DomainAdminSummaryOut.model_validate(domain),
+        roles=[RoleAdminSummaryOut.model_validate(item) for item in roles],
+    )
+
+
 @router.post("/domains", response_model=DomainOut, status_code=201)
 def create_domain(
     data: DomainCreateIn,
@@ -330,6 +377,29 @@ def update_domain(
         record_id=domain_id,
         action="update",
         new_value={"domain_name": domain.domain_name},
+    )
+    invalidate_cache(container, "catalog:")
+    return DomainOut.model_validate(domain)
+
+
+@router.patch("/domains/{domain_id}/status", response_model=DomainOut)
+def update_domain_status(
+    domain_id: int,
+    data: CatalogStatusUpdateIn,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> DomainOut:
+    domain = container.catalog_service.set_domain_active(
+        session, domain_id, is_active=data.is_active,
+    )
+    container.admin_service.repo.record_audit(
+        session,
+        user_id=admin_id,
+        table_name="job_domains",
+        record_id=domain_id,
+        action="restore" if data.is_active else "archive",
+        new_value={"is_active": data.is_active},
     )
     invalidate_cache(container, "catalog:")
     return DomainOut.model_validate(domain)
@@ -403,6 +473,29 @@ def update_role(
         record_id=role_id,
         action="update",
         new_value={"role_name": role.role_name},
+    )
+    invalidate_cache(container, "catalog:")
+    return RoleOut.model_validate(role)
+
+
+@router.patch("/roles/{role_id}/status", response_model=RoleOut)
+def update_role_status(
+    role_id: int,
+    data: CatalogStatusUpdateIn,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> RoleOut:
+    role = container.catalog_service.set_role_active(
+        session, role_id, is_active=data.is_active,
+    )
+    container.admin_service.repo.record_audit(
+        session,
+        user_id=admin_id,
+        table_name="job_roles",
+        record_id=role_id,
+        action="restore" if data.is_active else "archive",
+        new_value={"is_active": data.is_active},
     )
     invalidate_cache(container, "catalog:")
     return RoleOut.model_validate(role)
