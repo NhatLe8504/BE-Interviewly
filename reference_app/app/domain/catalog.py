@@ -48,6 +48,7 @@ class JobDomain:
     domain_id: int
     domain_name: str
     description: str | None = None
+    is_active: bool = True
     created_at: datetime | None = None
 
     def __post_init__(self) -> None:
@@ -60,6 +61,7 @@ class JobRole:
     domain_id: int
     role_name: str
     description: str | None = None
+    is_active: bool = True
     created_at: datetime | None = None
 
     def __post_init__(self) -> None:

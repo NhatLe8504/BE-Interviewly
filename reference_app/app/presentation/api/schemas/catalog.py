@@ -11,7 +11,38 @@ class DomainOut(BaseModel):
     domain_id: int
     domain_name: str
     description: str | None = None
+    is_active: bool = True
     created_at: datetime | None = None
+
+
+class DomainAdminSummaryOut(DomainOut):
+    role_count: int = 0
+    active_role_count: int = 0
+    question_count: int = 0
+
+
+class DomainAdminSummaryPageOut(BaseModel):
+    items: list[DomainAdminSummaryOut]
+    total: int
+    active_domains: int
+    archived_domains: int
+    active_roles: int
+    total_questions: int
+
+
+class RoleAdminSummaryOut(BaseModel):
+    role_id: int
+    domain_id: int
+    role_name: str
+    description: str | None = None
+    is_active: bool = True
+    question_count: int = 0
+    created_at: datetime | None = None
+
+
+class DomainAdminDetailOut(BaseModel):
+    domain: DomainAdminSummaryOut
+    roles: list[RoleAdminSummaryOut]
 
 
 class DomainCreateIn(BaseModel):
@@ -31,7 +62,12 @@ class RoleOut(BaseModel):
     domain_id: int
     role_name: str
     description: str | None = None
+    is_active: bool = True
     created_at: datetime | None = None
+
+
+class CatalogStatusUpdateIn(BaseModel):
+    is_active: bool
 
 
 class RoleCreateIn(BaseModel):

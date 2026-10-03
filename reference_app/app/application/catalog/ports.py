@@ -11,7 +11,7 @@ from ...domain.catalog import (
 
 
 class CatalogRepositoryPort(Protocol):
-    def list_domains(self, session: Any) -> list[JobDomain]:
+    def list_domains(self, session: Any, *, is_active: bool | None = True) -> list[JobDomain]:
         ...
 
     def get_domain_by_id(self, session: Any, domain_id: int) -> JobDomain | None:
@@ -33,10 +33,19 @@ class CatalogRepositoryPort(Protocol):
     ) -> JobDomain:
         ...
 
+    def set_domain_active(self, session: Any, domain_id: int, *, is_active: bool) -> JobDomain:
+        ...
+
     def delete_domain(self, session: Any, domain_id: int) -> None:
         ...
 
-    def list_roles(self, session: Any, *, domain_id: int | None = None) -> list[JobRole]:
+    def list_roles(
+        self,
+        session: Any,
+        *,
+        domain_id: int | None = None,
+        is_active: bool | None = True,
+    ) -> list[JobRole]:
         ...
 
     def get_role_by_id(self, session: Any, role_id: int) -> JobRole | None:
@@ -57,6 +66,19 @@ class CatalogRepositoryPort(Protocol):
         domain_id: int | None = None,
         fields_set: frozenset[str] | None = None,
     ) -> JobRole:
+        ...
+
+    def set_role_active(self, session: Any, role_id: int, *, is_active: bool) -> JobRole:
+        ...
+
+    def list_domain_summaries(
+        self, session: Any, *, is_active: bool | None = None,
+    ) -> list[dict[str, Any]]:
+        ...
+
+    def list_role_summaries(
+        self, session: Any, *, domain_id: int, is_active: bool | None = None,
+    ) -> list[dict[str, Any]]:
         ...
 
     def delete_role(self, session: Any, role_id: int) -> None:

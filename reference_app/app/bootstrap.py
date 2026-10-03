@@ -31,6 +31,13 @@ def _auto_migrate_columns(engine: Any) -> None:
             ]
             for col_name, col_def in cols:
                 conn.exec_driver_sql(f"ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS {col_name} {col_def};")
+            for table_name, col_name, col_def in [
+                ("job_domains", "is_active", "BOOLEAN DEFAULT TRUE NOT NULL"),
+                ("job_roles", "is_active", "BOOLEAN DEFAULT TRUE NOT NULL"),
+            ]:
+                conn.exec_driver_sql(
+                    f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS {col_name} {col_def};"
+                )
             conn.exec_driver_sql(
                 "ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS barge_in_enabled BOOLEAN DEFAULT FALSE NOT NULL;"
             )
@@ -47,6 +54,14 @@ def _auto_migrate_columns(engine: Any) -> None:
             ]:
                 try:
                     conn.exec_driver_sql(f"ALTER TABLE question_bank ADD COLUMN {col_name} {col_def};")
+                except Exception:
+                    pass
+            for table_name, col_name, col_def in [
+                ("job_domains", "is_active", "BOOLEAN DEFAULT 1 NOT NULL"),
+                ("job_roles", "is_active", "BOOLEAN DEFAULT 1 NOT NULL"),
+            ]:
+                try:
+                    conn.exec_driver_sql(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_def};")
                 except Exception:
                     pass
             try:
