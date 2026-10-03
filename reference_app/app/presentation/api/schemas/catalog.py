@@ -62,12 +62,12 @@ class RoleOut(BaseModel):
     domain_id: int
     role_name: str
     description: str | None = None
+    is_active: bool = True
+    created_at: datetime | None = None
 
 
 class CatalogStatusUpdateIn(BaseModel):
     is_active: bool
-    is_active: bool = True
-    created_at: datetime | None = None
 
 
 class RoleCreateIn(BaseModel):
