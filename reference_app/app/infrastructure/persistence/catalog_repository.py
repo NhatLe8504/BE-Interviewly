@@ -41,6 +41,7 @@ def _to_domain(row: JobDomainModel) -> JobDomain:
         domain_id=row.domain_id,
         domain_name=row.domain_name,
         description=row.description,
+        is_active=row.is_active,
         created_at=row.created_at,
     )
 
@@ -51,6 +52,7 @@ def _to_role(row: JobRoleModel) -> JobRole:
         domain_id=row.domain_id,
         role_name=row.role_name,
         description=row.description,
+        is_active=row.is_active,
         created_at=row.created_at,
     )
 
@@ -99,8 +101,11 @@ class SqlAlchemyCatalogRepository:
         )
         return set(session.execute(stmt).scalars().all())
 
-    def list_domains(self, session: Any) -> list[JobDomain]:
-        stmt = select(JobDomainModel).where(JobDomainModel.domain_name.not_like('Software Dev %')).order_by(JobDomainModel.domain_name)
+    def list_domains(self, session: Any, *, is_active: bool | None = True) -> list[JobDomain]:
+        stmt = select(JobDomainModel).where(JobDomainModel.domain_name.not_like('Software Dev %'))
+        if is_active is not None:
+            stmt = stmt.where(JobDomainModel.is_active == is_active)
+        stmt = stmt.order_by(JobDomainModel.domain_name)
         rows = session.execute(stmt).scalars().all()
         return [_to_domain(r) for r in rows]
 
@@ -145,16 +150,35 @@ class SqlAlchemyCatalogRepository:
         session.refresh(row)
         return _to_domain(row)
 
+    def set_domain_active(self, session: Any, domain_id: int, *, is_active: bool) -> JobDomain:
+        row = session.get(JobDomainModel, domain_id)
+        if row is None:
+            raise ValueError(f"domain {domain_id} not found")
+        row.is_active = is_active
+        session.commit()
+        session.refresh(row)
+        return _to_domain(row)
+
     def delete_domain(self, session: Any, domain_id: int) -> None:
         row = session.get(JobDomainModel, domain_id)
         if row:
             session.delete(row)
             session.commit()
 
-    def list_roles(self, session: Any, *, domain_id: int | None = None) -> list[JobRole]:
-        stmt = select(JobRoleModel)
+    def list_roles(
+        self,
+        session: Any,
+        *,
+        domain_id: int | None = None,
+        is_active: bool | None = True,
+    ) -> list[JobRole]:
+        stmt = select(JobRoleModel).join(JobDomainModel, JobDomainModel.domain_id == JobRoleModel.domain_id)
+        if is_active is True:
+            stmt = stmt.where(JobDomainModel.is_active == True)
         if domain_id is not None:
             stmt = stmt.where(JobRoleModel.domain_id == domain_id)
+        if is_active is not None:
+            stmt = stmt.where(JobRoleModel.is_active == is_active)
         stmt = stmt.order_by(JobRoleModel.role_name)
         rows = session.execute(stmt).scalars().all()
         return [_to_role(r) for r in rows]
@@ -204,6 +228,78 @@ class SqlAlchemyCatalogRepository:
         session.commit()
         session.refresh(row)
         return _to_role(row)
+
+    def set_role_active(self, session: Any, role_id: int, *, is_active: bool) -> JobRole:
+        row = session.get(JobRoleModel, role_id)
+        if row is None:
+            raise ValueError(f"role {role_id} not found")
+        row.is_active = is_active
+        session.commit()
+        session.refresh(row)
+        return _to_role(row)
+
+    def list_domain_summaries(
+        self, session: Any, *, is_active: bool | None = None,
+    ) -> list[dict[str, Any]]:
+        stmt = (
+            select(
+                JobDomainModel.domain_id,
+                JobDomainModel.domain_name,
+                JobDomainModel.description,
+                JobDomainModel.is_active,
+                JobDomainModel.created_at,
+                func.count(func.distinct(JobRoleModel.role_id)).label("role_count"),
+                func.count(func.distinct(JobRoleModel.role_id)).filter(JobRoleModel.is_active == True).label("active_role_count"),
+                func.count(func.distinct(QuestionBankModel.question_id)).label("question_count"),
+            )
+            .select_from(JobDomainModel)
+            .outerjoin(JobRoleModel, JobRoleModel.domain_id == JobDomainModel.domain_id)
+            .outerjoin(QuestionBankModel, QuestionBankModel.domain_id == JobDomainModel.domain_id)
+            .where(JobDomainModel.domain_name.not_like('Software Dev %'))
+            .group_by(
+                JobDomainModel.domain_id,
+                JobDomainModel.domain_name,
+                JobDomainModel.description,
+                JobDomainModel.is_active,
+                JobDomainModel.created_at,
+            )
+            .order_by(JobDomainModel.domain_name)
+        )
+        if is_active is not None:
+            stmt = stmt.where(JobDomainModel.is_active == is_active)
+        rows = session.execute(stmt).mappings().all()
+        return [dict(row) for row in rows]
+
+    def list_role_summaries(
+        self, session: Any, *, domain_id: int, is_active: bool | None = None,
+    ) -> list[dict[str, Any]]:
+        stmt = (
+            select(
+                JobRoleModel.role_id,
+                JobRoleModel.domain_id,
+                JobRoleModel.role_name,
+                JobRoleModel.description,
+                JobRoleModel.is_active,
+                JobRoleModel.created_at,
+                func.count(func.distinct(QuestionBankModel.question_id)).label("question_count"),
+            )
+            .select_from(JobRoleModel)
+            .outerjoin(QuestionBankModel, QuestionBankModel.role_id == JobRoleModel.role_id)
+            .where(JobRoleModel.domain_id == domain_id)
+            .group_by(
+                JobRoleModel.role_id,
+                JobRoleModel.domain_id,
+                JobRoleModel.role_name,
+                JobRoleModel.description,
+                JobRoleModel.is_active,
+                JobRoleModel.created_at,
+            )
+            .order_by(JobRoleModel.role_name)
+        )
+        if is_active is not None:
+            stmt = stmt.where(JobRoleModel.is_active == is_active)
+        rows = session.execute(stmt).mappings().all()
+        return [dict(row) for row in rows]
 
     def delete_role(self, session: Any, role_id: int) -> None:
         row = session.get(JobRoleModel, role_id)
@@ -264,7 +360,13 @@ class SqlAlchemyCatalogRepository:
         limit: int = 50,
         offset: int = 0,
     ) -> list[QuestionBankItem]:
-        stmt = select(QuestionBankModel)
+        stmt = (
+            select(QuestionBankModel)
+            .join(JobDomainModel, JobDomainModel.domain_id == QuestionBankModel.domain_id)
+            .outerjoin(JobRoleModel, JobRoleModel.role_id == QuestionBankModel.role_id)
+            .where(JobDomainModel.is_active == True)
+            .where((QuestionBankModel.role_id.is_(None)) | (JobRoleModel.is_active == True))
+        )
         if domain_id is not None:
             stmt = stmt.where(QuestionBankModel.domain_id == domain_id)
         if role_id is not None:
@@ -293,7 +395,14 @@ class SqlAlchemyCatalogRepository:
         language: str | None = None,
         is_active: bool | None = True,
     ) -> int:
-        stmt = select(func.count(QuestionBankModel.question_id))
+        stmt = (
+            select(func.count(QuestionBankModel.question_id))
+            .select_from(QuestionBankModel)
+            .join(JobDomainModel, JobDomainModel.domain_id == QuestionBankModel.domain_id)
+            .outerjoin(JobRoleModel, JobRoleModel.role_id == QuestionBankModel.role_id)
+            .where(JobDomainModel.is_active == True)
+            .where((QuestionBankModel.role_id.is_(None)) | (JobRoleModel.is_active == True))
+        )
         if domain_id is not None:
             stmt = stmt.where(QuestionBankModel.domain_id == domain_id)
         if role_id is not None:
@@ -321,6 +430,10 @@ class SqlAlchemyCatalogRepository:
                 QuestionBankModel.question_id.in_(question_ids),
                 QuestionBankModel.is_active == True,
             )
+            .join(JobDomainModel, JobDomainModel.domain_id == QuestionBankModel.domain_id)
+            .outerjoin(JobRoleModel, JobRoleModel.role_id == QuestionBankModel.role_id)
+            .where(JobDomainModel.is_active == True)
+            .where((QuestionBankModel.role_id.is_(None)) | (JobRoleModel.is_active == True))
         )
         rows = session.execute(stmt).scalars().all()
         row_dict = {r.question_id: _to_question(r) for r in rows}

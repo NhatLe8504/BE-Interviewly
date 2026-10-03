@@ -30,8 +30,8 @@ class CatalogService:
     def __init__(self, repo: CatalogRepositoryPort) -> None:
         self.repo = repo
 
-    def get_domains(self, session: Any) -> list[JobDomain]:
-        return self.repo.list_domains(session)
+    def get_domains(self, session: Any, *, is_active: bool | None = True) -> list[JobDomain]:
+        return self.repo.list_domains(session, is_active=is_active)
 
     def get_domain(self, session: Any, domain_id: int) -> JobDomain:
         domain = self.repo.get_domain_by_id(session, domain_id)
@@ -61,16 +61,28 @@ class CatalogService:
             fields_set=cmd.fields_set if cmd.fields_set else None,
         )
 
+    def set_domain_active(self, session: Any, domain_id: int, *, is_active: bool) -> JobDomain:
+        existing = self.repo.get_domain_by_id(session, domain_id)
+        if existing is None:
+            raise NotFoundError(f"domain {domain_id} not found")
+        return self.repo.set_domain_active(session, domain_id, is_active=is_active)
+
     def delete_domain(self, session: Any, domain_id: int) -> None:
         existing = self.repo.get_domain_by_id(session, domain_id)
         if existing is None:
             raise NotFoundError(f"domain {domain_id} not found")
         self.repo.delete_domain(session, domain_id)
 
-    def get_roles(self, session: Any, domain_id: int | None = None) -> list[JobRole]:
+    def get_roles(
+        self,
+        session: Any,
+        domain_id: int | None = None,
+        *,
+        is_active: bool | None = True,
+    ) -> list[JobRole]:
         if domain_id is not None and not self.repo.get_domain_by_id(session, domain_id):
             raise NotFoundError(f"domain {domain_id} not found")
-        return self.repo.list_roles(session, domain_id=domain_id)
+        return self.repo.list_roles(session, domain_id=domain_id, is_active=is_active)
 
     def get_role(self, session: Any, role_id: int) -> JobRole:
         role = self.repo.get_role_by_id(session, role_id)
@@ -79,8 +91,11 @@ class CatalogService:
         return role
 
     def create_role(self, session: Any, cmd: CreateRoleCommand) -> JobRole:
-        if not self.repo.get_domain_by_id(session, cmd.domain_id):
+        domain = self.repo.get_domain_by_id(session, cmd.domain_id)
+        if domain is None:
             raise NotFoundError(f"domain {cmd.domain_id} not found")
+        if not domain.is_active:
+            raise ConflictError(f"domain {cmd.domain_id} is archived")
         validate_not_blank(cmd.role_name, "role_name")
         return self.repo.add_role(
             session,
@@ -95,8 +110,12 @@ class CatalogService:
         existing = self.repo.get_role_by_id(session, role_id)
         if existing is None:
             raise NotFoundError(f"role {role_id} not found")
-        if cmd.domain_id is not None and not self.repo.get_domain_by_id(session, cmd.domain_id):
-            raise NotFoundError(f"domain {cmd.domain_id} not found")
+        if cmd.domain_id is not None:
+            domain = self.repo.get_domain_by_id(session, cmd.domain_id)
+            if domain is None:
+                raise NotFoundError(f"domain {cmd.domain_id} not found")
+            if not domain.is_active:
+                raise ConflictError(f"domain {cmd.domain_id} is archived")
         if cmd.role_name is not None:
             validate_not_blank(cmd.role_name, "role_name")
         return self.repo.update_role(
@@ -107,6 +126,24 @@ class CatalogService:
             domain_id=cmd.domain_id,
             fields_set=cmd.fields_set if cmd.fields_set else None,
         )
+
+    def set_role_active(self, session: Any, role_id: int, *, is_active: bool) -> JobRole:
+        existing = self.repo.get_role_by_id(session, role_id)
+        if existing is None:
+            raise NotFoundError(f"role {role_id} not found")
+        return self.repo.set_role_active(session, role_id, is_active=is_active)
+
+    def get_domain_summaries(
+        self, session: Any, *, is_active: bool | None = None,
+    ) -> list[dict[str, Any]]:
+        return self.repo.list_domain_summaries(session, is_active=is_active)
+
+    def get_role_summaries(
+        self, session: Any, *, domain_id: int, is_active: bool | None = None,
+    ) -> list[dict[str, Any]]:
+        if self.repo.get_domain_by_id(session, domain_id) is None:
+            raise NotFoundError(f"domain {domain_id} not found")
+        return self.repo.list_role_summaries(session, domain_id=domain_id, is_active=is_active)
 
     def delete_role(self, session: Any, role_id: int) -> None:
         existing = self.repo.get_role_by_id(session, role_id)
@@ -225,10 +262,19 @@ class CatalogService:
     def create_question(
         self, session: Any, cmd: CreateQuestionCommand,
     ) -> QuestionBankItem:
-        if not self.repo.get_domain_by_id(session, cmd.domain_id):
+        domain = self.repo.get_domain_by_id(session, cmd.domain_id)
+        if domain is None:
             raise NotFoundError(f"domain {cmd.domain_id} not found")
-        if cmd.role_id is not None and not self.repo.get_role_by_id(session, cmd.role_id):
-            raise NotFoundError(f"role {cmd.role_id} not found")
+        if not domain.is_active:
+            raise ConflictError(f"domain {cmd.domain_id} is archived")
+        if cmd.role_id is not None:
+            role = self.repo.get_role_by_id(session, cmd.role_id)
+            if role is None:
+                raise NotFoundError(f"role {cmd.role_id} not found")
+            if role.domain_id != cmd.domain_id:
+                raise ConflictError("role does not belong to the selected domain")
+            if not role.is_active:
+                raise ConflictError(f"role {cmd.role_id} is archived")
         if cmd.star_template_id is not None and not self.repo.get_star_template_by_id(session, cmd.star_template_id):
             raise NotFoundError(f"star template {cmd.star_template_id} not found")
 
@@ -269,8 +315,20 @@ class CatalogService:
             validate_catalog_language(cmd.language)
         if cmd.experience_level is not None:
             validate_catalog_experience_level(cmd.experience_level)
-        if cmd.role_id is not None and not self.repo.get_role_by_id(session, cmd.role_id):
-            raise NotFoundError(f"role {cmd.role_id} not found")
+        if cmd.domain_id is not None:
+            domain = self.repo.get_domain_by_id(session, cmd.domain_id)
+            if domain is None:
+                raise NotFoundError(f"domain {cmd.domain_id} not found")
+            if not domain.is_active:
+                raise ConflictError(f"domain {cmd.domain_id} is archived")
+        if cmd.role_id is not None:
+            role = self.repo.get_role_by_id(session, cmd.role_id)
+            if role is None:
+                raise NotFoundError(f"role {cmd.role_id} not found")
+            if cmd.domain_id is not None and role.domain_id != cmd.domain_id:
+                raise ConflictError("role does not belong to the selected domain")
+            if not role.is_active:
+                raise ConflictError(f"role {cmd.role_id} is archived")
         if cmd.star_template_id is not None and not self.repo.get_star_template_by_id(session, cmd.star_template_id):
             raise NotFoundError(f"star template {cmd.star_template_id} not found")
 
