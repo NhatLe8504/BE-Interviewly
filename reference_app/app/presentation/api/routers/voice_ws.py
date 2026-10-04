@@ -92,9 +92,34 @@ class WebSocketVoiceConnection(VoiceConnectionPort):
 
 async def handle_voice_websocket_session(
     websocket: WebSocket,
-    session_id: int,
+    session_id_raw: str | int,
 ) -> None:
     await websocket.accept()
+
+    container: ServiceContainer = websocket.app.state.services
+    session_factory = getattr(container, "session_factory", None)
+
+    # Safely resolve session_id to integer
+    session_id: int = 1
+    try:
+        session_id = int(session_id_raw)
+    except (ValueError, TypeError):
+        resolved = False
+        if session_factory and str(session_id_raw).startswith("jd_"):
+            db_temp = session_factory()
+            try:
+                from ....infrastructure.persistence.models.jd_interview import JDGenerationJob
+                job = db_temp.get(JDGenerationJob, str(session_id_raw))
+                if job and job.session_id:
+                    session_id = int(job.session_id)
+                    resolved = True
+            except Exception:
+                pass
+            finally:
+                db_temp.close()
+
+        if not resolved:
+            session_id = (abs(hash(str(session_id_raw))) % 1_000_000) + 1000
 
     container: ServiceContainer = websocket.app.state.services
     connection = WebSocketVoiceConnection(websocket)
@@ -209,12 +234,12 @@ async def handle_voice_websocket_session(
 
 
 @router.websocket("/api/v1/voice/ws/{session_id}")
-async def voice_websocket_endpoint(websocket: WebSocket, session_id: int):
+async def voice_websocket_endpoint(websocket: WebSocket, session_id: str):
     await handle_voice_websocket_session(websocket, session_id)
 
 
 @router.websocket("/api/v1/interviews/{session_id}/ws")
-async def interview_voice_websocket_endpoint(websocket: WebSocket, session_id: int):
+async def interview_voice_websocket_endpoint(websocket: WebSocket, session_id: str):
     await handle_voice_websocket_session(websocket, session_id)
 
 
