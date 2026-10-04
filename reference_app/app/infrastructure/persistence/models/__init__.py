@@ -1,5 +1,14 @@
 from __future__ import annotations
 
+from . import jd_interview as jd_interview
+from .jd_interview import (
+    JDGenerationJob,
+    NormalizedJDRecord,
+    JobAnalysisRecord,
+    InterviewBlueprintRecord,
+    InterviewScriptRecord,
+)
+
 from . import billing as billing
 from . import catalog as catalog
 from . import session as session
@@ -44,6 +53,12 @@ __all__ = [
     "SubscriptionPlan",
     "User",
     "UserSubscription",
+    "JDGenerationJob",
+    "NormalizedJDRecord",
+    "JobAnalysisRecord",
+    "InterviewBlueprintRecord",
+    "InterviewScriptRecord",
+    "jd_interview",
     "billing",
     "catalog",
     "session",
