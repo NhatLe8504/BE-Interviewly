@@ -243,6 +243,8 @@ class JDWorkflowOrchestrator:
                 "job_id": job_id,
                 "role": blueprint.target_role,
                 "seniority": blueprint.seniority,
+                "company_name": blueprint.company_name,
+                "focus_areas": blueprint.focus_areas,
                 "total_questions": script.total_questions,
                 "estimated_minutes": script.estimated_minutes,
                 "questions": serialized_items,

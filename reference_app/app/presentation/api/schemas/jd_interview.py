@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from typing import Any
 from pydantic import BaseModel, Field
@@ -27,6 +27,25 @@ class JDJobStatusOut(BaseModel):
     error: str | None = None
 
 
+class JDJobSummaryOut(BaseModel):
+    job_id: str
+    status: str
+    stage: str
+    progress_pct: int
+    source_type: str
+    role: str
+    seniority: str
+    company_name: str
+    focus_areas: list[str] = Field(default_factory=list)
+    total_questions: int = 0
+    estimated_minutes: int = 45
+    session_id: int | None = None
+    created_at: str | None = None
+    error: str | None = None
+
+
 class JDStartSessionIn(BaseModel):
     mode: str = Field(default="text", description="text hoặc voice")
     barge_in_enabled: bool = Field(default=False)
+    selected_stages: list[str] | None = None
+    stage_configs: list[dict[str, Any]] | None = None
