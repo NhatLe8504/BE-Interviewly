@@ -398,7 +398,7 @@ def update_domain_status(
         user_id=admin_id,
         table_name="job_domains",
         record_id=domain_id,
-        action="restore" if data.is_active else "archive",
+        action="update",
         new_value={"is_active": data.is_active},
     )
     invalidate_cache(container, "catalog:")
@@ -494,7 +494,7 @@ def update_role_status(
         user_id=admin_id,
         table_name="job_roles",
         record_id=role_id,
-        action="restore" if data.is_active else "archive",
+        action="update",
         new_value={"is_active": data.is_active},
     )
     invalidate_cache(container, "catalog:")
