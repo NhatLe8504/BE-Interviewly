@@ -28,11 +28,11 @@ class ParallelQuestionGenerator:
     def __init__(
         self,
         api_key: str = "",
-        model: str = "llama-3.3-70b-versatile",
+        model: str = "openai/gpt-oss-120b",
         base_url: str = "https://api.groq.com/openai/v1",
     ) -> None:
         self.api_key = api_key
-        self.model = model or "llama-3.3-70b-versatile"
+        self.model = model or "openai/gpt-oss-120b"
         if api_key.startswith("gsk_"):
             self.base_url = "https://api.groq.com/openai/v1"
         else:
