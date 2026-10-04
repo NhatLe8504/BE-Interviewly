@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import re
 from typing import Any
 import uuid
 
@@ -286,6 +288,22 @@ class VoiceInterviewOrchestrator:
         if not clean_text:
             return
 
+        # Acoustic Echo Suppression: Ignore transcript if it matches or is a substring of the last AI message
+        if self.conversation_history:
+            last_ai = next(
+                (m["content"] for m in reversed(self.conversation_history) if m["role"] == "assistant"),
+                None,
+            )
+            if last_ai:
+                clean_ai = re.sub(r"[^\w\s]", "", last_ai.lower()).strip()
+                clean_u = re.sub(r"[^\w\s]", "", clean_text.lower()).strip()
+                if clean_u and len(clean_u) >= 3:
+                    if clean_u in clean_ai or (len(clean_u) > 8 and clean_ai.endswith(clean_u)):
+                        logging.getLogger("VoiceOrchestrator").warning(
+                            "Dropped candidate acoustic echo loop: %s", clean_text
+                        )
+                        return
+
         # Ensure any leftover generation is stopped
         await self.cancel_current_generation()
 
@@ -548,6 +566,7 @@ class VoiceInterviewOrchestrator:
                             "turn_id": turn_id,
                             "generation_id": gen_id,
                             "full_text": final_text,
+                            "total_sentences": splitter.sentence_index,
                             "is_completed": False,
                         })
 
@@ -624,15 +643,54 @@ class VoiceInterviewOrchestrator:
                     "generation_id": gen_id,
                 })
 
-            for s_idx, s_text in splitter.feed(text):
-                if self.is_generation_cancelled(gen_id):
-                    return
-                await self._stream_sentence_tts(s_idx, s_text, gen_id, turn_id)
+            sentences = list(splitter.feed(text)) + list(splitter.flush())
+            if not sentences:
+                sentences = [(0, text)]
 
-            for s_idx, s_text in splitter.flush():
+            async def _synth(idx: int, s_text: str):
+                chunks: list[bytes] = []
+                async for chunk in self.tts.synthesize_stream(s_text, voice=self.voice):
+                    if self.is_generation_cancelled(gen_id):
+                        break
+                    if chunk:
+                        chunks.append(chunk)
+                return idx, s_text, b"".join(chunks)
+
+            synth_results = await asyncio.gather(
+                *[_synth(s_idx, s_text) for s_idx, s_text in sentences],
+                return_exceptions=True,
+            )
+
+            if self.is_generation_cancelled(gen_id):
+                return
+
+            if self.state != VoiceSessionState.SPEAK:
+                await self.set_state(VoiceSessionState.SPEAK)
+
+            for item in synth_results:
+                if isinstance(item, Exception) or not item:
+                    continue
+                s_idx, s_text, full_audio = item
                 if self.is_generation_cancelled(gen_id):
                     return
-                await self._stream_sentence_tts(s_idx, s_text, gen_id, turn_id)
+
+                if self.connection.is_open():
+                    await self.connection.send_event({
+                        "type": VoiceEventType.SUBTITLE.value,
+                        "sentence": s_text,
+                        "sentence_index": s_idx,
+                        "generation_id": gen_id,
+                        "turn_id": turn_id,
+                    })
+                    if full_audio:
+                        await self.connection.send_event({
+                            "type": VoiceEventType.AUDIO.value,
+                            "audio_chunk": full_audio,
+                            "mime_type": "audio/mpeg",
+                            "sentence_index": s_idx,
+                            "generation_id": gen_id,
+                            "turn_id": turn_id,
+                        })
 
             if not self.is_generation_cancelled(gen_id):
                 self.conversation_history.append({"role": "assistant", "content": text})
@@ -642,6 +700,7 @@ class VoiceInterviewOrchestrator:
                         "turn_id": turn_id,
                         "generation_id": gen_id,
                         "full_text": text,
+                        "total_sentences": len(sentences),
                         "is_completed": False,
                     })
                 self.current_turn_id += 1
