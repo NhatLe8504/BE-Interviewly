@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import base64
 import json
 from typing import Any
@@ -181,46 +183,52 @@ async def handle_voice_websocket_session(
                 continue
 
             msg_type = data.get("type", "")
+            try:
+                if msg_type == "ping":
+                    await connection.send_event({"type": "pong"})
 
-            if msg_type == "ping":
-                await connection.send_event({"type": "pong"})
+                elif msg_type == "client_ready":
+                    await orchestrator.handle_client_ready(
+                        role_name=data.get("role_name"),
+                        level=data.get("level"),
+                        language=data.get("language"),
+                        voice=data.get("voice"),
+                        barge_in_enabled=data.get("barge_in_enabled"),
+                        selected_stages=data.get("selected_stages"),
+                        questions_per_stage=data.get("questions_per_stage"),
+                    )
 
-            elif msg_type == "client_ready":
-                await orchestrator.handle_client_ready(
-                    role_name=data.get("role_name"),
-                    level=data.get("level"),
-                    language=data.get("language"),
-                    voice=data.get("voice"),
-                    barge_in_enabled=data.get("barge_in_enabled"),
-                    selected_stages=data.get("selected_stages"),
-                    questions_per_stage=data.get("questions_per_stage"),
-                )
+                elif msg_type in ("config", "set_barge_in"):
+                    if "barge_in_enabled" in data:
+                        orchestrator.set_barge_in_enabled(bool(data["barge_in_enabled"]))
 
-            elif msg_type in ("config", "set_barge_in"):
-                if "barge_in_enabled" in data:
-                    orchestrator.set_barge_in_enabled(bool(data["barge_in_enabled"]))
+                elif msg_type in ("user_speech_start", "abort"):
+                    await orchestrator.handle_user_speech_start()
 
-            elif msg_type in ("user_speech_start", "abort"):
-                await orchestrator.handle_user_speech_start()
+                elif msg_type == "interim_transcript":
+                    await orchestrator.handle_interim_transcript(data.get("text", ""))
 
-            elif msg_type == "interim_transcript":
-                await orchestrator.handle_interim_transcript(data.get("text", ""))
+                elif msg_type == "final_transcript":
+                    await orchestrator.handle_final_transcript(
+                        text=data.get("text", ""),
+                        duration_seconds=float(data.get("duration_seconds", 0.0)),
+                    )
 
-            elif msg_type == "final_transcript":
-                await orchestrator.handle_final_transcript(
-                    text=data.get("text", ""),
-                    duration_seconds=float(data.get("duration_seconds", 0.0)),
-                )
+                elif msg_type == "next_stage":
+                    await orchestrator.handle_next_stage()
 
-            elif msg_type == "next_stage":
-                await orchestrator.handle_next_stage()
+                elif msg_type == "reroll_question":
+                    await orchestrator.handle_reroll_question()
 
-            elif msg_type == "reroll_question":
-                await orchestrator.handle_reroll_question()
-
-            elif msg_type == "stop_session":
-                await orchestrator.handle_stop_session()
-                break
+                elif msg_type == "stop_session":
+                    await orchestrator.handle_stop_session()
+                    break
+            except Exception as handler_exc:
+                logging.getLogger("VoiceWS").exception("Error handling websocket message %s: %s", msg_type, handler_exc)
+                await connection.send_event({
+                    "type": "error",
+                    "message": f"Error handling {msg_type}: {handler_exc}",
+                })
 
     except WebSocketDisconnect:
         await orchestrator.cancel_current_generation()

@@ -74,6 +74,147 @@ class VoiceInterviewOrchestrator:
         self._generation_counter: int = 0
         self._cancelled_generation_ids: set[str] = set()
         self.conversation_history: list[dict[str, str]] = []
+        self._initial_opening_text: str | None = None
+        self._has_unvoiced_opening: bool = False
+
+        self._load_existing_turns_from_db()
+
+    def _load_existing_turns_from_db(self) -> None:
+        if not self.session_factory:
+            return
+        db = self.session_factory()
+        try:
+            from ...infrastructure.persistence.models.session import InterviewTurn as OrmInterviewTurn
+            rows = (
+                db.query(OrmInterviewTurn)
+                .filter_by(session_id=self.session_id)
+                .order_by(OrmInterviewTurn.turn_number.asc())
+                .all()
+            )
+            if not rows:
+                return
+
+            self.conversation_history = []
+            for r in rows:
+                if r.message_text:
+                    self.conversation_history.append({"role": "assistant", "content": r.message_text})
+                if r.transcribed_text:
+                    self.conversation_history.append({"role": "user", "content": r.transcribed_text})
+
+            last_row = rows[-1]
+            if last_row.transcribed_text and last_row.transcribed_text.strip():
+                self.current_turn_id = last_row.turn_number + 1
+                self._has_unvoiced_opening = False
+            else:
+                self.current_turn_id = last_row.turn_number
+                self._has_unvoiced_opening = not bool(last_row.audio_url)
+                if last_row.message_text:
+                    self._initial_opening_text = last_row.message_text
+        except Exception as exc:
+            logging.getLogger("VoiceOrchestrator").warning("Failed to load existing turns: %s", exc)
+        finally:
+            db.close()
+
+    async def _broadcast_conversation_history(self) -> None:
+        if not self.session_factory or not self.connection.is_open():
+            return
+        db = self.session_factory()
+        try:
+            from ...infrastructure.persistence.models.session import InterviewTurn as OrmInterviewTurn
+            from ...infrastructure.persistence.models.enums import TurnSpeaker
+            rows = (
+                db.query(OrmInterviewTurn)
+                .filter_by(session_id=self.session_id)
+                .order_by(OrmInterviewTurn.turn_number.asc())
+                .all()
+            )
+            turns_payload: list[dict[str, Any]] = []
+            for r in rows:
+                if r.message_text:
+                    turns_payload.append({
+                        "id": f"turn-ai-{r.turn_number}",
+                        "turnNumber": r.turn_number,
+                        "speaker": "ai",
+                        "text": r.message_text,
+                    })
+                if r.transcribed_text:
+                    turns_payload.append({
+                        "id": f"turn-u-{r.turn_number}",
+                        "turnNumber": r.turn_number,
+                        "speaker": "user",
+                        "text": r.transcribed_text,
+                    })
+            if turns_payload:
+                await self.connection.send_event({
+                    "type": "conversation_history",
+                    "turns": turns_payload,
+                })
+        except Exception as exc:
+            logging.getLogger("VoiceOrchestrator").warning("Failed to broadcast conversation history: %s", exc)
+        finally:
+            db.close()
+
+    def _persist_ai_turn(self, turn_id: int, message_text: str) -> None:
+        if not self.session_factory or not message_text.strip():
+            return
+        db = self.session_factory()
+        try:
+            from ...infrastructure.persistence.models.session import InterviewTurn as OrmInterviewTurn
+            from ...infrastructure.persistence.models.enums import TurnSpeaker
+            existing = (
+                db.query(OrmInterviewTurn)
+                .filter_by(session_id=self.session_id, turn_number=turn_id)
+                .first()
+            )
+            if existing:
+                existing.message_text = message_text.strip()
+                existing.speaker = TurnSpeaker.ai
+                existing.audio_url = "voice_streamed"
+            else:
+                turn_rec = OrmInterviewTurn(
+                    session_id=self.session_id,
+                    turn_number=turn_id,
+                    speaker=TurnSpeaker.ai,
+                    message_text=message_text.strip(),
+                    audio_url="voice_streamed",
+                )
+                db.add(turn_rec)
+            db.commit()
+            self._has_unvoiced_opening = False
+        except Exception as exc:
+            db.rollback()
+            logging.getLogger("VoiceOrchestrator").warning("Failed to persist AI turn #%d: %s", turn_id, exc)
+        finally:
+            db.close()
+
+    def _persist_user_transcript(self, turn_id: int, transcript: str) -> None:
+        if not self.session_factory or not transcript.strip():
+            return
+        db = self.session_factory()
+        try:
+            from ...infrastructure.persistence.models.session import InterviewTurn as OrmInterviewTurn
+            from ...infrastructure.persistence.models.enums import TurnSpeaker
+            existing = (
+                db.query(OrmInterviewTurn)
+                .filter_by(session_id=self.session_id, turn_number=turn_id)
+                .first()
+            )
+            if existing:
+                existing.transcribed_text = transcript.strip()
+            else:
+                turn_rec = OrmInterviewTurn(
+                    session_id=self.session_id,
+                    turn_number=turn_id,
+                    speaker=TurnSpeaker.candidate,
+                    transcribed_text=transcript.strip(),
+                )
+                db.add(turn_rec)
+            db.commit()
+        except Exception as exc:
+            db.rollback()
+            logging.getLogger("VoiceOrchestrator").warning("Failed to persist user transcript turn #%d: %s", turn_id, exc)
+        finally:
+            db.close()
 
     def _resolve_stages(self, selected_stages: list[str] | None) -> list[InterviewStageDefinition]:
         if not selected_stages:
@@ -154,6 +295,17 @@ class VoiceInterviewOrchestrator:
         is_vi = self.language == "vi"
 
         if cur_stage.id == StageId.WARMUP.value:
+            if self._initial_opening_text and self._initial_opening_text.strip():
+                txt = self._initial_opening_text.strip()
+                if txt.lower().startswith("chào") or txt.lower().startswith("hello") or txt.lower().startswith("welcome"):
+                    return txt
+                if is_vi:
+                    return f"Chào bạn, rất vui được đón tiếp bạn trong buổi phỏng vấn vị trí {self.role_name} ({self.level}). {txt}"
+                return f"Welcome to your interview for {self.role_name} ({self.level}). {txt}"
+            if self.current_intent_ctx and self.current_intent_ctx.intent:
+                if is_vi:
+                    return f"Chào bạn, rất vui được đón tiếp bạn trong buổi phỏng vấn vị trí {self.role_name} ({self.level}). {self.current_intent_ctx.intent}"
+                return f"Welcome to your interview for {self.role_name} ({self.level}). {self.current_intent_ctx.intent}"
             if is_vi:
                 return (
                     f"Chào bạn, rất vui được đón tiếp bạn trong buổi phỏng vấn vị trí {self.role_name} ({self.level}). "
@@ -245,8 +397,22 @@ class VoiceInterviewOrchestrator:
                 "difficulty": self.current_intent_ctx.difficulty,
             })
 
-        # If voice session has no history yet, initiate greeting and stage opening question
+        # Broadcast conversation history if available
+        if self.conversation_history and self.connection.is_open():
+            await self._broadcast_conversation_history()
+
+        # If voice session has no history yet, or has an unvoiced initial opening
+        should_speak_opening = False
         if not self.conversation_history and self.state == VoiceSessionState.IDLE:
+            should_speak_opening = True
+        elif (
+            self._has_unvoiced_opening
+            and self.state == VoiceSessionState.IDLE
+            and not any(m.get("role") == "user" for m in self.conversation_history)
+        ):
+            should_speak_opening = True
+
+        if should_speak_opening:
             await self.set_state(VoiceSessionState.THINK)
             prompt = self._build_opening_question()
             self._active_task = asyncio.create_task(
@@ -319,6 +485,7 @@ class VoiceInterviewOrchestrator:
             })
 
         self.conversation_history.append({"role": "user", "content": clean_text})
+        self._persist_user_transcript(self.current_turn_id, clean_text)
         self.turns_in_current_stage += 1
 
         # Transition state to THINK first
@@ -367,6 +534,7 @@ class VoiceInterviewOrchestrator:
             await self.cancel_current_generation()
             self.current_stage_index += 1
             self.turns_in_current_stage = 0
+            self.current_turn_id += 1
             next_stage = self.get_current_stage()
 
             if self.connection.is_open():
@@ -488,9 +656,10 @@ class VoiceInterviewOrchestrator:
         is_session_finishing: bool = False,
     ) -> None:
         self._generation_counter += 1
-        gen_id = f"gen_{self.session_id}_{self.current_turn_id}_{self._generation_counter}"
+        turn_id = self.current_turn_id + 1
+        self.current_turn_id = turn_id
+        gen_id = f"gen_{self.session_id}_{turn_id}_{self._generation_counter}"
         self.current_generation_id = gen_id
-        turn_id = self.current_turn_id
 
         splitter = StreamingSentenceSplitter(min_sentence_chars=12)
         full_ai_response: list[str] = []
@@ -548,6 +717,7 @@ class VoiceInterviewOrchestrator:
                 final_text = "".join(full_ai_response).strip()
                 if final_text:
                     self.conversation_history.append({"role": "assistant", "content": final_text})
+                    self._persist_ai_turn(turn_id, final_text)
 
                 if is_session_finishing:
                     await self.set_state(VoiceSessionState.COMPLETED)
@@ -570,7 +740,6 @@ class VoiceInterviewOrchestrator:
                             "is_completed": False,
                         })
 
-                    self.current_turn_id += 1
                     await self.set_state(VoiceSessionState.LISTEN)
 
         except asyncio.CancelledError:
@@ -694,6 +863,7 @@ class VoiceInterviewOrchestrator:
 
             if not self.is_generation_cancelled(gen_id):
                 self.conversation_history.append({"role": "assistant", "content": text})
+                self._persist_ai_turn(turn_id, text)
                 if self.connection.is_open():
                     await self.connection.send_event({
                         "type": VoiceEventType.DONE.value,
@@ -703,7 +873,6 @@ class VoiceInterviewOrchestrator:
                         "total_sentences": len(sentences),
                         "is_completed": False,
                     })
-                self.current_turn_id += 1
                 await self.set_state(VoiceSessionState.LISTEN)
         except asyncio.CancelledError:
             return
