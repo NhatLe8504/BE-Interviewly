@@ -236,16 +236,19 @@ def get_my_jd_jobs(
         total_questions = 0
         estimated_minutes = 45
 
+        if job.analysis:
+            role = job.analysis.job_title or role
+            seniority = job.analysis.seniority or seniority
+            company = job.analysis.company_name or ""
+            focus_areas = job.analysis.required_skills or []
+
         if job.blueprint:
             role = job.blueprint.target_role or role
             seniority = job.blueprint.seniority or seniority
-            company = job.blueprint.company_name or company
-            focus_areas = job.blueprint.focus_areas or []
-        elif job.analysis:
-            role = job.analysis.job_title or role
-            seniority = job.analysis.seniority or seniority
-            company = job.analysis.company_name or company
-            focus_areas = job.analysis.required_skills or []
+            if job.blueprint.competencies:
+                focus_areas = job.blueprint.competencies
+            if job.blueprint.total_duration_minutes:
+                estimated_minutes = job.blueprint.total_duration_minutes
 
         if job.script:
             total_questions = job.script.total_questions
@@ -302,13 +305,14 @@ def get_job_status(
         script_rec = session.query(InterviewScriptRecord).filter_by(job_id=job_id).first()
         bp_rec = session.query(InterviewBlueprintRecord).filter_by(job_id=job_id).first()
         if script_rec and bp_rec:
+            company_name = job_record.analysis.company_name if job_record.analysis else ""
             result = {
                 "script_id": script_rec.script_id,
                 "job_id": job_id,
                 "role": bp_rec.target_role,
                 "seniority": bp_rec.seniority,
-                "company_name": bp_rec.company_name or "",
-                "focus_areas": bp_rec.focus_areas or [],
+                "company_name": company_name or "",
+                "focus_areas": bp_rec.competencies or [],
                 "total_questions": script_rec.total_questions,
                 "estimated_minutes": script_rec.estimated_minutes,
                 "questions": script_rec.items,
@@ -378,14 +382,15 @@ def start_interview_from_jd_job(
     job_record.session_id = orm_session.session_id
     session.commit()
 
+    company_name = job_record.analysis.company_name if job_record.analysis else ""
     return {
         "session_id": orm_session.session_id,
         "first_question": first_q_text,
         "script_id": script_rec.script_id,
         "role": bp_rec.target_role,
         "seniority": bp_rec.seniority,
-        "company_name": bp_rec.company_name or "",
-        "focus_areas": bp_rec.focus_areas or [],
+        "company_name": company_name or "",
+        "focus_areas": bp_rec.competencies or [],
         "total_questions": script_rec.total_questions,
         "estimated_minutes": script_rec.estimated_minutes,
         "all_questions": [item["question_text"] for item in script_rec.items],
