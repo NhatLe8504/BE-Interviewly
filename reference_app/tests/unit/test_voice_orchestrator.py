@@ -225,3 +225,69 @@ async def test_orchestrator_custom_stages_warmup_and_closing() -> None:
     assert stage_changes[0]["stage_id"] == "closing"
     assert stage_changes[0]["stage_index"] == 2
     assert stage_changes[0]["total_stages"] == 2
+
+
+@pytest.mark.anyio
+async def test_orchestrator_reconnect_does_not_repeat_voiced_question() -> None:
+    class FakeTurnRow:
+        def __init__(self, turn_number: int, speaker: Any, message_text: str, transcribed_text: str | None = None, audio_url: str | None = None) -> None:
+            self.turn_number = turn_number
+            self.speaker = speaker
+            self.message_text = message_text
+            self.transcribed_text = transcribed_text
+            self.audio_url = audio_url
+
+    class FakeQuery:
+        def __init__(self, rows: list[Any]) -> None:
+            self._rows = rows
+        def filter_by(self, **kwargs):
+            return self
+        def order_by(self, *args):
+            return self
+        def all(self):
+            return list(self._rows)
+        def first(self):
+            return self._rows[0] if self._rows else None
+
+    class FakeDbSession:
+        def __init__(self, rows: list[Any]) -> None:
+            self.rows = rows
+        def query(self, model):
+            return FakeQuery(self.rows)
+        def add(self, item):
+            self.rows.append(item)
+        def commit(self):
+            pass
+        def rollback(self):
+            pass
+        def close(self):
+            pass
+
+    existing_rows = [
+        FakeTurnRow(turn_number=1, speaker="ai", message_text="Câu hỏi 1 đã được phát", audio_url="voice_streamed")
+    ]
+    def fake_session_factory():
+        return FakeDbSession(existing_rows)
+
+    conn = FakeVoiceConnection()
+    tts = FakeTTS()
+    llm = FakeLLM()
+    orch = VoiceInterviewOrchestrator(
+        session_id=99,
+        connection=conn,
+        tts=tts,
+        llm=llm,
+        session_factory=fake_session_factory,
+    )
+
+    assert orch._has_unvoiced_opening is False
+    assert len(orch.conversation_history) == 1
+
+    await orch.handle_client_ready()
+    assert orch.state == VoiceSessionState.LISTEN
+    assert len(tts.synthesized_sentences) == 0
+
+    history_events = [e for e in conn.events if e.get("type") == "conversation_history"]
+    assert len(history_events) == 1
+    assert len(history_events[0]["turns"]) == 1
+    assert history_events[0]["turns"][0]["turnNumber"] == 1
