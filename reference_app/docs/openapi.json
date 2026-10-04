@@ -5141,6 +5141,245 @@
           }
         }
       }
+    },
+    "/api/v1/interviews/from-jd/text": {
+      "post": {
+        "tags": [
+          "jd-interviews"
+        ],
+        "summary": "Submit Jd Text",
+        "operationId": "submit_jd_text_api_v1_interviews_from_jd_text_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JDTextSubmissionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JDJobStatusOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/interviews/from-jd/url": {
+      "post": {
+        "tags": [
+          "jd-interviews"
+        ],
+        "summary": "Submit Jd Url",
+        "operationId": "submit_jd_url_api_v1_interviews_from_jd_url_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JDUrlSubmissionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JDJobStatusOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/interviews/from-jd/file": {
+      "post": {
+        "tags": [
+          "jd-interviews"
+        ],
+        "summary": "Submit Jd File",
+        "operationId": "submit_jd_file_api_v1_interviews_from_jd_file_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_submit_jd_file_api_v1_interviews_from_jd_file_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JDJobStatusOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/interviews/from-jd/jobs/{job_id}/status": {
+      "get": {
+        "tags": [
+          "jd-interviews"
+        ],
+        "summary": "Get Job Status",
+        "operationId": "get_job_status_api_v1_interviews_from_jd_jobs__job_id__status_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JDJobStatusOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/interviews/from-jd/jobs/{job_id}/start-session": {
+      "post": {
+        "tags": [
+          "jd-interviews"
+        ],
+        "summary": "Start Interview From Jd Job",
+        "operationId": "start_interview_from_jd_job_api_v1_interviews_from_jd_jobs__job_id__start_session_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JDStartSessionIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Start Interview From Jd Job Api V1 Interviews From Jd Jobs  Job Id  Start Session Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5256,6 +5495,41 @@
           "offset"
         ],
         "title": "AuditLogPageOut"
+      },
+      "Body_submit_jd_file_api_v1_interviews_from_jd_file_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          },
+          "duration_minutes": {
+            "type": "integer",
+            "title": "Duration Minutes",
+            "default": 45
+          },
+          "difficulty": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Difficulty"
+          },
+          "language": {
+            "type": "string",
+            "title": "Language",
+            "default": "vi"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_submit_jd_file_api_v1_interviews_from_jd_file_post"
       },
       "Body_upload_audio_api_v1_upload_audio_post": {
         "properties": {
@@ -6122,6 +6396,159 @@
           "total_turns"
         ],
         "title": "HistorySessionItemOut"
+      },
+      "JDJobStatusOut": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "progress_pct": {
+            "type": "integer",
+            "title": "Progress Pct"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status",
+          "stage",
+          "progress_pct"
+        ],
+        "title": "JDJobStatusOut"
+      },
+      "JDStartSessionIn": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "title": "Mode",
+            "description": "text hoặc voice",
+            "default": "text"
+          },
+          "barge_in_enabled": {
+            "type": "boolean",
+            "title": "Barge In Enabled",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "JDStartSessionIn"
+      },
+      "JDTextSubmissionIn": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 30,
+            "title": "Text",
+            "description": "Nội dung Job Description"
+          },
+          "duration_minutes": {
+            "type": "integer",
+            "maximum": 90.0,
+            "minimum": 15.0,
+            "title": "Duration Minutes",
+            "description": "Thời lượng phỏng vấn mục tiêu (phút)",
+            "default": 45
+          },
+          "difficulty": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 5.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Difficulty",
+            "description": "Độ khó mong muốn (1-5)"
+          },
+          "language": {
+            "type": "string",
+            "title": "Language",
+            "description": "Ngôn ngữ phỏng vấn (vi hoặc en)",
+            "default": "vi"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "JDTextSubmissionIn"
+      },
+      "JDUrlSubmissionIn": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url",
+            "description": "Đường link công khai của tin tuyển dụng"
+          },
+          "duration_minutes": {
+            "type": "integer",
+            "maximum": 90.0,
+            "minimum": 15.0,
+            "title": "Duration Minutes",
+            "description": "Thời lượng phỏng vấn mục tiêu (phút)",
+            "default": 45
+          },
+          "difficulty": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 5.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Difficulty",
+            "description": "Độ khó mong muốn (1-5)"
+          },
+          "language": {
+            "type": "string",
+            "title": "Language",
+            "description": "Ngôn ngữ phỏng vấn (vi hoặc en)",
+            "default": "vi"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "title": "JDUrlSubmissionIn"
       },
       "LeaderboardItemOut": {
         "properties": {
