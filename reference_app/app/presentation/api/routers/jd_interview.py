@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 import logging
@@ -20,7 +20,13 @@ from ....infrastructure.persistence.models.jd_interview import (
     NormalizedJDRecord,
 )
 from ..dependencies import get_container, get_optional_user_id, get_session
-from ..schemas.jd_interview import JDJobStatusOut, JDStartSessionIn, JDTextSubmissionIn, JDUrlSubmissionIn
+from ..schemas.jd_interview import (
+    JDJobStatusOut,
+    JDJobSummaryOut,
+    JDStartSessionIn,
+    JDTextSubmissionIn,
+    JDUrlSubmissionIn,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +95,6 @@ async def submit_jd_text(
         payload={"source_type": "text", "text_length": len(payload.text)},
     )
 
-    # Spawn asynchronous background task
     asyncio.create_task(
         orchestrator.execute_pipeline(
             job_id=job_id,
@@ -129,7 +134,6 @@ async def submit_jd_url(
         payload={"source_type": "url", "url": payload.url},
     )
 
-    # Spawn asynchronous background task
     asyncio.create_task(
         orchestrator.execute_pipeline(
             job_id=job_id,
@@ -176,7 +180,6 @@ async def submit_jd_file(
         payload={"source_type": "file", "filename": file.filename},
     )
 
-    # Spawn asynchronous background task
     asyncio.create_task(
         orchestrator.execute_pipeline(
             job_id=job_id,
@@ -199,6 +202,76 @@ async def submit_jd_file(
     )
 
 
+@router.get("/my-jobs", response_model=list[JDJobSummaryOut])
+def get_my_jd_jobs(
+    limit: int = 30,
+    offset: int = 0,
+    user_id: int | None = Depends(get_optional_user_id),
+    session: Session = Depends(get_session),
+) -> list[JDJobSummaryOut]:
+    effective_user_id = user_id if user_id and user_id > 0 else 1
+    query = (
+        session.query(JDGenerationJob)
+        .filter(JDGenerationJob.user_id == effective_user_id)
+        .order_by(JDGenerationJob.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    jobs = query.all()
+    if not jobs:
+        jobs = (
+            session.query(JDGenerationJob)
+            .order_by(JDGenerationJob.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+
+    summaries: list[JDJobSummaryOut] = []
+    for job in jobs:
+        role = "Software Engineer"
+        seniority = "junior"
+        company = ""
+        focus_areas: list[str] = []
+        total_questions = 0
+        estimated_minutes = 45
+
+        if job.blueprint:
+            role = job.blueprint.target_role or role
+            seniority = job.blueprint.seniority or seniority
+            company = job.blueprint.company_name or company
+            focus_areas = job.blueprint.focus_areas or []
+        elif job.analysis:
+            role = job.analysis.job_title or role
+            seniority = job.analysis.seniority or seniority
+            company = job.analysis.company_name or company
+            focus_areas = job.analysis.required_skills or []
+
+        if job.script:
+            total_questions = job.script.total_questions
+            estimated_minutes = job.script.estimated_minutes
+
+        summaries.append(
+            JDJobSummaryOut(
+                job_id=job.job_id,
+                status=job.status,
+                stage=job.stage,
+                progress_pct=job.progress_pct,
+                source_type=job.source_type,
+                role=role,
+                seniority=seniority,
+                company_name=company,
+                focus_areas=focus_areas,
+                total_questions=total_questions,
+                estimated_minutes=estimated_minutes,
+                session_id=job.session_id,
+                created_at=job.created_at.isoformat() if job.created_at else None,
+                error=job.error_message,
+            )
+        )
+    return summaries
+
+
 @router.get("/jobs/{job_id}/status", response_model=JDJobStatusOut)
 def get_job_status(
     job_id: str,
@@ -209,12 +282,13 @@ def get_job_status(
     queue_state = orchestrator.queue_manager.get_job_state(job_id)
 
     if queue_state:
+        res = queue_state.get("result")
         return JDJobStatusOut(
             job_id=job_id,
             status=queue_state.get("status", "PENDING"),
             stage=queue_state.get("stage", "Đang xử lý..."),
             progress_pct=queue_state.get("progress_pct", 0),
-            result=queue_state.get("result"),
+            result=res,
             error=queue_state.get("error"),
         )
 
@@ -233,6 +307,8 @@ def get_job_status(
                 "job_id": job_id,
                 "role": bp_rec.target_role,
                 "seniority": bp_rec.seniority,
+                "company_name": bp_rec.company_name or "",
+                "focus_areas": bp_rec.focus_areas or [],
                 "total_questions": script_rec.total_questions,
                 "estimated_minutes": script_rec.estimated_minutes,
                 "questions": script_rec.items,
@@ -308,6 +384,8 @@ def start_interview_from_jd_job(
         "script_id": script_rec.script_id,
         "role": bp_rec.target_role,
         "seniority": bp_rec.seniority,
+        "company_name": bp_rec.company_name or "",
+        "focus_areas": bp_rec.focus_areas or [],
         "total_questions": script_rec.total_questions,
         "estimated_minutes": script_rec.estimated_minutes,
         "all_questions": [item["question_text"] for item in script_rec.items],

@@ -5280,6 +5280,68 @@
         ]
       }
     },
+    "/api/v1/interviews/from-jd/my-jobs": {
+      "get": {
+        "tags": [
+          "jd-interviews"
+        ],
+        "summary": "Get My Jd Jobs",
+        "operationId": "get_my_jd_jobs_api_v1_interviews_from_jd_my_jobs_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 30,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/JDJobSummaryOut"
+                  },
+                  "title": "Response Get My Jd Jobs Api V1 Interviews From Jd My Jobs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/interviews/from-jd/jobs/{job_id}/status": {
       "get": {
         "tags": [
@@ -6448,6 +6510,104 @@
         ],
         "title": "JDJobStatusOut"
       },
+      "JDJobSummaryOut": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "progress_pct": {
+            "type": "integer",
+            "title": "Progress Pct"
+          },
+          "source_type": {
+            "type": "string",
+            "title": "Source Type"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "seniority": {
+            "type": "string",
+            "title": "Seniority"
+          },
+          "company_name": {
+            "type": "string",
+            "title": "Company Name"
+          },
+          "focus_areas": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Focus Areas"
+          },
+          "total_questions": {
+            "type": "integer",
+            "title": "Total Questions",
+            "default": 0
+          },
+          "estimated_minutes": {
+            "type": "integer",
+            "title": "Estimated Minutes",
+            "default": 45
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status",
+          "stage",
+          "progress_pct",
+          "source_type",
+          "role",
+          "seniority",
+          "company_name"
+        ],
+        "title": "JDJobSummaryOut"
+      },
       "JDStartSessionIn": {
         "properties": {
           "mode": {
@@ -6460,6 +6620,35 @@
             "type": "boolean",
             "title": "Barge In Enabled",
             "default": false
+          },
+          "selected_stages": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Stages"
+          },
+          "stage_configs": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Configs"
           }
         },
         "type": "object",

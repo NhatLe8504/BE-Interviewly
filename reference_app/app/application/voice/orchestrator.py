@@ -165,6 +165,16 @@ class VoiceInterviewOrchestrator:
             )
 
         if cur_stage.id == StageId.TECHNICAL.value:
+            if self.current_intent_ctx and self.current_intent_ctx.intent:
+                if is_vi:
+                    return (
+                        f"Chào bạn, chúng ta sẽ bắt đầu trực tiếp với phần phỏng vấn chuyên môn cho vị trí {self.role_name} ({self.level}). "
+                        f"Câu hỏi đầu tiên: {self.current_intent_ctx.intent}"
+                    )
+                return (
+                    f"Hello! We will dive straight into the technical interview for {self.role_name} ({self.level}). "
+                    f"First question: {self.current_intent_ctx.intent}"
+                )
             if is_vi:
                 return (
                     f"Chào bạn, chúng ta sẽ bắt đầu trực tiếp với phần phỏng vấn chuyên môn cho vị trí {self.role_name} ({self.level}). "
@@ -640,6 +650,39 @@ class VoiceInterviewOrchestrator:
         cur_stage = self.get_current_stage()
         db = self.session_factory()
         try:
+            # Check if this session was generated from a JD interview job
+            try:
+                from ...infrastructure.persistence.models.jd_interview import JDGenerationJob
+                jd_job = db.query(JDGenerationJob).filter_by(session_id=self.session_id).first()
+                if jd_job and jd_job.script and jd_job.script.items:
+                    items = jd_job.script.items
+                    stage_matched = [
+                        item for item in items
+                        if str(item.get("section_type", "")).lower() == cur_stage.id
+                    ]
+                    chosen = None
+                    if stage_matched:
+                        idx = min(self.turns_in_current_stage, len(stage_matched) - 1)
+                        chosen = stage_matched[idx]
+                    elif items:
+                        idx = (self.current_turn_id - 1) % len(items)
+                        chosen = items[idx]
+
+                    if chosen:
+                        self.current_intent_ctx = QuestionIntentContext(
+                            question_id=int(chosen.get("order_index", 1)),
+                            intent=chosen.get("question_text", ""),
+                            stage_key=cur_stage.id,
+                            difficulty=int(chosen.get("difficulty", 3)),
+                            topic_label=chosen.get("competency_name") or chosen.get("section_type", "Chuyên môn"),
+                            expected_signals=chosen.get("expected_signals", []),
+                            red_flags=chosen.get("red_flags", []),
+                            sample_answer=chosen.get("sample_good_answer", ""),
+                        )
+                        return
+            except Exception:
+                pass
+
             intents = QuestionSelectionService.sample_questions_for_stage(
                 session=db,
                 session_id=self.session_id,
