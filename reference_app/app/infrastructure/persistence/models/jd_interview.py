@@ -75,7 +75,7 @@ class NormalizedJDRecord(Base):
         Index("idx_normalized_jds_checksum", "checksum"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     job_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("jd_generation_jobs.job_id", ondelete="CASCADE"), nullable=False, unique=True, index=True,
     )
@@ -97,7 +97,7 @@ class NormalizedJDRecord(Base):
 class JobAnalysisRecord(Base):
     __tablename__ = "job_analyses"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     job_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("jd_generation_jobs.job_id", ondelete="CASCADE"), nullable=False, unique=True, index=True,
     )
@@ -125,7 +125,7 @@ class JobAnalysisRecord(Base):
 class InterviewBlueprintRecord(Base):
     __tablename__ = "interview_blueprints"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     job_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("jd_generation_jobs.job_id", ondelete="CASCADE"), nullable=False, unique=True, index=True,
     )
@@ -147,7 +147,7 @@ class InterviewBlueprintRecord(Base):
 class InterviewScriptRecord(Base):
     __tablename__ = "interview_scripts"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     job_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("jd_generation_jobs.job_id", ondelete="CASCADE"), nullable=False, unique=True, index=True,
     )
