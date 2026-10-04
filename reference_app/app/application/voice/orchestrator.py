@@ -588,15 +588,20 @@ class VoiceInterviewOrchestrator:
                 "turn_id": turn_id,
             })
 
-        # Synthesize with Edge TTS and stream chunks immediately
+        # Synthesize complete, natural sentence audio to prevent micro-chunk audio stuttering
+        audio_chunks: list[bytes] = []
         async for audio_chunk in self.tts.synthesize_stream(sentence_text, voice=self.voice):
             if self.is_generation_cancelled(generation_id):
                 break
+            if audio_chunk:
+                audio_chunks.append(audio_chunk)
 
-            if self.connection.is_open() and audio_chunk:
+        if audio_chunks and not self.is_generation_cancelled(generation_id):
+            full_sentence_audio = b"".join(audio_chunks)
+            if self.connection.is_open():
                 await self.connection.send_event({
                     "type": VoiceEventType.AUDIO.value,
-                    "audio_chunk": audio_chunk,
+                    "audio_chunk": full_sentence_audio,
                     "mime_type": "audio/mpeg",
                     "sentence_index": sentence_idx,
                     "generation_id": generation_id,
