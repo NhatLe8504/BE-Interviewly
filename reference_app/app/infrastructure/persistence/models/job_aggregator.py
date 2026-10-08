@@ -66,6 +66,7 @@ class JobPostingRecord(Base):
         Index("idx_job_postings_seniority", "seniority"),
         Index("idx_job_postings_domain_id", "domain_id"),
         Index("idx_job_postings_created_at", "created_at"),
+        Index("idx_job_postings_source_ext_id", "source_id", "external_job_id"),
     )
 
     job_id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -101,6 +102,15 @@ class JobPostingRecord(Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="ACTIVE")
     posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    first_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+    last_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, server_default=func.now(),
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(),
     )
