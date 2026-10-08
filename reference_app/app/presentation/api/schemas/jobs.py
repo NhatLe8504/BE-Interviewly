@@ -73,6 +73,7 @@ class JobFilterMetadataOut(BaseModel):
 
 
 class JobSkillMatchOut(BaseModel):
+    has_candidate_skills: bool = False
     job_id: str
     match_score_pct: int
     matched_skills: list[str]
