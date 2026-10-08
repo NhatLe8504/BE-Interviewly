@@ -29,24 +29,30 @@ router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
 
 def _format_salary(salary_min: float | None, salary_max: float | None, currency: str = "VND") -> str:
     if not salary_min and not salary_max:
-        return "Thỏa thuận"
+        return "Chưa công bố"
+    divisor = 1_000_000 if currency == "VND" and (salary_min or salary_max or 0) >= 1_000_000 else 1
+    unit = f"triệu {currency}" if divisor > 1 else currency
     if salary_min and salary_max:
-        min_tr = salary_min / 1_000_000
-        max_tr = salary_max / 1_000_000
-        return f"{min_tr:.0f} - {max_tr:.0f} triệu {currency}"
+        return f"{salary_min / divisor:,.0f} – {salary_max / divisor:,.0f} {unit}"
     if salary_min:
-        return f"Từ {salary_min / 1_000_000:.0f} triệu {currency}"
-    return f"Lên tới {salary_max / 1_000_000:.0f} triệu {currency}"
+        return f"Từ {salary_min / divisor:,.0f} {unit}"
+    return f"Đến {salary_max / divisor:,.0f} {unit}"
 
 
 def _to_job_item_out(job: Any) -> JobItemOut:
     comp_out = None
     if job.company:
+        branding_allowed = job.company.branding_reuse_allowed
         comp_out = JobCompanyOut(
             company_id=job.company.company_id,
             company_name=job.company.company_name,
             slug=job.company.slug,
-            logo_url=job.company.logo_url,
+            logo_url=job.company.logo_url if branding_allowed else None,
+            company_logo_url=job.company.logo_url if branding_allowed else None,
+            company_banner_url=job.company.banner_url if branding_allowed else None,
+            branding_source_url=job.company.branding_source_url,
+            branding_license_url=job.company.branding_license_url,
+            branding_reuse_allowed=branding_allowed,
             location=job.company.location,
         )
     return JobItemOut(
@@ -59,16 +65,22 @@ def _to_job_item_out(job: Any) -> JobItemOut:
         workplace_type=job.workplace_type,
         location=job.location,
         salary_display=_format_salary(job.salary_min, job.salary_max, job.salary_currency),
+        salary_currency=job.salary_currency,
         salary_min=float(job.salary_min) if job.salary_min is not None else None,
         salary_max=float(job.salary_max) if job.salary_max is not None else None,
         skills_required=job.skills_required or [],
-        thumbnail_url=job.company.logo_url if job.company and job.company.logo_url else None,
+        thumbnail_url=comp_out.company_banner_url if comp_out else None,
         technologies=job.technologies or [],
         via_source=job.via_source or "via Web",
         original_apply_url=job.original_apply_url,
         posted_at=job.posted_at,
         updated_at=getattr(job, "updated_at", None) or getattr(job, "last_seen_at", None) or job.created_at,
         created_at=job.created_at,
+        first_seen_at=job.first_seen_at,
+        last_synced_at=job.last_seen_at,
+        expires_at=job.expires_at,
+        country_codes=job.country_codes or [],
+        is_global_remote=job.is_global_remote,
         company=comp_out,
     )
 
@@ -82,6 +94,7 @@ async def list_jobs(
     technology: str = Query("", description="Filter by specific technology"),
     location: str = Query("", description="Filter by location, city, or country"),
     source_id: str = Query("", description="Filter by source ID (topcv, itviec, vietnamworks, etc.)"),
+    country_code: str = Query("VN", pattern="^(?:|[A-Z]{2}|GLOBAL)$", description="VN includes Vietnam and explicitly worldwide remote jobs; empty searches all countries"),
     sort_by: str = Query("recent", description="Sort order: recent, posted, salary_desc, title_asc"),
     page: int = Query(1, ge=1),
     limit: int = Query(12, ge=1, le=50),
@@ -102,18 +115,11 @@ async def list_jobs(
         technology=technology,
         location=location,
         source_id=source_id,
+        country_code=country_code,
         sort_by=sort_by,
         page=page,
         limit=limit,
     )
-
-    # If database is empty on initial load, trigger real crawler cycle
-    if total == 0 and not keyword and not seniority and not technology:
-        if getattr(container, "job_worker", None):
-            await container.job_worker.run_cycle()
-        else:
-            await service.run_ingestion()
-        items, total = service.list_jobs(page=page, limit=limit)
 
     total_pages = math.ceil(total / limit) if total > 0 else 1
     return JobListResponse(
@@ -136,6 +142,7 @@ def get_filter_metadata(
         workplace_types=data.get("workplace_types", []),
         top_technologies=data.get("top_technologies", []),
         locations=data.get("locations", []),
+        countries=data.get("countries", []),
         sources=data.get("sources", []),
         sort_options=data.get("sort_options", []),
     )

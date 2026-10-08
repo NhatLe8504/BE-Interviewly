@@ -8,12 +8,14 @@ from pathlib import Path
 import re
 from typing import Any
 import uuid
+from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
 import httpx
 
 from ....domain.job_aggregator import compute_job_fingerprint
 from .base import BaseJobSourceAdapter
+from .company_branding import collect_company_branding, job_structured_data, page_job_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -158,11 +160,40 @@ class RecipeBasedCrawlerAdapter(BaseJobSourceAdapter):
                     if is_relevant_it_job(j.get("title", ""), j.get("cleaned_jd_text", ""), j.get("location", ""))
                     and len(j.get("cleaned_jd_text", "")) >= 150
                 ]
+                await self._enrich_company_branding(valid_it_jobs, recipe)
                 all_results.extend(valid_it_jobs)
             except Exception as exc:
                 logger.warning("Error crawling source %s with recipe: %s", sid, exc)
 
         return all_results[:limit]
+
+    async def _enrich_company_branding(self, jobs: list[dict[str, Any]], recipe: dict[str, Any]) -> None:
+        if recipe.get("company_branding", {}).get("reuse_allowed") is not True:
+            return
+        allowed_hosts = {
+            "job-boards.greenhouse.io", "boards.greenhouse.io", "jobs.lever.co", "www.topcv.vn",
+            "itviec.com", "www.vietnamworks.com", "www.linkedin.com", "career.vng.com.vn",
+        }
+        company_assets: dict[str, dict[str, Any]] = {}
+        async with httpx.AsyncClient(timeout=self.timeout, headers=BROWSER_HEADERS) as client:
+            for job in jobs:
+                company_name = job.get("company_name", "")
+                if job.get("company_banner_url") or job.get("company_logo_url"):
+                    continue
+                if company_name not in company_assets:
+                    company_assets[company_name] = {}
+                    source_url = job.get("original_apply_url", "")
+                    if urlparse(source_url).hostname not in allowed_hosts:
+                        continue
+                    try:
+                        response = await client.get(source_url)
+                        if response.status_code == 200:
+                            company_assets[company_name] = collect_company_branding(
+                                BeautifulSoup(response.text, "html.parser"), source_url, company_name, recipe,
+                            )
+                    except httpx.HTTPError:
+                        continue
+                job.update(company_assets[company_name])
 
     async def _crawl_topcv(self, recipe: dict[str, Any], limit: int = 5) -> list[dict[str, Any]]:
         results: list[dict[str, Any]] = []
@@ -214,7 +245,9 @@ class RecipeBasedCrawlerAdapter(BaseJobSourceAdapter):
                             comp_name = found.get_text(strip=True)
                             break
                     if not comp_name:
-                        comp_name = "Doanh nghiệp IT TopCV"
+                        comp_name = (job_structured_data(dsoup).get("hiringOrganization") or {}).get("name", "")
+                    if not comp_name:
+                        continue
 
                     sections: list[str] = []
                     for item in dsoup.select(recipe.get("detail", {}).get("fields", {}).get("sections", {}).get("container_selector", ".box-job-information-detail-item")):
@@ -234,12 +267,12 @@ class RecipeBasedCrawlerAdapter(BaseJobSourceAdapter):
                         "external_job_id": jid,
                         "source_id": "topcv",
                         "company_name": comp_name,
-                        "company_location": "Việt Nam",
+                        "company_location": None,
                         "title": title,
-                        "location": "Việt Nam",
+                        "location": None,
                         "seniority": self.detect_seniority(title, jd_text).value,
                         "employment_type": self.detect_employment_type(title, jd_text).value,
-                        "workplace_type": self.detect_workplace_type(title, "Việt Nam", jd_text).value,
+                        "workplace_type": self.detect_workplace_type(title, text=jd_text).value,
                         "raw_description": jd_text,
                         "cleaned_jd_text": jd_text,
                         "skills_required": skills,
@@ -247,6 +280,7 @@ class RecipeBasedCrawlerAdapter(BaseJobSourceAdapter):
                         "original_apply_url": durl,
                         "content_fingerprint": fingerprint,
                         "via_source": "via TopCV",
+                        **page_job_metadata(dsoup, durl, comp_name, recipe),
                     })
                 except Exception as exc:
                     logger.debug("Failed topcv single job detail %s: %s", durl, exc)
@@ -294,7 +328,9 @@ class RecipeBasedCrawlerAdapter(BaseJobSourceAdapter):
                     h1 = dsoup.find("h1")
                     title = h1.get_text(strip=True) if h1 else orig_title
                     comp_el = dsoup.select_one(".employer-name, .company-name")
-                    comp_name = comp_el.get_text(strip=True) if comp_el else "Nhà tuyển dụng ITviec"
+                    comp_name = comp_el.get_text(strip=True) if comp_el else (job_structured_data(dsoup).get("hiringOrganization") or {}).get("name", "")
+                    if not comp_name:
+                        continue
                     
                     paragraphs = dsoup.select(".job-details__paragraph, .paragraph")
                     jd_text = "\n\n".join(p.get_text("\n", strip=True) for p in paragraphs if len(p.get_text(strip=True)) > 20)
@@ -309,12 +345,12 @@ class RecipeBasedCrawlerAdapter(BaseJobSourceAdapter):
                         "external_job_id": slug,
                         "source_id": "itviec",
                         "company_name": comp_name,
-                        "company_location": "Việt Nam",
+                        "company_location": None,
                         "title": title,
-                        "location": "Việt Nam",
+                        "location": None,
                         "seniority": self.detect_seniority(title, jd_text).value,
                         "employment_type": self.detect_employment_type(title, jd_text).value,
-                        "workplace_type": self.detect_workplace_type(title, "Việt Nam", jd_text).value,
+                        "workplace_type": self.detect_workplace_type(title, text=jd_text).value,
                         "raw_description": jd_text,
                         "cleaned_jd_text": jd_text,
                         "skills_required": skills,
@@ -322,6 +358,7 @@ class RecipeBasedCrawlerAdapter(BaseJobSourceAdapter):
                         "original_apply_url": durl,
                         "content_fingerprint": fingerprint,
                         "via_source": "via ITviec",
+                        **page_job_metadata(dsoup, durl, comp_name, recipe),
                     })
                 except Exception as exc:
                     logger.debug("Failed itviec detail %s: %s", durl, exc)
@@ -403,13 +440,12 @@ class RecipeBasedCrawlerAdapter(BaseJobSourceAdapter):
                         "external_job_id": jid,
                         "source_id": "vietnamworks",
                         "company_name": comp,
-                        "company_location": "Việt Nam",
+                        "company_location": None,
                         "title": title,
-                        "location": "Việt Nam",
-                        "thumbnail_url": logo,
+                        "location": None,
                         "seniority": self.detect_seniority(title, jd_text).value,
                         "employment_type": self.detect_employment_type(title, jd_text).value,
-                        "workplace_type": self.detect_workplace_type(title, "Việt Nam", jd_text).value,
+                        "workplace_type": self.detect_workplace_type(title, text=jd_text).value,
                         "raw_description": jd_text,
                         "cleaned_jd_text": jd_text,
                         "skills_required": skills,
@@ -417,6 +453,7 @@ class RecipeBasedCrawlerAdapter(BaseJobSourceAdapter):
                         "original_apply_url": durl,
                         "content_fingerprint": fingerprint,
                         "via_source": "via VietnamWorks",
+                        **page_job_metadata(BeautifulSoup(html_content, "html.parser"), durl, comp, recipe),
                     })
                 except Exception as exc:
                     logger.debug("Vietnamworks detail error %s: %s", durl, exc)
@@ -460,7 +497,7 @@ class RecipeBasedCrawlerAdapter(BaseJobSourceAdapter):
                     jdata = ddata.get("props", {}).get("pageProps", {}).get("job_data", {})
                     title = jdata.get("title") or orig_title
                     jid = str(jdata.get("job_id") or slug)
-                    loc = jdata.get("location") or "Thành phố Hồ Chí Minh"
+                    loc = jdata.get("location") or ""
 
                     desc_text = BeautifulSoup(jdata.get("description", ""), "html.parser").get_text("\n", strip=True)
                     req_text = BeautifulSoup(jdata.get("requirement", ""), "html.parser").get_text("\n", strip=True)
@@ -510,7 +547,7 @@ class RecipeBasedCrawlerAdapter(BaseJobSourceAdapter):
                     for j in jobs:
                         jid = str(j.get("id"))
                         title = j.get("title", "")
-                        loc = j.get("location", {}).get("name", "Remote")
+                        loc = j.get("location", {}).get("name", "")
                         if not is_relevant_it_job(title, "", loc):
                             continue
                         apply_url = j.get("absolute_url", "")
@@ -561,7 +598,7 @@ class RecipeBasedCrawlerAdapter(BaseJobSourceAdapter):
                         jid = str(j.get("id"))
                         title = j.get("text", "")
                         hosted_url = j.get("hostedUrl", "")
-                        loc = j.get("categories", {}).get("location", "Global")
+                        loc = j.get("categories", {}).get("location", "")
                         if not is_relevant_it_job(title, "", loc):
                             continue
                         desc_plain = j.get("descriptionPlain", "")
@@ -593,6 +630,7 @@ class RecipeBasedCrawlerAdapter(BaseJobSourceAdapter):
                             "original_apply_url": hosted_url,
                             "content_fingerprint": fingerprint,
                             "via_source": "via Lever",
+                            "posted_at": j.get("createdAt"),
                         })
                 except Exception as exc:
                     logger.debug("Lever error %s: %s", c, exc)
@@ -649,12 +687,12 @@ class RecipeBasedCrawlerAdapter(BaseJobSourceAdapter):
                         "external_job_id": jid,
                         "source_id": "linkedin",
                         "company_name": comp,
-                        "company_location": "Việt Nam",
+                        "company_location": None,
                         "title": title,
-                        "location": "Việt Nam",
+                        "location": (dsoup.select_one(".topcard__flavor--bullet").get_text(" ", strip=True) if dsoup.select_one(".topcard__flavor--bullet") else None),
                         "seniority": self.detect_seniority(title, jd_text).value,
                         "employment_type": self.detect_employment_type(title, jd_text).value,
-                        "workplace_type": self.detect_workplace_type(title, "Việt Nam", jd_text).value,
+                        "workplace_type": self.detect_workplace_type(title, text=jd_text).value,
                         "raw_description": jd_text,
                         "cleaned_jd_text": jd_text,
                         "skills_required": skills,
@@ -662,6 +700,7 @@ class RecipeBasedCrawlerAdapter(BaseJobSourceAdapter):
                         "original_apply_url": f"https://www.linkedin.com/jobs/view/{jid}",
                         "content_fingerprint": fingerprint,
                         "via_source": "via LinkedIn",
+                        **page_job_metadata(dsoup, f"https://www.linkedin.com/jobs/view/{jid}", comp, recipe),
                     })
             except Exception as exc:
                 logger.debug("LinkedIn guest error: %s", exc)
