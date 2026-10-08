@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+from . import job_aggregator as job_aggregator
+from .job_aggregator import (
+    JobSourceRecord,
+    JobCompanyRecord,
+    JobPostingRecord,
+)
+
 from . import jd_interview as jd_interview
 from .jd_interview import (
     JDGenerationJob,
@@ -58,6 +65,7 @@ __all__ = [
     "JobAnalysisRecord",
     "InterviewBlueprintRecord",
     "InterviewScriptRecord",
+    "job_aggregator",
     "jd_interview",
     "billing",
     "catalog",
@@ -65,3 +73,4 @@ __all__ = [
     "system",
     "user",
 ]
+

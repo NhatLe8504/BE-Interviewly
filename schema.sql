@@ -308,4 +308,67 @@ CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at);
 -- Gợi ý mở rộng (mục 5): khi scale, partition bảng này theo tháng (created_at)
 -- bằng PostgreSQL declarative partitioning.
 
+
+-- =====================================================================
+-- 17. job_aggregator tables (Job Aggregator Module)
+-- =====================================================================
+CREATE TABLE IF NOT EXISTS job_sources (
+    source_id        VARCHAR(32) PRIMARY KEY,
+    source_name      VARCHAR(100) NOT NULL,
+    source_type      VARCHAR(32) NOT NULL,
+    base_url         VARCHAR(500) NOT NULL,
+    is_active        BOOLEAN NOT NULL DEFAULT TRUE,
+    crawl_interval_m INT NOT NULL DEFAULT 120,
+    last_synced_at   TIMESTAMPTZ,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS job_companies (
+    company_id       SERIAL PRIMARY KEY,
+    company_name     VARCHAR(200) NOT NULL,
+    slug             VARCHAR(200) NOT NULL UNIQUE,
+    logo_url         VARCHAR(500),
+    website_url      VARCHAR(500),
+    industry         VARCHAR(100),
+    location         VARCHAR(200),
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_job_companies_slug ON job_companies(slug);
+
+CREATE TABLE IF NOT EXISTS job_postings (
+    job_id               VARCHAR(36) PRIMARY KEY,
+    source_id            VARCHAR(32) NOT NULL REFERENCES job_sources(source_id) ON DELETE CASCADE,
+    company_id           INT NOT NULL REFERENCES job_companies(company_id) ON DELETE CASCADE,
+    external_job_id      VARCHAR(255),
+    title                VARCHAR(255) NOT NULL,
+    slug                 VARCHAR(300) NOT NULL,
+    domain_id            INT REFERENCES job_domains(domain_id) ON DELETE SET NULL,
+    seniority            VARCHAR(32) NOT NULL DEFAULT 'mid',
+    employment_type      VARCHAR(32) NOT NULL DEFAULT 'full_time',
+    workplace_type       VARCHAR(32) NOT NULL DEFAULT 'hybrid',
+    location             VARCHAR(255),
+    salary_min           NUMERIC(12, 2),
+    salary_max           NUMERIC(12, 2),
+    salary_currency      VARCHAR(10) NOT NULL DEFAULT 'VND',
+    is_salary_negotiable BOOLEAN NOT NULL DEFAULT TRUE,
+    raw_description      TEXT NOT NULL,
+    cleaned_jd_text      TEXT NOT NULL,
+    skills_required      JSONB NOT NULL DEFAULT '[]'::jsonb,
+    technologies         JSONB NOT NULL DEFAULT '[]'::jsonb,
+    original_apply_url   VARCHAR(1000) NOT NULL,
+    content_fingerprint  VARCHAR(64) NOT NULL,
+    via_source           VARCHAR(100),
+    status               VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+    posted_at            TIMESTAMPTZ,
+    expires_at           TIMESTAMPTZ,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_job_postings_status ON job_postings(status);
+CREATE INDEX IF NOT EXISTS idx_job_postings_fingerprint ON job_postings(content_fingerprint);
+CREATE INDEX IF NOT EXISTS idx_job_postings_seniority ON job_postings(seniority);
+CREATE INDEX IF NOT EXISTS idx_job_postings_domain_id ON job_postings(domain_id);
+CREATE INDEX IF NOT EXISTS idx_job_postings_created_at ON job_postings(created_at DESC);
+
 COMMIT;
+
