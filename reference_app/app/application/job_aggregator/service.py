@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from ...domain.job_aggregator import JobPosting, JobSkillMatch
 from ...infrastructure.persistence.job_aggregator_repository import SqlAlchemyJobAggregatorRepository
 from .adapters.ats_adapters import GreenhouseAdapter, SeedFallbackAdapter
+from .adapters.recipe_engine import DomainRecipeRegistry, RecipeBasedCrawlerAdapter
 from .adapters.serper_adapter import SerperGoogleJobsAdapter
 
 logger = logging.getLogger(__name__)
@@ -28,7 +29,10 @@ class JobAggregatorService:
         self.serper_api_key = serper_api_key
         self.redis = redis_client
         self._lock_key = "interviewly:lock:job_ingestion"
+        self.recipe_registry = DomainRecipeRegistry()
+        self.recipe_adapter = RecipeBasedCrawlerAdapter(registry=self.recipe_registry)
         self._adapters = [
+            self.recipe_adapter,
             SerperGoogleJobsAdapter(api_key=serper_api_key),
             GreenhouseAdapter(),
             SeedFallbackAdapter(),
@@ -57,7 +61,14 @@ class JobAggregatorService:
 
         total_saved = 0
         try:
-            # Always run seed adapter if database has few jobs
+            # 1. Primary Ingestion: Verified Domain Recipes (Zero Serper credits burned)
+            logger.info("Running Recipe-Based Crawler across verified domain recipes...")
+            recipe_jobs = await self.recipe_adapter.fetch_jobs(query=query, limit=25)
+            for j in recipe_jobs:
+                self.repo.save_job(j)
+                total_saved += 1
+
+            # 2. Seed fallback if database is empty
             _, existing_count = self.repo.list_jobs(limit=1)
             if existing_count < 5 or force_seed:
                 logger.info("Seeding initial high-quality jobs...")
@@ -67,20 +78,14 @@ class JobAggregatorService:
                     self.repo.save_job(j)
                     total_saved += 1
 
-            # Run Serper adapter
-            if self.serper_api_key:
+            # 3. Optional Serper discovery if explicitly configured and requested
+            if self.serper_api_key and query:
+                logger.info("Running Serper Google Jobs search for query '%s'...", query)
                 serper_adapter = SerperGoogleJobsAdapter(api_key=self.serper_api_key)
-                serper_jobs = await serper_adapter.fetch_jobs(query=query, limit=15)
+                serper_jobs = await serper_adapter.fetch_jobs(query=query, limit=10)
                 for j in serper_jobs:
                     self.repo.save_job(j)
                     total_saved += 1
-
-            # Run Greenhouse adapter
-            gh_adapter = GreenhouseAdapter()
-            gh_jobs = await gh_adapter.fetch_jobs(limit=10)
-            for j in gh_jobs:
-                self.repo.save_job(j)
-                total_saved += 1
 
             self.session.commit()
             logger.info("Job ingestion completed successfully. Saved/updated %d jobs.", total_saved)
@@ -115,45 +120,27 @@ class JobAggregatorService:
     def get_job_by_id(self, job_id: str) -> Any | None:
         return self.repo.get_job_by_id(job_id)
 
-    def get_filter_metadata(self) -> dict[str, Any]:
-        return self.repo.get_metadata_filters()
-
-    def calculate_skill_match(self, job_id: str, candidate_skills: list[str]) -> JobSkillMatch:
+    def match_candidate_skills(self, job_id: str, candidate_skills: list[str]) -> JobSkillMatch | None:
         job = self.repo.get_job_by_id(job_id)
         if not job:
-            return JobSkillMatch(
-                job_id=job_id,
-                match_score_pct=0,
-                matched_skills=[],
-                missing_skills=[],
-                recommendation="Không tìm thấy thông tin tin tuyển dụng.",
-            )
+            return None
 
-        job_skills = list(job.skills_required or [])
-        if not job_skills:
-            job_skills = list(job.technologies or [])
+        required = [s.lower() for s in (job.skills_required or [])]
+        user_skills = [s.lower() for s in candidate_skills]
 
-        candidate_lower = {s.lower().strip() for s in candidate_skills}
-        matched = [s for s in job_skills if s.lower().strip() in candidate_lower]
-        missing = [s for s in job_skills if s.lower().strip() not in candidate_lower]
+        matching = [s for s in required if s in user_skills]
+        missing = [s for s in required if s not in user_skills]
+        pct = (len(matching) / max(1, len(required))) * 100.0
 
-        if not job_skills:
-            score = 75
-        else:
-            score = int((len(matched) / len(job_skills)) * 100)
-            score = max(20, min(100, score))
-
-        if score >= 75:
-            rec = "Hồ sơ của bạn rất phù hợp với vị trí này! Hãy tự tin luyện tập phỏng vấn ngay."
-        elif score >= 50:
-            rec = "Bạn đáp ứng được các kỹ năng cốt lõi. Nên ôn tập thêm các kỹ năng còn thiếu trước khi phỏng vấn."
-        else:
-            rec = "Vị trí này có nhiều yêu cầu công nghệ mới. Luyện tập với AI sẽ giúp bạn làm quen nhanh chóng."
+        readiness = "Cần bổ sung kiến thức chuyên sâu"
+        if pct >= 80:
+            readiness = "Rất sẵn sàng ứng tuyển"
+        elif pct >= 50:
+            readiness = "Đáp ứng cơ bản yêu cầu"
 
         return JobSkillMatch(
-            job_id=job_id,
-            match_score_pct=score,
-            matched_skills=matched,
+            matching_skills=matching,
             missing_skills=missing,
-            recommendation=rec,
+            readiness_score=round(pct, 1),
+            readiness_assessment=readiness,
         )
