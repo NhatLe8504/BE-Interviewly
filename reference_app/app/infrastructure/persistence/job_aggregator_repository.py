@@ -195,6 +195,9 @@ class SqlAlchemyJobAggregatorRepository:
         seniority: str = "",
         workplace_type: str = "",
         technology: str = "",
+        location: str = "",
+        source_id: str = "",
+        sort_by: str = "recent",
         page: int = 1,
         limit: int = 12,
     ) -> tuple[list[JobPostingRecord], int]:
@@ -236,11 +239,35 @@ class SqlAlchemyJobAggregatorRepository:
             stmt = stmt.where(cond)
             count_stmt = count_stmt.where(cond)
 
+        if location:
+            loc_lower = location.lower()
+            if loc_lower in ("remote", "từ xa"):
+                stmt = stmt.where(or_(JobPostingRecord.workplace_type == "remote", func.lower(JobPostingRecord.location).like("%remote%")))
+                count_stmt = count_stmt.where(or_(JobPostingRecord.workplace_type == "remote", func.lower(JobPostingRecord.location).like("%remote%")))
+            else:
+                loc_kw = f"%{loc_lower}%"
+                stmt = stmt.where(func.lower(JobPostingRecord.location).like(loc_kw))
+                count_stmt = count_stmt.where(func.lower(JobPostingRecord.location).like(loc_kw))
+
+        if source_id:
+            stmt = stmt.where(JobPostingRecord.source_id == source_id)
+            count_stmt = count_stmt.where(JobPostingRecord.source_id == source_id)
+
+        # Order by sort_by
+        if sort_by == "posted":
+            order_clause = [JobPostingRecord.posted_at.desc().nullslast(), JobPostingRecord.created_at.desc()]
+        elif sort_by == "salary_desc":
+            order_clause = [JobPostingRecord.salary_max.desc().nullslast(), JobPostingRecord.updated_at.desc()]
+        elif sort_by == "title_asc":
+            order_clause = [JobPostingRecord.title.asc()]
+        else: # "recent" or default
+            order_clause = [JobPostingRecord.updated_at.desc(), JobPostingRecord.created_at.desc()]
+
         total = self.session.execute(count_stmt).scalar() or 0
         offset = max(0, (page - 1) * limit)
         items = list(
             self.session.execute(
-                stmt.order_by(JobPostingRecord.created_at.desc()).offset(offset).limit(limit)
+                stmt.order_by(*order_clause).offset(offset).limit(limit)
             ).scalars().all()
         )
         return items, total
@@ -290,8 +317,30 @@ class SqlAlchemyJobAggregatorRepository:
             "Java", "React", "Golang", "Python", "TypeScript", "Node.js",
             "Spring Boot", "Kafka", "PostgreSQL", "Docker", "Kubernetes", "AWS"
         ]
+        locations = [
+            "Việt Nam", "Hà Nội", "Hồ Chí Minh City", "Đà Nẵng",
+            "Remote", "Bắc Mỹ", "Châu Âu", "Châu Á"
+        ]
+        sources = [
+            {"id": "topcv", "name": "TopCV"},
+            {"id": "itviec", "name": "ITviec"},
+            {"id": "vietnamworks", "name": "VietnamWorks"},
+            {"id": "vng", "name": "VNG Careers"},
+            {"id": "linkedin", "name": "LinkedIn"},
+            {"id": "greenhouse", "name": "Greenhouse"},
+            {"id": "lever", "name": "Lever"},
+        ]
+        sort_options = [
+            {"id": "recent", "name": "Mới cập nhật nhất"},
+            {"id": "posted", "name": "Mới đăng gần đây"},
+            {"id": "salary_desc", "name": "Lương cao nhất"},
+            {"id": "title_asc", "name": "Tiêu đề A - Z"},
+        ]
         return {
             "seniorities": seniorities,
             "workplace_types": workplace_types,
             "top_technologies": top_technologies,
+            "locations": locations,
+            "sources": sources,
+            "sort_options": sort_options,
         }
