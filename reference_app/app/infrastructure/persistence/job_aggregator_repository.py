@@ -6,10 +6,11 @@ import re
 from typing import Any
 import uuid
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import String, cast, func, or_, select, update
 from sqlalchemy.orm import Session, joinedload
 
 from .models.job_aggregator import JobCompanyRecord, JobPostingRecord, JobSourceRecord
+from ...domain.job_metadata import detect_countries, is_global_remote, parse_source_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,9 @@ class SqlAlchemyJobAggregatorRepository:
         return source
 
     def get_or_create_company(
-        self, company_name: str, location: str | None = None, logo_url: str | None = None
+        self, company_name: str, location: str | None = None, logo_url: str | None = None,
+        banner_url: str | None = None, branding_source_url: str | None = None,
+        branding_license_url: str | None = None, branding_reuse_allowed: bool = False,
     ) -> JobCompanyRecord:
         clean_name = company_name.strip() if company_name else "Tech Enterprise"
         slug = re.sub(r"[^a-z0-9]+", "-", clean_name.lower()).strip("-") or "company"
@@ -50,12 +53,17 @@ class SqlAlchemyJobAggregatorRepository:
                 company_name=clean_name,
                 slug=slug,
                 location=location,
-                logo_url=logo_url,
             )
             self.session.add(company)
             self.session.flush()
-        elif logo_url and not company.logo_url:
-            company.logo_url = logo_url
+        if branding_reuse_allowed and branding_source_url and branding_license_url:
+            if logo_url:
+                company.logo_url = logo_url
+            if banner_url:
+                company.banner_url = banner_url
+            company.branding_source_url = branding_source_url
+            company.branding_license_url = branding_license_url
+            company.branding_reuse_allowed = True
             self.session.flush()
         return company
 
@@ -115,7 +123,11 @@ class SqlAlchemyJobAggregatorRepository:
         company = self.get_or_create_company(
             company_name=job_dict.get("company_name", "Doanh nghiệp IT"),
             location=job_dict.get("company_location"),
-            logo_url=job_dict.get("thumbnail_url"),
+            logo_url=job_dict.get("company_logo_url"),
+            banner_url=job_dict.get("company_banner_url"),
+            branding_source_url=job_dict.get("branding_source_url"),
+            branding_license_url=job_dict.get("branding_license_url"),
+            branding_reuse_allowed=job_dict.get("branding_reuse_allowed", False),
         )
 
         # 2. Hierarchical duplicate search
@@ -126,6 +138,18 @@ class SqlAlchemyJobAggregatorRepository:
         )
 
         if existing:
+            existing.seniority = job_dict.get("seniority") or "unknown"
+            existing.employment_type = job_dict.get("employment_type") or "unknown"
+            existing.workplace_type = job_dict.get("workplace_type") or "unknown"
+            existing.location = job_dict.get("location") or None
+            existing.country_codes = detect_countries(existing.location)
+            existing.is_global_remote = is_global_remote(existing.location, existing.workplace_type)
+            source_posted_at = parse_source_datetime(job_dict.get("posted_at"))
+            if source_posted_at:
+                existing.posted_at = source_posted_at
+            source_expires_at = parse_source_datetime(job_dict.get("expires_at"))
+            if source_expires_at:
+                existing.expires_at = source_expires_at
             # Job already exists: refresh last_seen_at
             existing.last_seen_at = now
             existing.last_verified_at = now
@@ -159,10 +183,12 @@ class SqlAlchemyJobAggregatorRepository:
             title=title,
             slug=f"{title_slug}-{job_id[:8]}",
             domain_id=job_dict.get("domain_id"),
-            seniority=job_dict.get("seniority", "mid"),
-            employment_type=job_dict.get("employment_type", "full_time"),
-            workplace_type=job_dict.get("workplace_type", "hybrid"),
-            location=job_dict.get("location", "Việt Nam"),
+            seniority=job_dict.get("seniority") or "unknown",
+            employment_type=job_dict.get("employment_type") or "unknown",
+            workplace_type=job_dict.get("workplace_type") or "unknown",
+            location=job_dict.get("location") or None,
+            country_codes=detect_countries(job_dict.get("location")),
+            is_global_remote=is_global_remote(job_dict.get("location"), job_dict.get("workplace_type", "unknown")),
             salary_min=job_dict.get("salary_min"),
             salary_max=job_dict.get("salary_max"),
             salary_currency=job_dict.get("salary_currency", "VND"),
@@ -175,7 +201,8 @@ class SqlAlchemyJobAggregatorRepository:
             content_fingerprint=fp,
             via_source=job_dict.get("via_source"),
             status="ACTIVE",
-            posted_at=now,
+            posted_at=parse_source_datetime(job_dict.get("posted_at")),
+            expires_at=parse_source_datetime(job_dict.get("expires_at")),
             first_seen_at=now,
             last_seen_at=now,
             last_verified_at=now,
@@ -197,6 +224,7 @@ class SqlAlchemyJobAggregatorRepository:
         technology: str = "",
         location: str = "",
         source_id: str = "",
+        country_code: str = "VN",
         sort_by: str = "recent",
         page: int = 1,
         limit: int = 12,
@@ -253,21 +281,29 @@ class SqlAlchemyJobAggregatorRepository:
             stmt = stmt.where(JobPostingRecord.source_id == source_id)
             count_stmt = count_stmt.where(JobPostingRecord.source_id == source_id)
 
-        # Order by sort_by
+        if country_code:
+            country_condition = cast(JobPostingRecord.country_codes, String).contains(f'"{country_code.upper()}"')
+            if country_code.upper() == "VN":
+                country_condition = or_(country_condition, JobPostingRecord.is_global_remote.is_(True))
+            elif country_code.upper() == "GLOBAL":
+                country_condition = JobPostingRecord.is_global_remote.is_(True)
+            stmt = stmt.where(country_condition)
+            count_stmt = count_stmt.where(country_condition)
+
         if sort_by == "posted":
             order_clause = [JobPostingRecord.posted_at.desc().nullslast(), JobPostingRecord.created_at.desc()]
         elif sort_by == "salary_desc":
             order_clause = [JobPostingRecord.salary_max.desc().nullslast(), JobPostingRecord.updated_at.desc()]
         elif sort_by == "title_asc":
             order_clause = [JobPostingRecord.title.asc()]
-        else: # "recent" or default
+        else:
             order_clause = [JobPostingRecord.updated_at.desc(), JobPostingRecord.created_at.desc()]
 
         total = self.session.execute(count_stmt).scalar() or 0
         offset = max(0, (page - 1) * limit)
         items = list(
             self.session.execute(
-                stmt.order_by(*order_clause).offset(offset).limit(limit)
+                stmt.order_by(*order_clause, JobPostingRecord.job_id).offset(offset).limit(limit)
             ).scalars().all()
         )
         return items, total
@@ -311,36 +347,33 @@ class SqlAlchemyJobAggregatorRepository:
         return res.rowcount
 
     def get_metadata_filters(self) -> dict[str, Any]:
-        seniorities = ["intern", "fresher", "junior", "mid", "senior", "lead"]
-        workplace_types = ["hybrid", "remote", "on_site"]
-        top_technologies = [
-            "Java", "React", "Golang", "Python", "TypeScript", "Node.js",
-            "Spring Boot", "Kafka", "PostgreSQL", "Docker", "Kubernetes", "AWS"
-        ]
-        locations = [
-            "Việt Nam", "Hà Nội", "Hồ Chí Minh City", "Đà Nẵng",
-            "Remote", "Bắc Mỹ", "Châu Âu", "Châu Á"
-        ]
-        sources = [
-            {"id": "topcv", "name": "TopCV"},
-            {"id": "itviec", "name": "ITviec"},
-            {"id": "vietnamworks", "name": "VietnamWorks"},
-            {"id": "vng", "name": "VNG Careers"},
-            {"id": "linkedin", "name": "LinkedIn"},
-            {"id": "greenhouse", "name": "Greenhouse"},
-            {"id": "lever", "name": "Lever"},
-        ]
-        sort_options = [
-            {"id": "recent", "name": "Mới cập nhật nhất"},
-            {"id": "posted", "name": "Mới đăng gần đây"},
-            {"id": "salary_desc", "name": "Lương cao nhất"},
-            {"id": "title_asc", "name": "Tiêu đề A - Z"},
-        ]
+        from collections import Counter
+
+        jobs = list(self.session.scalars(select(JobPostingRecord).where(JobPostingRecord.status == "ACTIVE")))
+        technologies = Counter(technology for job in jobs for technology in job.technologies or [])
+        country_names = {
+            "VN": "Việt Nam", "US": "Hoa Kỳ", "GB": "Vương quốc Anh", "SG": "Singapore",
+            "JP": "Nhật Bản", "DE": "Đức", "ES": "Tây Ban Nha", "IN": "Ấn Độ",
+            "CA": "Canada", "AU": "Australia", "IE": "Ireland", "PL": "Ba Lan",
+            "BR": "Brazil", "MX": "Mexico", "FR": "Pháp",
+        }
+        countries = sorted({code for job in jobs for code in job.country_codes or []})
+        source_names = {
+            "topcv": "TopCV", "itviec": "ITviec", "vietnamworks": "VietnamWorks",
+            "vng": "VNG Careers", "linkedin": "LinkedIn", "greenhouse": "Greenhouse", "lever": "Lever",
+        }
+        source_ids = sorted({job.source_id for job in jobs})
         return {
-            "seniorities": seniorities,
-            "workplace_types": workplace_types,
-            "top_technologies": top_technologies,
-            "locations": locations,
-            "sources": sources,
-            "sort_options": sort_options,
+            "seniorities": sorted({job.seniority for job in jobs if job.seniority != "unknown"}),
+            "workplace_types": sorted({job.workplace_type for job in jobs if job.workplace_type != "unknown"}),
+            "top_technologies": [technology for technology, count in technologies.most_common(10)],
+            "locations": sorted({job.location for job in jobs if job.location}),
+            "countries": [{"id": code, "name": country_names.get(code, code)} for code in countries]
+                + ([{"id": "GLOBAL", "name": "Remote toàn cầu"}] if any(job.is_global_remote for job in jobs) else []),
+            "sources": [{"id": source_id, "name": source_names.get(source_id, source_id)} for source_id in source_ids],
+            "sort_options": [
+                {"id": "recent", "name": "Mới cập nhật dữ liệu"},
+                {"id": "posted", "name": "Mới đăng tuyển"},
+                {"id": "title_asc", "name": "Tên công việc A – Z"},
+            ],
         }
