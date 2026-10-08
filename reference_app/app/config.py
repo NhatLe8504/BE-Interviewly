@@ -92,6 +92,7 @@ class Settings:
     xgate_receiver_account: str = DEFAULT_XGATE_RECEIVER_ACCOUNT
     xgate_receiver_name: str = DEFAULT_XGATE_RECEIVER_NAME
     pdf_reports_dir: str = "reports"
+    serper_api_key: str = ""
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -148,4 +149,5 @@ class Settings:
             xgate_receiver_account=os.environ.get("PAYMENT_QR_ACCOUNT_NUMBER", os.environ.get("XGATE_RECEIVER_ACCOUNT", os.environ.get("XGATE_ACCOUNT", DEFAULT_XGATE_RECEIVER_ACCOUNT))),
             xgate_receiver_name=os.environ.get("PAYMENT_QR_ACCOUNT_NAME", os.environ.get("XGATE_RECEIVER_NAME", DEFAULT_XGATE_RECEIVER_NAME)),
             pdf_reports_dir=os.environ.get("PDF_REPORTS_DIR", "reports"),
+            serper_api_key=os.environ.get("SERPER_API_KEY", ""),
         )
