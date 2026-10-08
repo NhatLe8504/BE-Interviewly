@@ -5442,6 +5442,355 @@
           }
         }
       }
+    },
+    "/api/v1/jobs": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "List Jobs",
+        "operationId": "list_jobs_api_v1_jobs_get",
+        "parameters": [
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Search by keyword in title, location or skills",
+              "default": "",
+              "title": "Keyword"
+            },
+            "description": "Search by keyword in title, location or skills"
+          },
+          {
+            "name": "domain_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by domain ID",
+              "title": "Domain Id"
+            },
+            "description": "Filter by domain ID"
+          },
+          {
+            "name": "seniority",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Filter by seniority level",
+              "default": "",
+              "title": "Seniority"
+            },
+            "description": "Filter by seniority level"
+          },
+          {
+            "name": "workplace_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Filter by workplace type (remote, hybrid, on_site)",
+              "default": "",
+              "title": "Workplace Type"
+            },
+            "description": "Filter by workplace type (remote, hybrid, on_site)"
+          },
+          {
+            "name": "technology",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Filter by specific technology",
+              "default": "",
+              "title": "Technology"
+            },
+            "description": "Filter by specific technology"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 12,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/jobs/metadata/filters": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Get Filter Metadata",
+        "operationId": "get_filter_metadata_api_v1_jobs_metadata_filters_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobFilterMetadataOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/jobs/sync/status": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Get Sync Status",
+        "operationId": "get_sync_status_api_v1_jobs_sync_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Get Sync Status Api V1 Jobs Sync Status Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/jobs/sync": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Sync Jobs",
+        "operationId": "sync_jobs_api_v1_jobs_sync_post",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Optional custom query",
+              "default": "",
+              "title": "Query"
+            },
+            "description": "Optional custom query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Sync Jobs Api V1 Jobs Sync Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Get Job Detail",
+        "operationId": "get_job_detail_api_v1_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobDetailOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/jobs/{job_id}/skill-match": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Get Job Skill Match",
+        "operationId": "get_job_skill_match_api_v1_jobs__job_id__skill_match_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobSkillMatchOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/jobs/{job_id}/start-practice": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Start Practice From Job",
+        "operationId": "start_practice_from_job_api_v1_jobs__job_id__start_practice_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartJobPracticeOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -6739,6 +7088,452 @@
         ],
         "title": "JDUrlSubmissionIn"
       },
+      "JobCompanyOut": {
+        "properties": {
+          "company_id": {
+            "type": "integer",
+            "title": "Company Id"
+          },
+          "company_name": {
+            "type": "string",
+            "title": "Company Name"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id",
+          "company_name",
+          "slug"
+        ],
+        "title": "JobCompanyOut"
+      },
+      "JobDetailOut": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "seniority": {
+            "type": "string",
+            "title": "Seniority"
+          },
+          "employment_type": {
+            "type": "string",
+            "title": "Employment Type"
+          },
+          "workplace_type": {
+            "type": "string",
+            "title": "Workplace Type"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "salary_display": {
+            "type": "string",
+            "title": "Salary Display",
+            "default": "Thỏa thuận"
+          },
+          "salary_min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Salary Min"
+          },
+          "salary_max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Salary Max"
+          },
+          "skills_required": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skills Required"
+          },
+          "thumbnail_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumbnail Url"
+          },
+          "technologies": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Technologies"
+          },
+          "via_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Via Source"
+          },
+          "original_apply_url": {
+            "type": "string",
+            "title": "Original Apply Url"
+          },
+          "posted_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Posted At"
+          },
+          "company": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobCompanyOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "raw_description": {
+            "type": "string",
+            "title": "Raw Description"
+          },
+          "cleaned_jd_text": {
+            "type": "string",
+            "title": "Cleaned Jd Text"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "title",
+          "slug",
+          "seniority",
+          "employment_type",
+          "workplace_type",
+          "original_apply_url",
+          "raw_description",
+          "cleaned_jd_text",
+          "created_at"
+        ],
+        "title": "JobDetailOut"
+      },
+      "JobFilterMetadataOut": {
+        "properties": {
+          "seniorities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Seniorities"
+          },
+          "workplace_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Workplace Types"
+          },
+          "top_technologies": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Top Technologies"
+          }
+        },
+        "type": "object",
+        "required": [
+          "seniorities",
+          "workplace_types",
+          "top_technologies"
+        ],
+        "title": "JobFilterMetadataOut"
+      },
+      "JobItemOut": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "seniority": {
+            "type": "string",
+            "title": "Seniority"
+          },
+          "employment_type": {
+            "type": "string",
+            "title": "Employment Type"
+          },
+          "workplace_type": {
+            "type": "string",
+            "title": "Workplace Type"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "salary_display": {
+            "type": "string",
+            "title": "Salary Display",
+            "default": "Thỏa thuận"
+          },
+          "salary_min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Salary Min"
+          },
+          "salary_max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Salary Max"
+          },
+          "skills_required": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skills Required"
+          },
+          "thumbnail_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumbnail Url"
+          },
+          "technologies": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Technologies"
+          },
+          "via_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Via Source"
+          },
+          "original_apply_url": {
+            "type": "string",
+            "title": "Original Apply Url"
+          },
+          "posted_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Posted At"
+          },
+          "company": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobCompanyOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "title",
+          "slug",
+          "seniority",
+          "employment_type",
+          "workplace_type",
+          "original_apply_url"
+        ],
+        "title": "JobItemOut"
+      },
+      "JobListResponse": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "total_pages": {
+            "type": "integer",
+            "title": "Total Pages"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/JobItemOut"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "page",
+          "limit",
+          "total_pages",
+          "items"
+        ],
+        "title": "JobListResponse"
+      },
+      "JobSkillMatchOut": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "match_score_pct": {
+            "type": "integer",
+            "title": "Match Score Pct"
+          },
+          "matched_skills": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Matched Skills"
+          },
+          "missing_skills": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing Skills"
+          },
+          "recommendation": {
+            "type": "string",
+            "title": "Recommendation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "match_score_pct",
+          "matched_skills",
+          "missing_skills",
+          "recommendation"
+        ],
+        "title": "JobSkillMatchOut"
+      },
       "LeaderboardItemOut": {
         "properties": {
           "rank": {
@@ -7892,6 +8687,11 @@
             ],
             "title": "Avatar Url"
           },
+          "mascot_id": {
+            "type": "string",
+            "title": "Mascot Id",
+            "default": "fox-pixel"
+          },
           "created_at": {
             "anyOf": [
               {
@@ -8013,6 +8813,18 @@
               }
             ],
             "title": "Avatar Url"
+          },
+          "mascot_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(fox-pixel|cat|otter|panda|gearbot|astronaut|none)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mascot Id"
           }
         },
         "type": "object",
@@ -10612,6 +11424,29 @@
         ],
         "title": "StarTemplateOut"
       },
+      "StartJobPracticeOut": {
+        "properties": {
+          "interview_id": {
+            "type": "string",
+            "title": "Interview Id"
+          },
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "redirect_url": {
+            "type": "string",
+            "title": "Redirect Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "interview_id",
+          "job_id",
+          "redirect_url"
+        ],
+        "title": "StartJobPracticeOut"
+      },
       "StartSessionIn": {
         "properties": {
           "domain_id": {
@@ -11464,6 +12299,11 @@
               }
             ],
             "title": "Avatar Url"
+          },
+          "mascot_id": {
+            "type": "string",
+            "title": "Mascot Id",
+            "default": "fox-pixel"
           }
         },
         "type": "object",

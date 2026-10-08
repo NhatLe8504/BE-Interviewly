@@ -138,3 +138,25 @@ class JobAggregatorService:
             readiness_score=round(pct, 1),
             readiness_assessment=readiness,
         )
+
+    def get_filter_metadata(self) -> dict[str, Any]:
+        return self.repo.get_metadata_filters()
+
+    def calculate_skill_match(self, job_id: str, candidate_skills: list[str]) -> Any:
+        match = self.match_candidate_skills(job_id, candidate_skills)
+        class SkillMatchObj:
+            def __init__(self, jid, pct, matched, missing, rec):
+                self.job_id = jid
+                self.match_score_pct = pct
+                self.matched_skills = matched
+                self.missing_skills = missing
+                self.recommendation = rec
+        if match:
+            return SkillMatchObj(
+                jid=job_id,
+                pct=match.readiness_score,
+                matched=match.matching_skills,
+                missing=match.missing_skills,
+                rec=match.readiness_assessment,
+            )
+        return SkillMatchObj(jid=job_id, pct=0.0, matched=[], missing=[], rec="Chưa có thông tin")
