@@ -298,6 +298,15 @@ def build_services(
     # Edge TTS
     tts_adapter = EdgeTTSAdapter()
 
+    # Automated Job Ingestion Worker
+    from .application.job_aggregator.worker import JobIngestionWorker
+    job_worker = JobIngestionWorker(
+        session_factory=session_factory,
+        redis_client=redis_client,
+        serper_api_key=getattr(settings, "serper_api_key", ""),
+        crawl_interval_seconds=3600,
+    )
+
     return ServiceContainer(
         clock=effective_clock,
         settings=settings,
@@ -320,5 +329,6 @@ def build_services(
         cache_service=cache_service,
         tts_adapter=tts_adapter,
         llm_voice_adapter=llm_adapter,
+        job_worker=job_worker,
     )
 

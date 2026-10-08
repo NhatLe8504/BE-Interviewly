@@ -30,3 +30,4 @@ class ServiceContainer:
     cache_service: Any = None
     tts_adapter: Any = None
     llm_voice_adapter: Any = None
+    job_worker: Any = None
