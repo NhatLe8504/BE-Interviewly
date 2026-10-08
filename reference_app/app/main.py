@@ -30,6 +30,7 @@ from .presentation.api.routers import upload as upload_router
 from .presentation.api.routers import voice_ws as voice_router
 from .presentation.api.routers import onboarding as onboarding_router
 from .presentation.api.routers import jd_interview as jd_interview_router
+from .presentation.api.routers import jobs as jobs_router
 
 
 def export_openapi(app: FastAPI) -> Path:
@@ -128,6 +129,7 @@ def create_app(services: ServiceContainer | None = None) -> FastAPI:
     app.include_router(onboarding_router.router)
     app.include_router(onboarding_router.admin_router)
     app.include_router(jd_interview_router.router)
+    app.include_router(jobs_router.router)
     register_error_handlers(app)
     return app
 
