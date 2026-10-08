@@ -26,6 +26,7 @@ class JobItemOut(BaseModel):
     salary_min: float | None = None
     salary_max: float | None = None
     skills_required: list[str] = Field(default_factory=list)
+    thumbnail_url: str | None = None
     technologies: list[str] = Field(default_factory=list)
     via_source: str | None = None
     original_apply_url: str
