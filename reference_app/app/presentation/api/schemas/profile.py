@@ -19,6 +19,7 @@ class ProfileOut(BaseModel):
     target_domain_name: str | None = None
     bio: str | None = None
     avatar_url: str | None = None
+    mascot_id: str = "fox-pixel"
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -34,6 +35,7 @@ class ProfileUpdateIn(BaseModel):
     target_domain_id: int | None = None
     bio: str | None = Field(None, max_length=5000)
     avatar_url: str | None = Field(None, max_length=500)
+    mascot_id: str | None = Field(None, pattern="^(fox-pixel|cat|otter|panda|gearbot|astronaut|none)$")
 
 
 class ChangePasswordIn(BaseModel):

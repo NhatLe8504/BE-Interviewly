@@ -4,7 +4,7 @@ from typing import Any
 
 from ...application.profile.ports import ProfileRepositoryPort
 from ...domain.errors import NotFoundError
-from ...domain.profile import UserProfile
+from ...domain.profile import DEFAULT_MASCOT_ID, UserProfile
 from .models.catalog import JobDomain
 from .models.enums import ExperienceLevel, Language
 from .models.user import CandidateProfile, User
@@ -50,6 +50,7 @@ class SqlAlchemyProfileRepository:
             target_domain_name=domain_name,
             bio=profile.bio if profile else None,
             avatar_url=profile.avatar_url if profile else None,
+            mascot_id=profile.mascot_id if profile else DEFAULT_MASCOT_ID,
             created_at=user.created_at,
             updated_at=profile.updated_at if profile and profile.updated_at else user.updated_at,
         )
@@ -66,6 +67,7 @@ class SqlAlchemyProfileRepository:
         target_domain_id: int | None = None,
         bio: str | None = None,
         avatar_url: str | None = None,
+        mascot_id: str | None = None,
         fields_set: frozenset[str] | None = None,
     ) -> UserProfile:
         user = session.get(User, user_id)
@@ -92,6 +94,8 @@ class SqlAlchemyProfileRepository:
                 profile.bio = bio
             if avatar_url is not None:
                 profile.avatar_url = avatar_url
+            if mascot_id is not None:
+                profile.mascot_id = mascot_id
         else:
             if "full_name" in fields_set and full_name is not None:
                 user.full_name = full_name
@@ -107,6 +111,8 @@ class SqlAlchemyProfileRepository:
                 profile.bio = bio
             if "avatar_url" in fields_set:
                 profile.avatar_url = avatar_url
+            if "mascot_id" in fields_set:
+                profile.mascot_id = mascot_id or DEFAULT_MASCOT_ID
 
         session.commit()
         session.refresh(user)

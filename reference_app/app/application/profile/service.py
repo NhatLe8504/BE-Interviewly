@@ -10,6 +10,7 @@ from ...domain.profile import (
     validate_bio,
     validate_experience_level,
     validate_language,
+    validate_mascot_id,
     validate_phone,
 )
 from .commands import ChangePasswordCommand, UpdateProfileCommand
@@ -53,6 +54,7 @@ class ProfileService:
             validate_bio(cmd.bio)
         if cmd.avatar_url is not None:
             validate_avatar_url(cmd.avatar_url)
+        validate_mascot_id(cmd.mascot_id)
         if cmd.target_domain_id is not None:
             if not self.repo.domain_exists(session, cmd.target_domain_id):
                 raise NotFoundError(f"target domain {cmd.target_domain_id} not found")
@@ -67,6 +69,7 @@ class ProfileService:
             target_domain_id=cmd.target_domain_id,
             bio=cmd.bio,
             avatar_url=cmd.avatar_url,
+            mascot_id=cmd.mascot_id,
             fields_set=cmd.fields_set if cmd.fields_set else None,
         )
 
