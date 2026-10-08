@@ -98,9 +98,12 @@ async def list_jobs(
         limit=limit,
     )
 
-    # If database is completely empty on first load, seed automatically
+    # If database is empty on initial load, trigger real crawler cycle
     if total == 0 and not keyword and not seniority and not technology:
-        await service.run_ingestion(force_seed=True)
+        if getattr(container, "job_worker", None):
+            await container.job_worker.run_cycle()
+        else:
+            await service.run_ingestion()
         items, total = service.list_jobs(page=page, limit=limit)
 
     total_pages = math.ceil(total / limit) if total > 0 else 1
@@ -126,12 +129,25 @@ def get_filter_metadata(
     )
 
 
+@router.get("/sync/status")
+def get_sync_status(
+    container: ServiceContainer = Depends(get_container),
+) -> dict[str, Any]:
+    if getattr(container, "job_worker", None):
+        return container.job_worker.last_run_stats
+    return {"status": "unsupported", "message": "Worker not attached"}
+
+
 @router.post("/sync", status_code=status.HTTP_200_OK)
 async def sync_jobs(
-    query: str = Query("", description="Optional custom query for Serper"),
+    query: str = Query("", description="Optional custom query"),
     session: Session = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
 ) -> dict[str, Any]:
+    if getattr(container, "job_worker", None):
+        stats = await container.job_worker.run_cycle(query=query)
+        return {"status": "ok", "stats": stats}
+
     api_key = getattr(container.settings, "serper_api_key", "")
     if not api_key:
         import os
@@ -142,7 +158,7 @@ async def sync_jobs(
         serper_api_key=api_key,
         redis_client=getattr(container, "redis_client", None),
     )
-    saved = await service.run_ingestion(query=query, force_seed=True)
+    saved = await service.run_ingestion(query=query)
     return {"status": "ok", "synced_jobs": saved}
 
 
@@ -155,6 +171,12 @@ def get_job_detail(
     job = service.get_job_by_id(job_id)
     if not job:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+
+    if job.status != "ACTIVE":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tin tuyển dụng này đã hết hạn hoặc không còn nhận ứng tuyển.",
+        )
 
     base_item = _to_job_item_out(job)
     return JobDetailOut(
