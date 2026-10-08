@@ -133,10 +133,11 @@ async def list_jobs(
 
 @router.get("/metadata/filters", response_model=JobFilterMetadataOut)
 def get_filter_metadata(
+    country_code: str = Query("VN", pattern="^(?:|[A-Z]{2}|GLOBAL)$"),
     session: Session = Depends(get_session),
 ) -> JobFilterMetadataOut:
     service = JobAggregatorService(session=session)
-    data = service.get_filter_metadata()
+    data = service.get_filter_metadata(country_code=country_code)
     return JobFilterMetadataOut(
         seniorities=data.get("seniorities", []),
         workplace_types=data.get("workplace_types", []),
@@ -227,6 +228,7 @@ def get_job_skill_match(
         matched_skills=result.matched_skills,
         missing_skills=result.missing_skills,
         recommendation=result.recommendation,
+        has_candidate_skills=bool(candidate_skills),
     )
 
 

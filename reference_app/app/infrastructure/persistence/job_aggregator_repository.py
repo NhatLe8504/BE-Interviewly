@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone, timedelta
+from hashlib import sha256
 import logging
 import re
 from typing import Any
@@ -43,11 +44,17 @@ class SqlAlchemyJobAggregatorRepository:
         banner_url: str | None = None, branding_source_url: str | None = None,
         branding_license_url: str | None = None, branding_reuse_allowed: bool = False,
     ) -> JobCompanyRecord:
-        clean_name = company_name.strip() if company_name else "Tech Enterprise"
+        clean_name = " ".join((company_name or "").split()) or "Chưa rõ doanh nghiệp tuyển dụng"
         slug = re.sub(r"[^a-z0-9]+", "-", clean_name.lower()).strip("-") or "company"
         company = self.session.execute(
             select(JobCompanyRecord).where(JobCompanyRecord.slug == slug)
         ).scalar_one_or_none()
+        if company is not None and company.company_name.casefold() != clean_name.casefold():
+            name_hash = sha256(clean_name.casefold().encode("utf-8")).hexdigest()[:12]
+            slug = f"{slug}-{name_hash}"
+            company = self.session.execute(
+                select(JobCompanyRecord).where(JobCompanyRecord.slug == slug)
+            ).scalar_one_or_none()
         if company is None:
             company = JobCompanyRecord(
                 company_name=clean_name,
@@ -121,7 +128,7 @@ class SqlAlchemyJobAggregatorRepository:
             base_url=job_dict.get("original_apply_url", "https://interviewly.ai"),
         )
         company = self.get_or_create_company(
-            company_name=job_dict.get("company_name", "Doanh nghiệp IT"),
+            company_name=job_dict.get("company_name", ""),
             location=job_dict.get("company_location"),
             logo_url=job_dict.get("company_logo_url"),
             banner_url=job_dict.get("company_banner_url"),
@@ -138,6 +145,9 @@ class SqlAlchemyJobAggregatorRepository:
         )
 
         if existing:
+            if existing.company_id != company.company_id:
+                existing.company = company
+                existing.updated_at = now
             existing.seniority = job_dict.get("seniority") or "unknown"
             existing.employment_type = job_dict.get("employment_type") or "unknown"
             existing.workplace_type = job_dict.get("workplace_type") or "unknown"
@@ -242,6 +252,7 @@ class SqlAlchemyJobAggregatorRepository:
                 func.lower(JobPostingRecord.title).like(kw),
                 func.lower(JobPostingRecord.location).like(kw),
                 func.lower(JobPostingRecord.cleaned_jd_text).like(kw),
+                JobPostingRecord.company.has(func.lower(JobCompanyRecord.company_name).like(kw)),
             )
             stmt = stmt.where(cond)
             count_stmt = count_stmt.where(cond)
@@ -259,10 +270,11 @@ class SqlAlchemyJobAggregatorRepository:
             count_stmt = count_stmt.where(JobPostingRecord.workplace_type == workplace_type)
 
         if technology:
-            tech_kw = f"%{technology.lower()}%"
+            tech_name = technology.strip().lower()
+            tech_names = {"go", "golang"} if tech_name in {"go", "golang"} else {tech_name}
             cond = or_(
-                func.lower(JobPostingRecord.title).like(tech_kw),
-                func.lower(JobPostingRecord.cleaned_jd_text).like(tech_kw),
+                *(func.lower(cast(JobPostingRecord.technologies, String)).contains(f'"{name}"', autoescape=True)
+                  for name in tech_names),
             )
             stmt = stmt.where(cond)
             count_stmt = count_stmt.where(cond)
@@ -346,10 +358,14 @@ class SqlAlchemyJobAggregatorRepository:
         self.session.flush()
         return res.rowcount
 
-    def get_metadata_filters(self) -> dict[str, Any]:
+    def get_metadata_filters(self, country_code: str = "VN") -> dict[str, Any]:
         from collections import Counter
 
         jobs = list(self.session.scalars(select(JobPostingRecord).where(JobPostingRecord.status == "ACTIVE")))
+        all_jobs = jobs
+        if country_code:
+            jobs = [job for job in jobs if country_code in (job.country_codes or [])
+                    or country_code in {"VN", "GLOBAL"} and job.is_global_remote]
         technologies = Counter(technology for job in jobs for technology in job.technologies or [])
         country_names = {
             "VN": "Việt Nam", "US": "Hoa Kỳ", "GB": "Vương quốc Anh", "SG": "Singapore",
@@ -357,7 +373,7 @@ class SqlAlchemyJobAggregatorRepository:
             "CA": "Canada", "AU": "Australia", "IE": "Ireland", "PL": "Ba Lan",
             "BR": "Brazil", "MX": "Mexico", "FR": "Pháp",
         }
-        countries = sorted({code for job in jobs for code in job.country_codes or []})
+        countries = sorted({code for job in all_jobs for code in job.country_codes or []})
         source_names = {
             "topcv": "TopCV", "itviec": "ITviec", "vietnamworks": "VietnamWorks",
             "vng": "VNG Careers", "linkedin": "LinkedIn", "greenhouse": "Greenhouse", "lever": "Lever",
@@ -369,7 +385,7 @@ class SqlAlchemyJobAggregatorRepository:
             "top_technologies": [technology for technology, count in technologies.most_common(10)],
             "locations": sorted({job.location for job in jobs if job.location}),
             "countries": [{"id": code, "name": country_names.get(code, code)} for code in countries]
-                + ([{"id": "GLOBAL", "name": "Remote toàn cầu"}] if any(job.is_global_remote for job in jobs) else []),
+                + ([{"id": "GLOBAL", "name": "Remote toàn cầu"}] if any(job.is_global_remote for job in all_jobs) else []),
             "sources": [{"id": source_id, "name": source_names.get(source_id, source_id)} for source_id in source_ids],
             "sort_options": [
                 {"id": "recent", "name": "Mới cập nhật dữ liệu"},

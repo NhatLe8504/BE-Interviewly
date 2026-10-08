@@ -127,44 +127,37 @@ class JobAggregatorService:
         if not job:
             return None
 
-        required = [s.lower() for s in (job.skills_required or [])]
-        user_skills = [s.lower() for s in candidate_skills]
+        required = list(dict.fromkeys(skill.strip().lower() for skill in (job.skills_required or []) if skill.strip()))
+        user_skills = {skill.strip().lower() for skill in candidate_skills if skill.strip()}
 
         matching = [s for s in required if s in user_skills]
         missing = [s for s in required if s not in user_skills]
-        pct = (len(matching) / max(1, len(required))) * 100.0
+        pct = round((len(matching) / max(1, len(required))) * 100)
 
-        readiness = "Cần bổ sung kiến thức chuyên sâu"
-        if pct >= 80:
-            readiness = "Rất sẵn sàng ứng tuyển"
+        recommendation = "Đối chiếu các kỹ năng còn thiếu với mô tả công việc để lên kế hoạch luyện tập."
+        if not required:
+            recommendation = "Nguồn chưa cung cấp đủ danh sách kỹ năng để đối chiếu."
+        elif not user_skills:
+            recommendation = "Bổ sung kỹ năng trong hồ sơ để đối chiếu với yêu cầu công việc."
+        elif pct >= 80:
+            recommendation = "Hồ sơ có nhiều kỹ năng trùng yêu cầu. Hãy đọc kỹ JD và luyện tập theo vị trí."
         elif pct >= 50:
-            readiness = "Đáp ứng cơ bản yêu cầu"
+            recommendation = "Hồ sơ khớp một phần yêu cầu. Tham khảo các kỹ năng còn thiếu để luyện tập."
 
         return JobSkillMatch(
-            matching_skills=matching,
+            job_id=job_id,
+            match_score_pct=pct,
+            matched_skills=matching,
             missing_skills=missing,
-            readiness_score=round(pct, 1),
-            readiness_assessment=readiness,
+            recommendation=recommendation,
         )
 
-    def get_filter_metadata(self) -> dict[str, Any]:
-        return self.repo.get_metadata_filters()
+    def get_filter_metadata(self, country_code: str = "VN") -> dict[str, Any]:
+        return self.repo.get_metadata_filters(country_code=country_code)
 
-    def calculate_skill_match(self, job_id: str, candidate_skills: list[str]) -> Any:
+    def calculate_skill_match(self, job_id: str, candidate_skills: list[str]) -> JobSkillMatch:
         match = self.match_candidate_skills(job_id, candidate_skills)
-        class SkillMatchObj:
-            def __init__(self, jid, pct, matched, missing, rec):
-                self.job_id = jid
-                self.match_score_pct = pct
-                self.matched_skills = matched
-                self.missing_skills = missing
-                self.recommendation = rec
-        if match:
-            return SkillMatchObj(
-                jid=job_id,
-                pct=match.readiness_score,
-                matched=match.matching_skills,
-                missing=match.missing_skills,
-                rec=match.readiness_assessment,
-            )
-        return SkillMatchObj(jid=job_id, pct=0.0, matched=[], missing=[], rec="Chưa có thông tin")
+        return match or JobSkillMatch(
+            job_id=job_id, match_score_pct=0, matched_skills=[], missing_skills=[],
+            recommendation="Chưa có thông tin công việc để đối chiếu.",
+        )

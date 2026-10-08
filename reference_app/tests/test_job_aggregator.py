@@ -74,3 +74,8 @@ def test_jobs_api_endpoints():
     status_resp = client.get("/api/v1/jobs/sync/status")
     assert status_resp.status_code == 200
     assert "status" in status_resp.json()
+
+    match_resp = client.get(f"/api/v1/jobs/{job_id}/skill-match")
+    assert match_resp.status_code == 200
+    assert match_resp.json()["has_candidate_skills"] is False
+    assert match_resp.json()["match_score_pct"] == 0

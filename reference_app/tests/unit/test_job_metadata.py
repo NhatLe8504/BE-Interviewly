@@ -8,11 +8,13 @@ from sqlalchemy.orm import Session
 
 from app.application.job_aggregator.adapters.base import BaseJobSourceAdapter
 from app.application.job_aggregator.adapters.company_branding import collect_company_branding, page_job_metadata
+from app.application.job_aggregator.service import JobAggregatorService
 from app.domain.job_metadata import detect_countries, detect_seniority, is_global_remote, parse_source_datetime
 from app.infrastructure.orm import Base
 from app.infrastructure.persistence.job_aggregator_repository import SqlAlchemyJobAggregatorRepository
 from app.infrastructure.persistence.job_metadata_migration import migrate_job_metadata
 from app.infrastructure.persistence.models.job_aggregator import JobCompanyRecord, JobPostingRecord, JobSourceRecord
+from app.presentation.api.schemas.jobs import JobSkillMatchOut
 
 
 @pytest.mark.parametrize("title,description,expected", [
@@ -121,6 +123,13 @@ def test_repository_keeps_unknowns_and_real_posting_date(isolated_database):
         assert {item.external_job_id for item in items} == {"vn", "world"}
         assert repository.list_jobs(country_code="")[1] == 4
         assert repository.list_jobs(country_code="US")[1] == 1
+        metadata = repository.get_metadata_filters()
+        assert "New York, United States" not in metadata["locations"]
+        assert "Hà Nội, Vietnam" in metadata["locations"]
+        assert "Home based - Worldwide" in metadata["locations"]
+        assert "Home based - Americas" not in metadata["locations"]
+        assert "New York, United States" in repository.get_metadata_filters(country_code="")["locations"]
+        assert {country["id"] for country in metadata["countries"]} == {"VN", "US", "GLOBAL"}
         created_at = vietnam_job.first_seen_at
         data = posting_data("vn", "Hà Nội, Vietnam")
         data["posted_at"] = "2026-09-15T12:00:00Z"
@@ -150,3 +159,62 @@ def test_migration_repairs_legacy_guesses_once(isolated_database):
         assert posting.technologies == ["Docker"]
         assert posting.country_codes == ["VN"]
         assert posting.metadata_revision == 2
+
+
+def test_company_identity_does_not_share_branding_after_slug_collision(isolated_database):
+    with Session(isolated_database) as session:
+        repository = SqlAlchemyJobAggregatorRepository(session)
+        first_company = repository.get_or_create_company("株式会社一")
+        second_company = repository.get_or_create_company("株式会社二")
+        assert first_company.company_id != second_company.company_id
+        assert repository.get_or_create_company("株式会社二").company_id == second_company.company_id
+        unknown_company = repository.get_or_create_company("")
+        assert unknown_company.company_name == "Chưa rõ doanh nghiệp tuyển dụng"
+        job, _ = repository.upsert_job(posting_data("company-correction", "Hà Nội, Vietnam"))
+        corrected_data = posting_data("company-correction", "Hà Nội, Vietnam")
+        corrected_data["company_name"] = "株式会社二"
+        refreshed, is_new = repository.upsert_job(corrected_data)
+        assert not is_new
+        assert refreshed.company.company_id == second_company.company_id
+
+
+def test_search_uses_company_name_and_real_technology_tags(isolated_database):
+    with Session(isolated_database) as session:
+        repository = SqlAlchemyJobAggregatorRepository(session)
+        go_data = posting_data("actual-go", "Hà Nội, Vietnam")
+        go_data.update(title="Golang Developer", technologies=["Go"])
+        repository.upsert_job(go_data)
+        devops_data = posting_data("not-go", "Hà Nội, Vietnam")
+        devops_data.update(cleaned_jd_text="Go to Google to read about Docker.", technologies=["Docker"])
+        repository.upsert_job(devops_data)
+        session.commit()
+        jobs, total = repository.list_jobs(technology="Go")
+        assert total == 1
+        assert jobs[0].external_job_id == "actual-go"
+        assert repository.list_jobs(technology="Golang")[1] == 1
+        assert repository.list_jobs(keyword="Example Company")[1] == 2
+        assert repository.list_jobs(technology="Cloud")[1] == 0
+
+
+def test_missing_candidate_profile_cannot_create_a_readiness_claim():
+    result = JobSkillMatchOut(
+        job_id="technical-fixture", match_score_pct=0, matched_skills=[],
+        missing_skills=[], recommendation="Complete your profile",
+    )
+    assert result.has_candidate_skills is False
+
+
+def test_skill_match_uses_domain_contract_and_actual_candidate_skills(isolated_database):
+    with Session(isolated_database) as session:
+        repository = SqlAlchemyJobAggregatorRepository(session)
+        data = posting_data("skills", "Hà Nội, Vietnam")
+        data["skills_required"] = ["Go", "Python", "Docker", "Docker"]
+        job, _ = repository.upsert_job(data)
+        service = JobAggregatorService(session=session)
+        match = service.calculate_skill_match(job.job_id, [" Go "])
+        assert match.match_score_pct == 33
+        assert match.matched_skills == ["go"]
+        assert match.missing_skills == ["python", "docker"]
+        empty_profile_match = service.calculate_skill_match(job.job_id, [])
+        assert empty_profile_match.match_score_pct == 0
+        assert "Bổ sung kỹ năng" in empty_profile_match.recommendation

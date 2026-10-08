@@ -5518,6 +5518,55 @@
             "description": "Filter by specific technology"
           },
           {
+            "name": "location",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Filter by location, city, or country",
+              "default": "",
+              "title": "Location"
+            },
+            "description": "Filter by location, city, or country"
+          },
+          {
+            "name": "source_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Filter by source ID (topcv, itviec, vietnamworks, etc.)",
+              "default": "",
+              "title": "Source Id"
+            },
+            "description": "Filter by source ID (topcv, itviec, vietnamworks, etc.)"
+          },
+          {
+            "name": "country_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:|[A-Z]{2}|GLOBAL)$",
+              "description": "VN includes Vietnam and explicitly worldwide remote jobs; empty searches all countries",
+              "default": "VN",
+              "title": "Country Code"
+            },
+            "description": "VN includes Vietnam and explicitly worldwide remote jobs; empty searches all countries"
+          },
+          {
+            "name": "sort_by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Sort order: recent, posted, salary_desc, title_asc",
+              "default": "recent",
+              "title": "Sort By"
+            },
+            "description": "Sort order: recent, posted, salary_desc, title_asc"
+          },
+          {
             "name": "page",
             "in": "query",
             "required": false,
@@ -5572,6 +5621,19 @@
         ],
         "summary": "Get Filter Metadata",
         "operationId": "get_filter_metadata_api_v1_jobs_metadata_filters_get",
+        "parameters": [
+          {
+            "name": "country_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(?:|[A-Z]{2}|GLOBAL)$",
+              "default": "VN",
+              "title": "Country Code"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -5579,6 +5641,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/JobFilterMetadataOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -7013,8 +7085,8 @@
           },
           "duration_minutes": {
             "type": "integer",
-            "maximum": 90.0,
-            "minimum": 15.0,
+            "maximum": 90,
+            "minimum": 15,
             "title": "Duration Minutes",
             "description": "Thời lượng phỏng vấn mục tiêu (phút)",
             "default": 45
@@ -7023,8 +7095,8 @@
             "anyOf": [
               {
                 "type": "integer",
-                "maximum": 5.0,
-                "minimum": 1.0
+                "maximum": 5,
+                "minimum": 1
               },
               {
                 "type": "null"
@@ -7055,8 +7127,8 @@
           },
           "duration_minutes": {
             "type": "integer",
-            "maximum": 90.0,
-            "minimum": 15.0,
+            "maximum": 90,
+            "minimum": 15,
             "title": "Duration Minutes",
             "description": "Thời lượng phỏng vấn mục tiêu (phút)",
             "default": 45
@@ -7065,8 +7137,8 @@
             "anyOf": [
               {
                 "type": "integer",
-                "maximum": 5.0,
-                "minimum": 1.0
+                "maximum": 5,
+                "minimum": 1
               },
               {
                 "type": "null"
@@ -7113,6 +7185,55 @@
             ],
             "title": "Logo Url"
           },
+          "company_logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Logo Url"
+          },
+          "company_banner_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Banner Url"
+          },
+          "branding_source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branding Source Url"
+          },
+          "branding_license_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branding License Url"
+          },
+          "branding_reuse_allowed": {
+            "type": "boolean",
+            "title": "Branding Reuse Allowed",
+            "default": false
+          },
           "location": {
             "anyOf": [
               {
@@ -7139,6 +7260,17 @@
             "type": "string",
             "title": "Job Id"
           },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
           "title": {
             "type": "string",
             "title": "Title"
@@ -7173,7 +7305,18 @@
           "salary_display": {
             "type": "string",
             "title": "Salary Display",
-            "default": "Thỏa thuận"
+            "default": "Chưa công bố"
+          },
+          "salary_currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Salary Currency"
           },
           "salary_min": {
             "anyOf": [
@@ -7249,6 +7392,71 @@
             ],
             "title": "Posted At"
           },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "first_seen_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Seen At"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced At"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "country_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Country Codes"
+          },
+          "is_global_remote": {
+            "type": "boolean",
+            "title": "Is Global Remote",
+            "default": false
+          },
           "company": {
             "anyOf": [
               {
@@ -7266,11 +7474,6 @@
           "cleaned_jd_text": {
             "type": "string",
             "title": "Cleaned Jd Text"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
           }
         },
         "type": "object",
@@ -7282,9 +7485,9 @@
           "employment_type",
           "workplace_type",
           "original_apply_url",
+          "created_at",
           "raw_description",
-          "cleaned_jd_text",
-          "created_at"
+          "cleaned_jd_text"
         ],
         "title": "JobDetailOut"
       },
@@ -7310,6 +7513,43 @@
             },
             "type": "array",
             "title": "Top Technologies"
+          },
+          "locations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Locations"
+          },
+          "countries": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Countries"
+          },
+          "sources": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "sort_options": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Sort Options"
           }
         },
         "type": "object",
@@ -7325,6 +7565,17 @@
           "job_id": {
             "type": "string",
             "title": "Job Id"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
           },
           "title": {
             "type": "string",
@@ -7360,7 +7611,18 @@
           "salary_display": {
             "type": "string",
             "title": "Salary Display",
-            "default": "Thỏa thuận"
+            "default": "Chưa công bố"
+          },
+          "salary_currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Salary Currency"
           },
           "salary_min": {
             "anyOf": [
@@ -7435,6 +7697,78 @@
               }
             ],
             "title": "Posted At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "first_seen_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Seen At"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced At"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "country_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Country Codes"
+          },
+          "is_global_remote": {
+            "type": "boolean",
+            "title": "Is Global Remote",
+            "default": false
           },
           "company": {
             "anyOf": [
@@ -7497,6 +7831,11 @@
       },
       "JobSkillMatchOut": {
         "properties": {
+          "has_candidate_skills": {
+            "type": "boolean",
+            "title": "Has Candidate Skills",
+            "default": false
+          },
           "job_id": {
             "type": "string",
             "title": "Job Id"
@@ -7777,37 +8116,37 @@
           "quiz_score": {
             "type": "number",
             "title": "Quiz Score",
-            "default": 0.0
+            "default": 0
           },
           "quiz_max": {
             "type": "number",
             "title": "Quiz Max",
-            "default": 15.0
+            "default": 15
           },
           "text_score": {
             "type": "number",
             "title": "Text Score",
-            "default": 0.0
+            "default": 0
           },
           "text_max": {
             "type": "number",
             "title": "Text Max",
-            "default": 35.0
+            "default": 35
           },
           "voice_score": {
             "type": "number",
             "title": "Voice Score",
-            "default": 0.0
+            "default": 0
           },
           "voice_max": {
             "type": "number",
             "title": "Voice Max",
-            "default": 50.0
+            "default": 50
           },
           "total_score": {
             "type": "number",
             "title": "Total Score",
-            "default": 0.0
+            "default": 0
           }
         },
         "type": "object",
@@ -8377,7 +8716,7 @@
           "average_score": {
             "type": "number",
             "title": "Average Score",
-            "default": 0.0
+            "default": 0
           },
           "quiz_score_avg": {
             "anyOf": [
@@ -9592,15 +9931,15 @@
           },
           "target_difficulty": {
             "type": "integer",
-            "maximum": 5.0,
-            "minimum": 1.0,
+            "maximum": 5,
+            "minimum": 1,
             "title": "Target Difficulty",
             "default": 3
           },
           "estimated_duration_minutes": {
             "type": "integer",
-            "maximum": 180.0,
-            "minimum": 1.0,
+            "maximum": 180,
+            "minimum": 1,
             "title": "Estimated Duration Minutes",
             "default": 20
           },
@@ -9739,12 +10078,12 @@
           "avg_score": {
             "type": "number",
             "title": "Avg Score",
-            "default": 0.0
+            "default": 0
           },
           "pass_rate": {
             "type": "number",
             "title": "Pass Rate",
-            "default": 0.0
+            "default": 0
           },
           "created_at": {
             "anyOf": [
@@ -9881,12 +10220,12 @@
           "avg_score": {
             "type": "number",
             "title": "Avg Score",
-            "default": 0.0
+            "default": 0
           },
           "pass_rate": {
             "type": "number",
             "title": "Pass Rate",
-            "default": 0.0
+            "default": 0
           },
           "created_at": {
             "anyOf": [
@@ -9948,8 +10287,8 @@
         "properties": {
           "rating": {
             "type": "integer",
-            "maximum": 5.0,
-            "minimum": 1.0,
+            "maximum": 5,
+            "minimum": 1,
             "title": "Rating"
           },
           "comment": {
@@ -10182,8 +10521,8 @@
             "anyOf": [
               {
                 "type": "integer",
-                "maximum": 5.0,
-                "minimum": 1.0
+                "maximum": 5,
+                "minimum": 1
               },
               {
                 "type": "null"
@@ -10195,8 +10534,8 @@
             "anyOf": [
               {
                 "type": "integer",
-                "maximum": 180.0,
-                "minimum": 1.0
+                "maximum": 180,
+                "minimum": 1
               },
               {
                 "type": "null"
@@ -11157,15 +11496,15 @@
           },
           "min_turns": {
             "type": "integer",
-            "maximum": 3.0,
-            "minimum": 1.0,
+            "maximum": 3,
+            "minimum": 1,
             "title": "Min Turns",
             "default": 1
           },
           "max_turns": {
             "type": "integer",
-            "maximum": 3.0,
-            "minimum": 1.0,
+            "maximum": 3,
+            "minimum": 1,
             "title": "Max Turns",
             "default": 2
           },
@@ -11222,7 +11561,7 @@
           "completeness_percentage": {
             "type": "number",
             "title": "Completeness Percentage",
-            "default": 0.0
+            "default": 0
           }
         },
         "type": "object",
@@ -11951,7 +12290,7 @@
           "duration_seconds": {
             "type": "number",
             "title": "Duration Seconds",
-            "default": 0.0
+            "default": 0
           }
         },
         "type": "object",
@@ -11972,15 +12311,15 @@
           },
           "duration_seconds": {
             "type": "number",
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Duration Seconds",
-            "default": 0.0
+            "default": 0
           },
           "pause_duration_seconds": {
             "type": "number",
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Pause Duration Seconds",
-            "default": 0.0
+            "default": 0
           },
           "audio_url": {
             "anyOf": [
