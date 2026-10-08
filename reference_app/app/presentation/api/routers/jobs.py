@@ -61,6 +61,7 @@ def _to_job_item_out(job: Any) -> JobItemOut:
         salary_min=float(job.salary_min) if job.salary_min is not None else None,
         salary_max=float(job.salary_max) if job.salary_max is not None else None,
         skills_required=job.skills_required or [],
+        thumbnail_url=job.company.logo_url if job.company and job.company.logo_url else None,
         technologies=job.technologies or [],
         via_source=job.via_source or "via Web",
         original_apply_url=job.original_apply_url,
