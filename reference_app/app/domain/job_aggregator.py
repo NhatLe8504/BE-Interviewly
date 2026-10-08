@@ -9,6 +9,7 @@ from typing import Any
 
 
 class JobSeniority(str, enum.Enum):
+    unknown = "unknown"
     intern = "intern"
     fresher = "fresher"
     junior = "junior"
@@ -18,6 +19,7 @@ class JobSeniority(str, enum.Enum):
 
 
 class JobEmploymentType(str, enum.Enum):
+    unknown = "unknown"
     full_time = "full_time"
     part_time = "part_time"
     contract = "contract"
@@ -25,6 +27,7 @@ class JobEmploymentType(str, enum.Enum):
 
 
 class JobWorkplaceType(str, enum.Enum):
+    unknown = "unknown"
     remote = "remote"
     hybrid = "hybrid"
     on_site = "on_site"
@@ -57,6 +60,10 @@ class JobCompany:
     slug: str
     company_id: int | None = None
     logo_url: str | None = None
+    banner_url: str | None = None
+    branding_source_url: str | None = None
+    branding_license_url: str | None = None
+    branding_reuse_allowed: bool = False
     website_url: str | None = None
     industry: str | None = None
     location: str | None = None
@@ -88,9 +95,9 @@ class JobPosting:
     content_fingerprint: str
     external_job_id: str | None = None
     domain_id: int | None = None
-    seniority: JobSeniority = JobSeniority.mid
-    employment_type: JobEmploymentType = JobEmploymentType.full_time
-    workplace_type: JobWorkplaceType = JobWorkplaceType.hybrid
+    seniority: JobSeniority = JobSeniority.unknown
+    employment_type: JobEmploymentType = JobEmploymentType.unknown
+    workplace_type: JobWorkplaceType = JobWorkplaceType.unknown
     location: str | None = None
     salary_min: float | None = None
     salary_max: float | None = None

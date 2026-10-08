@@ -2,6 +2,9 @@ from __future__ import annotations
 
 def _auto_migrate_columns(engine: Any) -> None:
     """Ensures newly added columns exist in existing PostgreSQL/SQLite tables."""
+    from .infrastructure.persistence.job_metadata_migration import migrate_job_metadata
+
+    migrate_job_metadata(engine)
     with engine.begin() as conn:
         dialect = engine.dialect.name
         if dialect == "postgresql":

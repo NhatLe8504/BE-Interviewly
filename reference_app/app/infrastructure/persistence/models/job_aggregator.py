@@ -46,6 +46,10 @@ class JobCompanyRecord(Base):
     company_name: Mapped[str] = mapped_column(String(200), nullable=False)
     slug: Mapped[str] = mapped_column(String(200), nullable=False, unique=True, index=True)
     logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    banner_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    branding_source_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    branding_license_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    branding_reuse_allowed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     website_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     industry: Mapped[str | None] = mapped_column(String(100), nullable=True)
     location: Mapped[str | None] = mapped_column(String(200), nullable=True)
@@ -82,10 +86,13 @@ class JobPostingRecord(Base):
     domain_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("job_domains.domain_id", ondelete="SET NULL"), nullable=True,
     )
-    seniority: Mapped[str] = mapped_column(String(32), nullable=False, default="mid")
-    employment_type: Mapped[str] = mapped_column(String(32), nullable=False, default="full_time")
-    workplace_type: Mapped[str] = mapped_column(String(32), nullable=False, default="hybrid")
+    seniority: Mapped[str] = mapped_column(String(32), nullable=False, default="unknown")
+    employment_type: Mapped[str] = mapped_column(String(32), nullable=False, default="unknown")
+    workplace_type: Mapped[str] = mapped_column(String(32), nullable=False, default="unknown")
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    country_codes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    is_global_remote: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    metadata_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
     salary_min: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
     salary_max: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
     salary_currency: Mapped[str] = mapped_column(String(10), nullable=False, default="VND")
@@ -115,7 +122,7 @@ class JobPostingRecord(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now(),
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now(),
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
     )
 
     source: Mapped[JobSourceRecord] = relationship("JobSourceRecord", back_populates="postings")
