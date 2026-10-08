@@ -650,9 +650,10 @@ class VoiceInterviewOrchestrator:
         self,
         is_transitioning: bool = False,
         is_session_finishing: bool = False,
+        question_text: str | None = None,
     ) -> None:
         self._generation_counter += 1
-        turn_id = self.current_turn_id + 1
+        turn_id = self.current_turn_id if question_text is not None else self.current_turn_id + 1
         self.current_turn_id = turn_id
         gen_id = f"gen_{self.session_id}_{turn_id}_{self._generation_counter}"
         self.current_generation_id = gen_id
@@ -680,7 +681,17 @@ class VoiceInterviewOrchestrator:
                     "or translate the entire job description. Preserve technical terms when appropriate."
                 ),
             })
+            if question_text is not None:
+                messages.append({
+                    "role": "system",
+                    "content": (
+                        "For this turn, only present the supplied interview question in the chosen language. "
+                        "Preserve its meaning, do not answer it, and do not introduce additional questions."
+                    ),
+                })
             messages.extend(self.conversation_history[-8:])
+            if question_text is not None:
+                messages.append({"role": "user", "content": question_text})
 
             sentence_queue: asyncio.Queue[tuple[int, str] | None] = asyncio.Queue(maxsize=4)
 
@@ -804,6 +815,9 @@ class VoiceInterviewOrchestrator:
                 })
 
     async def _stream_predefined_text(self, text: str) -> None:
+        if self.language != "vi":
+            await self._run_llm_and_tts_pipeline(question_text=text)
+            return
         self._generation_counter += 1
         gen_id = f"gen_{self.session_id}_{self.current_turn_id}_{self._generation_counter}"
         self.current_generation_id = gen_id
