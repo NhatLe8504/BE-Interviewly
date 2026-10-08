@@ -43,6 +43,7 @@ def _to_out(user: AuthUser, session: Any = None) -> UserOut:
     is_onboarded = False
     needs_password = False
     avatar_url: str | None = None
+    mascot_id = "fox-pixel"
     if session is not None:
         onboarding = session.execute(
             select(OnboardingResponse).where(OnboardingResponse.user_id == user.user_id)
@@ -56,6 +57,8 @@ def _to_out(user: AuthUser, session: Any = None) -> UserOut:
             needs_password = True
         if user_row and user_row.profile and user_row.profile.avatar_url:
             avatar_url = user_row.profile.avatar_url
+        if user_row and user_row.profile:
+            mascot_id = user_row.profile.mascot_id
 
     return UserOut(
         user_id=user.user_id,
@@ -66,6 +69,7 @@ def _to_out(user: AuthUser, session: Any = None) -> UserOut:
         is_onboarded=is_onboarded,
         needs_password=needs_password,
         avatar_url=avatar_url,
+        mascot_id=mascot_id,
     )
 
 

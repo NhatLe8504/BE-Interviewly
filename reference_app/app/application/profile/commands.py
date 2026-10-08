@@ -12,6 +12,7 @@ class UpdateProfileCommand:
     target_domain_id: int | None = None
     bio: str | None = None
     avatar_url: str | None = None
+    mascot_id: str | None = None
     fields_set: frozenset[str] = field(default_factory=frozenset)
 
 

@@ -45,6 +45,7 @@ def update_my_profile(
             target_domain_id=data.target_domain_id,
             bio=data.bio,
             avatar_url=data.avatar_url,
+            mascot_id=data.mascot_id,
             fields_set=frozenset(data.model_fields_set),
         ),
     )

@@ -33,6 +33,7 @@ class UserOut(BaseModel):
     is_onboarded: bool = False
     needs_password: bool = False
     avatar_url: str | None = None
+    mascot_id: str = "fox-pixel"
 
 
 class SetInitialPasswordIn(BaseModel):

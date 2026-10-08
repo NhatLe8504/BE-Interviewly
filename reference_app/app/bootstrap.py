@@ -34,6 +34,7 @@ def _auto_migrate_columns(engine: Any) -> None:
             for table_name, col_name, col_def in [
                 ("job_domains", "is_active", "BOOLEAN DEFAULT TRUE NOT NULL"),
                 ("job_roles", "is_active", "BOOLEAN DEFAULT TRUE NOT NULL"),
+                ("candidate_profiles", "mascot_id", "VARCHAR(32) DEFAULT 'fox-pixel' NOT NULL"),
             ]:
                 conn.exec_driver_sql(
                     f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS {col_name} {col_def};"
@@ -59,6 +60,7 @@ def _auto_migrate_columns(engine: Any) -> None:
             for table_name, col_name, col_def in [
                 ("job_domains", "is_active", "BOOLEAN DEFAULT 1 NOT NULL"),
                 ("job_roles", "is_active", "BOOLEAN DEFAULT 1 NOT NULL"),
+                ("candidate_profiles", "mascot_id", "VARCHAR(32) DEFAULT 'fox-pixel' NOT NULL"),
             ]:
                 try:
                     conn.exec_driver_sql(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_def};")

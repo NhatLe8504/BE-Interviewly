@@ -72,6 +72,7 @@ CREATE TABLE candidate_profiles (
     target_domain_id  INT REFERENCES job_domains(domain_id) ON DELETE SET NULL,
     bio               TEXT,
     avatar_url        VARCHAR(500),
+    mascot_id         VARCHAR(32) NOT NULL DEFAULT 'fox-pixel',
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );

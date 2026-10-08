@@ -66,6 +66,7 @@ class CandidateProfile(Base):
     )
     bio: Mapped[str | None] = mapped_column(Text)
     avatar_url: Mapped[str | None] = mapped_column(String(500))
+    mascot_id: Mapped[str] = mapped_column(String(32), nullable=False, default="fox-pixel", server_default="fox-pixel")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(),
     )

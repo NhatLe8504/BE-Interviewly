@@ -16,6 +16,13 @@ VALID_EXPERIENCE_LEVELS = frozenset({
 })
 
 VALID_LANGUAGES = frozenset({"vi", "en"})
+DEFAULT_MASCOT_ID = "fox-pixel"
+VALID_MASCOT_IDS = frozenset({"fox-pixel", "cat", "otter", "panda", "gearbot", "astronaut", "none"})
+
+
+def validate_mascot_id(mascot_id: str | None) -> None:
+    if mascot_id is not None and mascot_id not in VALID_MASCOT_IDS:
+        raise DomainValidationError("invalid mascot id")
 
 
 def validate_experience_level(level: str | None) -> None:
@@ -70,10 +77,12 @@ class UserProfile:
     target_domain_name: str | None = None
     bio: str | None = None
     avatar_url: str | None = None
+    mascot_id: str = DEFAULT_MASCOT_ID
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
     def __post_init__(self) -> None:
+        validate_mascot_id(self.mascot_id)
         validate_language(self.preferred_language)
         if self.experience_level is not None:
             validate_experience_level(self.experience_level)
