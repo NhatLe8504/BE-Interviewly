@@ -52,7 +52,11 @@ async def lifespan(app: FastAPI):
         except Exception:
             pass
     export_openapi(app)
+    if getattr(container, "job_worker", None):
+        container.job_worker.start_background_scheduler()
     yield
+    if getattr(container, "job_worker", None):
+        container.job_worker.stop()
 
 
 def create_app(services: ServiceContainer | None = None) -> FastAPI:
