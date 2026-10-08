@@ -202,7 +202,10 @@ async def handle_voice_websocket_session(
                     if "barge_in_enabled" in data:
                         orchestrator.set_barge_in_enabled(bool(data["barge_in_enabled"]))
 
-                elif msg_type in ("user_speech_start", "abort"):
+                elif msg_type == "abort":
+                    await orchestrator.handle_user_speech_start(force=True)
+
+                elif msg_type == "user_speech_start":
                     await orchestrator.handle_user_speech_start()
 
                 elif msg_type == "interim_transcript":

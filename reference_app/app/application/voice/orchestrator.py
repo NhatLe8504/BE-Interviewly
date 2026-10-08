@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 from typing import Any
 import uuid
 
@@ -421,13 +420,13 @@ class VoiceInterviewOrchestrator:
         else:
             await self.set_state(VoiceSessionState.LISTEN)
 
-    async def handle_user_speech_start(self) -> None:
-        if not self.barge_in_enabled:
+    async def handle_user_speech_start(self, *, force: bool = False) -> None:
+        if not force and not self.barge_in_enabled:
             return
 
         if self.state in (VoiceSessionState.SPEAK, VoiceSessionState.THINK) or (
             self._active_task and not self._active_task.done()
-        ):
+        ) or (force and self.current_generation_id):
             await self.cancel_current_generation()
             await self.set_state(VoiceSessionState.LISTEN)
 
@@ -454,21 +453,6 @@ class VoiceInterviewOrchestrator:
         if not clean_text:
             return
 
-        # Acoustic Echo Suppression: Ignore transcript if it matches or is a substring of the last AI message
-        if self.conversation_history:
-            last_ai = next(
-                (m["content"] for m in reversed(self.conversation_history) if m["role"] == "assistant"),
-                None,
-            )
-            if last_ai:
-                clean_ai = re.sub(r"[^\w\s]", "", last_ai.lower()).strip()
-                clean_u = re.sub(r"[^\w\s]", "", clean_text.lower()).strip()
-                if clean_u and len(clean_u) >= 3:
-                    if clean_u in clean_ai or (len(clean_u) > 8 and clean_ai.endswith(clean_u)):
-                        logging.getLogger("VoiceOrchestrator").warning(
-                            "Dropped candidate acoustic echo loop: %s", clean_text
-                        )
-                        return
 
         # Ensure any leftover generation is stopped
         await self.cancel_current_generation()
@@ -676,41 +660,42 @@ class VoiceInterviewOrchestrator:
             messages.append({"role": "system", "content": stage_instruction})
             messages.extend(self.conversation_history[-8:])
 
-            # Stream tokens from LLM
-            async for token in self.llm.stream_ai_tokens(messages):
-                if self.is_generation_cancelled(gen_id):
-                    return
+            sentence_queue: asyncio.Queue[tuple[int, str] | None] = asyncio.Queue(maxsize=4)
 
-                full_ai_response.append(token)
-                if self.connection.is_open():
-                    await self.connection.send_event({
-                        "type": VoiceEventType.AI_TOKEN.value,
-                        "token": token,
-                        "turn_id": turn_id,
-                        "generation_id": gen_id,
-                    })
-
-                # Feed to sentence splitter
-                for sentence_idx, sentence_text in splitter.feed(token):
+            async def produce_sentences() -> None:
+                async for token in self.llm.stream_ai_tokens(messages):
                     if self.is_generation_cancelled(gen_id):
+                        break
+                    full_ai_response.append(token)
+                    if self.connection.is_open():
+                        await self.connection.send_event({
+                            "type": VoiceEventType.AI_TOKEN.value,
+                            "token": token,
+                            "turn_id": turn_id,
+                            "generation_id": gen_id,
+                        })
+                    for sentence in splitter.feed(token):
+                        await sentence_queue.put(sentence)
+                if not self.is_generation_cancelled(gen_id):
+                    for sentence in splitter.flush():
+                        await sentence_queue.put(sentence)
+                await sentence_queue.put(None)
+
+            async def consume_sentences() -> None:
+                while True:
+                    sentence = await sentence_queue.get()
+                    if sentence is None:
                         return
                     await self._stream_sentence_tts(
-                        sentence_idx=sentence_idx,
-                        sentence_text=sentence_text,
+                        sentence_idx=sentence[0],
+                        sentence_text=sentence[1],
                         generation_id=gen_id,
                         turn_id=turn_id,
                     )
 
-            # Flush any remaining text in splitter
-            for sentence_idx, sentence_text in splitter.flush():
-                if self.is_generation_cancelled(gen_id):
-                    return
-                await self._stream_sentence_tts(
-                    sentence_idx=sentence_idx,
-                    sentence_text=sentence_text,
-                    generation_id=gen_id,
-                    turn_id=turn_id,
-                )
+            async with asyncio.TaskGroup() as tasks:
+                tasks.create_task(produce_sentences())
+                tasks.create_task(consume_sentences())
 
             # If not cancelled, record AI message in history and finalize turn
             if not self.is_generation_cancelled(gen_id):
@@ -816,50 +801,15 @@ class VoiceInterviewOrchestrator:
             if not sentences:
                 sentences = [(0, text)]
 
-            async def _synth(idx: int, s_text: str):
-                chunks: list[bytes] = []
-                async for chunk in self.tts.synthesize_stream(s_text, voice=self.voice):
-                    if self.is_generation_cancelled(gen_id):
-                        break
-                    if chunk:
-                        chunks.append(chunk)
-                return idx, s_text, b"".join(chunks)
-
-            synth_results = await asyncio.gather(
-                *[_synth(s_idx, s_text) for s_idx, s_text in sentences],
-                return_exceptions=True,
-            )
-
-            if self.is_generation_cancelled(gen_id):
-                return
-
-            if self.state != VoiceSessionState.SPEAK:
-                await self.set_state(VoiceSessionState.SPEAK)
-
-            for item in synth_results:
-                if isinstance(item, Exception) or not item:
-                    continue
-                s_idx, s_text, full_audio = item
+            for sentence_idx, sentence_text in sentences:
                 if self.is_generation_cancelled(gen_id):
                     return
-
-                if self.connection.is_open():
-                    await self.connection.send_event({
-                        "type": VoiceEventType.SUBTITLE.value,
-                        "sentence": s_text,
-                        "sentence_index": s_idx,
-                        "generation_id": gen_id,
-                        "turn_id": turn_id,
-                    })
-                    if full_audio:
-                        await self.connection.send_event({
-                            "type": VoiceEventType.AUDIO.value,
-                            "audio_chunk": full_audio,
-                            "mime_type": "audio/mpeg",
-                            "sentence_index": s_idx,
-                            "generation_id": gen_id,
-                            "turn_id": turn_id,
-                        })
+                await self._stream_sentence_tts(
+                    sentence_idx=sentence_idx,
+                    sentence_text=sentence_text,
+                    generation_id=gen_id,
+                    turn_id=turn_id,
+                )
 
             if not self.is_generation_cancelled(gen_id):
                 self.conversation_history.append({"role": "assistant", "content": text})
@@ -876,6 +826,17 @@ class VoiceInterviewOrchestrator:
                 await self.set_state(VoiceSessionState.LISTEN)
         except asyncio.CancelledError:
             return
+        except Exception:
+            logging.getLogger("VoiceOrchestrator").exception("Failed to speak interview question")
+            if self.connection.is_open():
+                await self.connection.send_event({
+                    "type": VoiceEventType.ERROR.value,
+                    "message": "Không thể phát giọng AI. Bạn vẫn có thể đọc câu hỏi và trả lời.",
+                    "turn_id": turn_id,
+                    "generation_id": gen_id,
+                    "full_text": text,
+                })
+            await self.set_state(VoiceSessionState.LISTEN)
 
     def _resolve_next_intent(self) -> None:
         if not self.session_factory:
