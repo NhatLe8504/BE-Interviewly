@@ -1,0 +1,62 @@
+{
+  "domain": "vietnamworks.com",
+  "source_id": "vietnamworks",
+  "source_name": "VietnamWorks",
+  "access_method": "json_api_and_rsc_stream",
+  "verification_status": "VERIFIED",
+  "last_verified_at": "2026-10-09T00:45:00+07:00",
+  "tested_jobs_count": 10,
+  "success_rate_pct": 100.0,
+  "notes": "Verified on 10 live postings. Listing fetched via VietnamWorks search microservice API. Detail page parsed from Next.js App Router React Server Component stream (jobDescription & resolved jobRequirement pointer).",
+  "listing": {
+    "search_api": {
+      "url": "https://ms.vietnamworks.com/job-search/v1.0/search",
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "payload_template": {
+        "userId": 0,
+        "query": "{query}",
+        "filter": [],
+        "ranges": [],
+        "order": [],
+        "hitsPerPage": 20,
+        "page": 0
+      }
+    },
+    "json_paths": {
+      "root": "data",
+      "job_id": "jobId",
+      "title": "jobTitle",
+      "company": "companyName",
+      "company_logo": "companyLogo",
+      "salary": "prettySalary",
+      "detail_url": "jobUrl",
+      "skills": "skills[*].skillName",
+      "created_on": "createdOn",
+      "expired_on": "expiredOn"
+    }
+  },
+  "job_id_extraction": {
+    "type": "numeric_job_id",
+    "field": "jobId"
+  },
+  "detail": {
+    "fetch_method": "http_get",
+    "parser": "nextjs_rsc_stream",
+    "patterns": {
+      "title": "jobTitle\\\\\":\\\\\"([^\\\\\"]+)\\\\\"",
+      "company": "companyName\\\\\":\\\\\"([^\\\\\"]+)\\\\\"",
+      "description": "jobDescription\\\\\":\\\\\"((?:(?!\\\\\",\\\\\").)*)\\\\\"",
+      "requirements_pointer": "jobRequirement\\\\\":\\\\\"\\$([a-zA-Z0-9]+)\\\\\"",
+      "pointer_content_template": "{ptr}:T[0-9a-f]+,(.*?)(?:\\\\\\\\n|\\\",\\[|$)"
+    }
+  },
+  "normalization_rules": {
+    "key_format": "vietnamworks:{company}:{title}:{job_id}",
+    "source_badge": "via VietnamWorks",
+    "min_jd_length": 150
+  }
+}

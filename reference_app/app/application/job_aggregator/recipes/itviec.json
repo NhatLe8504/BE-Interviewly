@@ -1,0 +1,93 @@
+{
+  "domain": "itviec.com",
+  "source_id": "itviec",
+  "source_name": "ITviec Vietnam",
+  "access_method": "html_direct",
+  "verification_status": "VERIFIED",
+  "last_verified_at": "2026-10-09T00:45:00+07:00",
+  "tested_jobs_count": 10,
+  "success_rate_pct": 100.0,
+  "notes": "Verified on 10 live postings. Listing cards have data-job-key UUID and data-search--job-selection-job-slug-value. Detail page returns comprehensive structured paragraphs under .job-details__paragraph.",
+  "listing": {
+    "default_urls": [
+      "https://itviec.com/it-jobs"
+    ],
+    "pagination": {
+      "type": "query_param",
+      "param_name": "page",
+      "start_page": 1
+    },
+    "card_selector": ".job-card",
+    "fields": {
+      "job_key": {
+        "attribute": "data-job-key"
+      },
+      "slug": {
+        "attribute": "data-search--job-selection-job-slug-value"
+      },
+      "title": {
+        "selector": "h3 a, .job-card__title a, a[href*='/it-jobs/']",
+        "attribute": "text"
+      },
+      "detail_link": {
+        "template": "https://itviec.com/it-jobs/{slug}",
+        "fallback_selector": "h3 a, .job-card__title a",
+        "fallback_attribute": "href"
+      },
+      "company": {
+        "selector": ".employer-name, .job-card__company-name",
+        "attribute": "text"
+      },
+      "salary": {
+        "selector": ".job-card__salary, .salary",
+        "attribute": "text"
+      }
+    }
+  },
+  "job_id_extraction": {
+    "type": "slug_or_data_key",
+    "priority": ["data-job-key", "slug_suffix", "slug"]
+  },
+  "detail": {
+    "fetch_method": "http_get",
+    "fields": {
+      "title": {
+        "selector": "h1",
+        "attribute": "text"
+      },
+      "company": {
+        "selectors": [
+          ".employer-name",
+          ".company-name",
+          "a[href*='/companies/']"
+        ],
+        "attribute": "text"
+      },
+      "location": {
+        "selectors": [
+          ".job-details__overview",
+          ".working-location",
+          ".location"
+        ],
+        "attribute": "text"
+      },
+      "paragraphs": {
+        "selector": ".job-details__paragraph, .paragraph",
+        "attribute": "text"
+      },
+      "section_headings": {
+        "selectors": ["h2", "h3"],
+        "known_sections": [
+          "Top 3 reasons to join us",
+          "Job description",
+          "Your skills and experience"
+        ]
+      }
+    }
+  },
+  "normalization_rules": {
+    "key_format": "itviec:{company}:{title}:{job_id}",
+    "source_badge": "via ITviec",
+    "min_jd_length": 200
+  }
+}
