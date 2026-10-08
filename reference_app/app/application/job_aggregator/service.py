@@ -68,15 +68,9 @@ class JobAggregatorService:
                 self.repo.save_job(j)
                 total_saved += 1
 
-            # 2. Seed fallback if database is empty
-            _, existing_count = self.repo.list_jobs(limit=1)
-            if existing_count < 5 or force_seed:
-                logger.info("Seeding initial high-quality jobs...")
-                seed_adapter = SeedFallbackAdapter()
-                seed_jobs = await seed_adapter.fetch_jobs(limit=20)
-                for j in seed_jobs:
-                    self.repo.save_job(j)
-                    total_saved += 1
+            # 2. Lifecycle expiration check
+            self.repo.mark_expired_by_deadline()
+            self.repo.mark_suspected_expired(days_threshold=7)
 
             # 3. Optional Serper discovery if explicitly configured and requested
             if self.serper_api_key and query:
