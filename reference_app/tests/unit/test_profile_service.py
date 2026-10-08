@@ -32,6 +32,7 @@ class FakeProfileRepository:
         target_domain_id: int | None = None,
         bio: str | None = None,
         avatar_url: str | None = None,
+        mascot_id: str | None = None,
         fields_set: frozenset[str] | None = None,
     ) -> UserProfile:
         current = self.profiles[user_id]
@@ -61,6 +62,7 @@ class FakeProfileRepository:
                 target_domain_name="Tech" if (target_domain_id or current.target_domain_id) else None,
                 bio=bio if bio is not None else current.bio,
                 avatar_url=avatar_url if avatar_url is not None else current.avatar_url,
+                mascot_id=mascot_id if mascot_id is not None else current.mascot_id,
             )
         else:
             updated = UserProfile(
@@ -88,6 +90,7 @@ class FakeProfileRepository:
                 target_domain_name="Tech" if target_domain_id else None,
                 bio=bio if "bio" in fields_set else current.bio,
                 avatar_url=avatar_url if "avatar_url" in fields_set else current.avatar_url,
+                mascot_id=(mascot_id or "fox-pixel") if "mascot_id" in fields_set else current.mascot_id,
             )
         self.profiles[user_id] = updated
         return updated
