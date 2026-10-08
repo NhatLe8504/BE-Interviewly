@@ -32,6 +32,58 @@ API_HEADERS = {
 }
 
 
+NON_IT_KEYWORDS = [
+    "accountant", "accounting", "accounts payable", "accounts receivable",
+    "clerk", "cashier", "receptionist", "secretary", "office administrator",
+    "sales executive", "sales representative", "telesales", "bán hàng",
+    "hr manager", "hr business partner", "recruiter", "talent acquisition", "tuyển dụng nhân sự",
+    "nhân viên hành chính", "kế toán", "thu ngân", "nhân viên kinh doanh",
+    "legal counsel", "pháp chế", "lái xe", "bảo vệ", "tạp vụ", "đầu bếp",
+    "cook", "driver", "security guard", "customer service agent", "chăm sóc khách hàng",
+    "fpa executive", "fp&a", "cash loan", "thai localization",
+]
+
+POSITIVE_IT_KEYWORDS = [
+    "software", "engineer", "developer", "programmer", "architect",
+    "backend", "frontend", "front-end", "fullstack", "full-stack",
+    "devops", "sre", "cloud", "platform", "infrastructure", "system",
+    "data engineer", "data analyst", "data scientist", "bi analyst",
+    "ai", "machine learning", "ml", "deep learning", "nlp", "llm", "computer vision",
+    "qa", "qc", "tester", "test automation", "automation engineer",
+    "security engineer", "cybersecurity", "soc",
+    "mobile", "android", "ios", "flutter", "react native",
+    "java", "python", "golang", "go", "c#", ".net", "c++", "rust", "php", "node", "nodejs",
+    "react", "vue", "angular", "nextjs", "typescript", "javascript",
+    "database administrator", "dba", "embedded", "firmware", "iot",
+    "it specialist", "it support", "it helpdesk", "network engineer",
+    "scrum master", "product owner", "tech lead", "engineering manager",
+]
+
+
+def is_relevant_it_job(title: str, text: str = "", location: str = "") -> bool:
+    title_lower = title.lower()
+
+    # Reject explicit non-IT titles
+    for bad in NON_IT_KEYWORDS:
+        if bad in title_lower:
+            return False
+
+    # Check positive technical keywords in title or summary
+    has_it_title = any(kw in title_lower for kw in POSITIVE_IT_KEYWORDS)
+    if not has_it_title:
+        text_lower = text[:500].lower()
+        if not any(kw in text_lower for kw in ["software", "programming", "lập trình", "source code", "git", "api", "database"]):
+            return False
+
+    # Check location constraints: exclude overseas-only on-site offices
+    loc_lower = location.lower()
+    if "office based" in loc_lower and not any(vn in loc_lower for vn in ["vietnam", "viet nam", "hanoi", "ha noi", "ho chi minh", "hcm", "da nang"]):
+        if "remote" not in loc_lower and "worldwide" not in loc_lower:
+            return False
+
+    return True
+
+
 def make_deterministic_job_key(source_id: str, company_name: str, job_title: str, external_id: str = "") -> str:
     norm_comp = re.sub(r"[^a-z0-9]", "", company_name.lower())
     norm_title = re.sub(r"[^a-z0-9]", "", job_title.lower())
@@ -101,7 +153,12 @@ class RecipeBasedCrawlerAdapter(BaseJobSourceAdapter):
                     jobs = await self._crawl_linkedin(recipe, query=query or "Software Engineer", limit=min(4, per_source_limit))
                 else:
                     jobs = []
-                all_results.extend(jobs)
+                valid_it_jobs = [
+                    j for j in jobs
+                    if is_relevant_it_job(j.get("title", ""), j.get("cleaned_jd_text", ""), j.get("location", ""))
+                    and len(j.get("cleaned_jd_text", "")) >= 150
+                ]
+                all_results.extend(valid_it_jobs)
             except Exception as exc:
                 logger.warning("Error crawling source %s with recipe: %s", sid, exc)
 
@@ -450,10 +507,12 @@ class RecipeBasedCrawlerAdapter(BaseJobSourceAdapter):
                     if resp.status_code != 200:
                         continue
                     jobs = resp.json().get("jobs", [])
-                    for j in jobs[:limit]:
+                    for j in jobs:
                         jid = str(j.get("id"))
                         title = j.get("title", "")
                         loc = j.get("location", {}).get("name", "Remote")
+                        if not is_relevant_it_job(title, "", loc):
+                            continue
                         apply_url = j.get("absolute_url", "")
                         clean_jd = BeautifulSoup(j.get("content", ""), "html.parser").get_text("\n", strip=True)
                         if len(clean_jd) < 150:
@@ -481,6 +540,8 @@ class RecipeBasedCrawlerAdapter(BaseJobSourceAdapter):
                             "content_fingerprint": fingerprint,
                             "via_source": "via Greenhouse",
                         })
+                        if len(results) >= limit:
+                            break
                 except Exception as exc:
                     logger.debug("Greenhouse error %s: %s", b, exc)
         return results
@@ -496,11 +557,13 @@ class RecipeBasedCrawlerAdapter(BaseJobSourceAdapter):
                     if resp.status_code != 200:
                         continue
                     jobs = resp.json()
-                    for j in jobs[:limit]:
+                    for j in jobs:
                         jid = str(j.get("id"))
                         title = j.get("text", "")
                         hosted_url = j.get("hostedUrl", "")
                         loc = j.get("categories", {}).get("location", "Global")
+                        if not is_relevant_it_job(title, "", loc):
+                            continue
                         desc_plain = j.get("descriptionPlain", "")
                         lists_text = ""
                         for lst in j.get("lists", []):
