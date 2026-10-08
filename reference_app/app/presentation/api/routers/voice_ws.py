@@ -199,6 +199,12 @@ async def handle_voice_websocket_session(
                     )
 
                 elif msg_type in ("config", "set_barge_in"):
+                    if "language" in data:
+                        orchestrator.set_interview_language(data["language"])
+                        await connection.send_event({
+                            "type": "language_configured",
+                            "language": orchestrator.language,
+                        })
                     if "barge_in_enabled" in data:
                         orchestrator.set_barge_in_enabled(bool(data["barge_in_enabled"]))
 

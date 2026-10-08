@@ -13,6 +13,8 @@ from ...domain.voice import (
     VoiceGenerationContext,
     VoiceSessionState,
 )
+from ...domain.errors import DomainValidationError
+from .languages import INTERVIEW_LANGUAGE_SETTINGS
 from .ports import LLMVoiceStreamPort, TTSPort, VoiceConnectionPort
 from .sentence_splitter import StreamingSentenceSplitter
 from ..interview.intent_composer import QuestionIntentComposer, QuestionIntentContext
@@ -289,6 +291,16 @@ class VoiceInterviewOrchestrator:
     def set_barge_in_enabled(self, enabled: bool) -> None:
         self.barge_in_enabled = enabled
 
+    def set_interview_language(self, language: str) -> None:
+        if not isinstance(language, str) or language not in INTERVIEW_LANGUAGE_SETTINGS:
+            raise DomainValidationError("Unsupported interview language")
+        if language == self.language:
+            return
+        if self.state not in (VoiceSessionState.IDLE, VoiceSessionState.LISTEN):
+            raise DomainValidationError("Change language while the interviewer is waiting for your answer")
+        self.language = language
+        self.voice = INTERVIEW_LANGUAGE_SETTINGS[language][1]
+
     def _build_opening_question(self) -> str:
         cur_stage = self.get_current_stage()
         is_vi = self.language == "vi"
@@ -363,7 +375,7 @@ class VoiceInterviewOrchestrator:
         if level:
             self.level = level
         if language:
-            self.language = language
+            self.set_interview_language(language)
         if voice:
             self.voice = voice
         if barge_in_enabled is not None:
@@ -658,6 +670,16 @@ class VoiceInterviewOrchestrator:
             if self.system_prompt:
                 messages.append({"role": "system", "content": self.system_prompt})
             messages.append({"role": "system", "content": stage_instruction})
+            language_name = INTERVIEW_LANGUAGE_SETTINGS[self.language][0]
+            messages.append({
+                "role": "system",
+                "content": (
+                    f"Conduct this interview and respond exclusively in {language_name}. "
+                    "This choice is independent of the job description, interface, and prior messages. "
+                    "Keep the same interview topic and progression; do not restart the interview "
+                    "or translate the entire job description. Preserve technical terms when appropriate."
+                ),
+            })
             messages.extend(self.conversation_history[-8:])
 
             sentence_queue: asyncio.Queue[tuple[int, str] | None] = asyncio.Queue(maxsize=4)
