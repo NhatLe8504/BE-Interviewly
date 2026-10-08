@@ -1,0 +1,16 @@
+{
+  "domain": "career.fpt-software.com",
+  "source_id": "fpt_software",
+  "source_name": "FPT Software Careers",
+  "access_method": "blocked_by_protection",
+  "verification_status": "BLOCKED",
+  "last_verified_at": "2026-10-09T00:45:00+07:00",
+  "tested_jobs_count": 0,
+  "success_rate_pct": 0.0,
+  "notes": "Blocked by Cloudflare Managed Challenge ('Just a moment...' challenge screen with HTTP 403) on career.fpt-software.com. Jobs from FPT Software can alternatively be gathered via LinkedIn Jobs or TopCV verified sources.",
+  "block_details": {
+    "waf_provider": "Cloudflare Managed Challenge",
+    "http_status": 403,
+    "alternative_source": "linkedin.com/jobs or topcv.vn"
+  }
+}

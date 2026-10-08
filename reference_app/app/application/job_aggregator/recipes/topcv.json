@@ -1,0 +1,108 @@
+{
+  "domain": "topcv.vn",
+  "source_id": "topcv",
+  "source_name": "TopCV Vietnam",
+  "access_method": "html_direct",
+  "verification_status": "VERIFIED",
+  "last_verified_at": "2026-10-09T00:45:00+07:00",
+  "tested_jobs_count": 10,
+  "success_rate_pct": 100.0,
+  "notes": "Verified on 10 live postings. Direct HTTP GET with desktop browser user-agent works reliably without headless browser.",
+  "listing": {
+    "default_urls": [
+      "https://www.topcv.vn/tim-viec-lam-software-engineering-cr257cb258",
+      "https://www.topcv.vn/tim-viec-lam-it-phan-mem-c10026"
+    ],
+    "pagination": {
+      "type": "query_param",
+      "param_name": "page",
+      "start_page": 1
+    },
+    "card_selector": ".job-item-search-result",
+    "fields": {
+      "title": {
+        "selector": "h3.title a, .title a",
+        "attribute": "text",
+        "clean_regex": "^(Tuyển\\s+|Tuyển\\s+dụng\\s+|\\[.*?\\]\\s*|\\(.*?\\)\\s*)"
+      },
+      "detail_link": {
+        "selector": "h3.title a, .title a",
+        "attribute": "href",
+        "strip_query": true
+      },
+      "company": {
+        "selector": "a.company, a[href*='/cong-ty/']",
+        "attribute": "text"
+      },
+      "salary": {
+        "selector": ".title-salary",
+        "attribute": "text"
+      },
+      "location": {
+        "selector": ".address",
+        "attribute": "text"
+      },
+      "experience": {
+        "selector": ".exp",
+        "attribute": "text"
+      }
+    }
+  },
+  "job_id_extraction": {
+    "type": "regex_from_url",
+    "regex": "/(\\d+)\\.html",
+    "group": 1
+  },
+  "detail": {
+    "fetch_method": "http_get",
+    "fields": {
+      "title": {
+        "selector": "h1",
+        "attribute": "text",
+        "clean_regex": "^(Tuyển\\s+|Tuyển\\s+dụng\\s+|\\[.*?\\]\\s*|\\(.*?\\)\\s*)"
+      },
+      "company": {
+        "selectors": [
+          ".name-company",
+          ".company-name a",
+          ".company-name",
+          "a[href*='/cong-ty/']",
+          ".company-title"
+        ],
+        "attribute": "text"
+      },
+      "salary": {
+        "selectors": [
+          ".job-detail__info--section-content-value.salary",
+          ".salary",
+          ".title-salary"
+        ],
+        "attribute": "text",
+        "clean_regex": "Xem mức lương.*$"
+      },
+      "sections": {
+        "container_selector": ".box-job-information-detail-item, .job-description__item",
+        "heading_selector": ".title, h3, .job-description__item--title",
+        "content_selector": ".text, .job-description__item--content",
+        "mappings": {
+          "description": ["mô tả", "mô tả công việc", "job description"],
+          "requirements": ["yêu cầu", "yêu cầu ứng viên", "skills", "requirements"],
+          "benefits": ["quyền lợi", "quyền lợi được hưởng", "benefits"]
+        }
+      },
+      "deadline": {
+        "selectors": [
+          ".job-detail__info--section-content-value.deadline",
+          ".deadline",
+          ".job-deadline"
+        ],
+        "attribute": "text"
+      }
+    }
+  },
+  "normalization_rules": {
+    "key_format": "topcv:{company}:{title}:{job_id}",
+    "source_badge": "via TopCV",
+    "min_jd_length": 150
+  }
+}

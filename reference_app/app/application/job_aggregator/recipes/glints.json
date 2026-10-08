@@ -1,0 +1,16 @@
+{
+  "domain": "glints.com",
+  "source_id": "glints",
+  "source_name": "Glints Vietnam",
+  "access_method": "blocked_by_protection",
+  "verification_status": "BLOCKED",
+  "last_verified_at": "2026-10-09T00:45:00+07:00",
+  "tested_jobs_count": 0,
+  "success_rate_pct": 0.0,
+  "notes": "Blocked by Cloudflare Bot Management (returns HTTP 403 on listing /opportunities/jobs/explore and internal APIs). Additionally, robots.txt explicitly disallows '*/opportunities/jobs/explore?*'. Per project security constraints, no bypass is attempted.",
+  "block_details": {
+    "waf_provider": "Cloudflare",
+    "http_status": 403,
+    "robots_txt_rule": "disallow: */opportunities/jobs/explore?*"
+  }
+}

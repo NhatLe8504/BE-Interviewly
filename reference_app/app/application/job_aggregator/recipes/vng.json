@@ -1,0 +1,50 @@
+{
+  "domain": "career.vng.com.vn",
+  "source_id": "vng",
+  "source_name": "VNG Corporation Careers",
+  "access_method": "nextjs_ssr_data",
+  "verification_status": "VERIFIED",
+  "last_verified_at": "2026-10-09T00:45:00+07:00",
+  "tested_jobs_count": 10,
+  "success_rate_pct": 100.0,
+  "notes": "Verified on 10 live postings. Listing fetched from /vi/tim-kiem-viec-lam (__NEXT_DATA__ props.pageProps.jobs). Detail page fetched from /tim-kiem-viec-lam/chi-tiet/{slug} (__NEXT_DATA__ props.pageProps.job_data).",
+  "listing": {
+    "default_urls": [
+      "https://career.vng.com.vn/vi/tim-kiem-viec-lam"
+    ],
+    "parser": "next_data_json",
+    "json_paths": {
+      "root": "props.pageProps.jobs",
+      "job_id": "job_id",
+      "code": "code",
+      "slug": "slug",
+      "title": "title",
+      "location": "location",
+      "working_type": "workingType",
+      "detail_url_template": "https://career.vng.com.vn/tim-kiem-viec-lam/chi-tiet/{slug}"
+    }
+  },
+  "job_id_extraction": {
+    "type": "numeric_or_code",
+    "priority": ["job_id", "code", "slug"]
+  },
+  "detail": {
+    "fetch_method": "http_get",
+    "parser": "next_data_json",
+    "json_paths": {
+      "root": "props.pageProps.job_data",
+      "title": "title",
+      "code": "code",
+      "location": "location",
+      "department": "department",
+      "description_html": "description",
+      "requirements_html": "requirement"
+    }
+  },
+  "normalization_rules": {
+    "key_format": "vng:{company}:{title}:{job_id}",
+    "company_default": "VNG Corporation",
+    "source_badge": "via VNG Careers",
+    "min_jd_length": 150
+  }
+}

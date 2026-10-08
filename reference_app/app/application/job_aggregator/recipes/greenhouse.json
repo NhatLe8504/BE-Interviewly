@@ -1,0 +1,43 @@
+{
+  "domain": "boards-api.greenhouse.io",
+  "source_id": "greenhouse",
+  "source_name": "Greenhouse ATS Boards",
+  "access_method": "ats_public_rest_api",
+  "verification_status": "VERIFIED",
+  "last_verified_at": "2026-10-09T00:45:00+07:00",
+  "tested_jobs_count": 10,
+  "success_rate_pct": 100.0,
+  "notes": "Verified on 10 live postings across Canonical board. Official public open REST API. Complete un-gated JD returned directly in content field.",
+  "listing": {
+    "url_template": "https://boards-api.greenhouse.io/v1/boards/{board_token}/jobs?content=true",
+    "method": "GET",
+    "supported_boards": ["canonical", "gitlab", "cloudflare", "stripe"],
+    "json_paths": {
+      "root": "jobs",
+      "job_id": "id",
+      "title": "title",
+      "apply_url": "absolute_url",
+      "location": "location.name",
+      "updated_at": "updated_at",
+      "raw_content": "content"
+    }
+  },
+  "job_id_extraction": {
+    "type": "integer_id",
+    "field": "id"
+  },
+  "detail": {
+    "fetch_method": "included_in_listing_content",
+    "parser": "html_unescape_and_clean",
+    "fields": {
+      "title": "title",
+      "location": "location.name",
+      "description": "content"
+    }
+  },
+  "normalization_rules": {
+    "key_format": "greenhouse:{board}:{title}:{job_id}",
+    "source_badge": "via Greenhouse",
+    "min_jd_length": 200
+  }
+}
