@@ -16,6 +16,7 @@ class JobCompanyOut(BaseModel):
 
 class JobItemOut(BaseModel):
     job_id: str
+    source_id: str | None = None
     title: str
     slug: str
     seniority: str
@@ -31,6 +32,8 @@ class JobItemOut(BaseModel):
     via_source: str | None = None
     original_apply_url: str
     posted_at: datetime | None = None
+    updated_at: datetime | None = None
+    created_at: datetime | None = None
     company: JobCompanyOut | None = None
 
 
@@ -52,6 +55,9 @@ class JobFilterMetadataOut(BaseModel):
     seniorities: list[str]
     workplace_types: list[str]
     top_technologies: list[str]
+    locations: list[str] = Field(default_factory=list)
+    sources: list[dict[str, str]] = Field(default_factory=list)
+    sort_options: list[dict[str, str]] = Field(default_factory=list)
 
 
 class JobSkillMatchOut(BaseModel):

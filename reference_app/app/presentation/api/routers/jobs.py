@@ -51,6 +51,7 @@ def _to_job_item_out(job: Any) -> JobItemOut:
         )
     return JobItemOut(
         job_id=job.job_id,
+        source_id=job.source_id,
         title=job.title,
         slug=job.slug,
         seniority=job.seniority,
@@ -66,6 +67,8 @@ def _to_job_item_out(job: Any) -> JobItemOut:
         via_source=job.via_source or "via Web",
         original_apply_url=job.original_apply_url,
         posted_at=job.posted_at,
+        updated_at=getattr(job, "updated_at", None) or getattr(job, "last_seen_at", None) or job.created_at,
+        created_at=job.created_at,
         company=comp_out,
     )
 
@@ -77,6 +80,9 @@ async def list_jobs(
     seniority: str = Query("", description="Filter by seniority level"),
     workplace_type: str = Query("", description="Filter by workplace type (remote, hybrid, on_site)"),
     technology: str = Query("", description="Filter by specific technology"),
+    location: str = Query("", description="Filter by location, city, or country"),
+    source_id: str = Query("", description="Filter by source ID (topcv, itviec, vietnamworks, etc.)"),
+    sort_by: str = Query("recent", description="Sort order: recent, posted, salary_desc, title_asc"),
     page: int = Query(1, ge=1),
     limit: int = Query(12, ge=1, le=50),
     session: Session = Depends(get_session),
@@ -94,6 +100,9 @@ async def list_jobs(
         seniority=seniority,
         workplace_type=workplace_type,
         technology=technology,
+        location=location,
+        source_id=source_id,
+        sort_by=sort_by,
         page=page,
         limit=limit,
     )
@@ -123,9 +132,12 @@ def get_filter_metadata(
     service = JobAggregatorService(session=session)
     data = service.get_filter_metadata()
     return JobFilterMetadataOut(
-        seniorities=data["seniorities"],
-        workplace_types=data["workplace_types"],
-        top_technologies=data["top_technologies"],
+        seniorities=data.get("seniorities", []),
+        workplace_types=data.get("workplace_types", []),
+        top_technologies=data.get("top_technologies", []),
+        locations=data.get("locations", []),
+        sources=data.get("sources", []),
+        sort_options=data.get("sort_options", []),
     )
 
 
@@ -179,12 +191,11 @@ def get_job_detail(
         )
 
     base_item = _to_job_item_out(job)
-    return JobDetailOut(
-        **base_item.model_dump(),
-        raw_description=job.raw_description,
-        cleaned_jd_text=job.cleaned_jd_text,
-        created_at=job.created_at,
-    )
+    item_dict = base_item.model_dump()
+    item_dict["raw_description"] = job.raw_description or ""
+    item_dict["cleaned_jd_text"] = job.cleaned_jd_text or ""
+    item_dict["created_at"] = job.created_at
+    return JobDetailOut(**item_dict)
 
 
 @router.get("/{job_id}/skill-match", response_model=JobSkillMatchOut)

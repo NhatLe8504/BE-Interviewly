@@ -98,6 +98,9 @@ class JobAggregatorService:
         seniority: str = "",
         workplace_type: str = "",
         technology: str = "",
+        location: str = "",
+        source_id: str = "",
+        sort_by: str = "recent",
         page: int = 1,
         limit: int = 12,
     ) -> tuple[list[Any], int]:
@@ -107,6 +110,9 @@ class JobAggregatorService:
             seniority=seniority,
             workplace_type=workplace_type,
             technology=technology,
+            location=location,
+            source_id=source_id,
+            sort_by=sort_by,
             page=page,
             limit=limit,
         )
