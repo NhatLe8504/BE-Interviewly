@@ -91,7 +91,11 @@ class SkillLevelEstimator:
             # Recency decay (half-life of 90 days)
             recency = 0.5 ** (days_ago / cls.HALF_LIFE_DAYS)
             source_weight = cls.SOURCE_WEIGHTS.get(ev.source_type, 0.8)
-            w = max(0.05, ev.grader_confidence * recency * source_weight)
+            # Không áp sàn trọng số: bằng chứng có grader_confidence = 0 không
+            # được phép tích lũy thành confidence (LOI #7: 100 bằng chứng cũ,
+            # confidence đầu vào 0 từng cho ra confidence 0.76 và level middle).
+            # Lượt có trọng số 0 cũng không cập nhật Elo.
+            w = max(0.0, min(1.0, float(ev.grader_confidence))) * recency * source_weight
             total_effective_weight += w
 
             # Logistic expected probability of success given current theta and question difficulty
@@ -154,16 +158,30 @@ class SkillLevelEstimator:
         # Filter estimates with meaningful confidence
         valid_estimates = [s for s in skill_estimates if s.level != "none" and s.confidence >= 0.25]
 
+        track_skill_counts: dict[str, int] = {track: 0 for track in track_scores}
+
         for s in valid_estimates:
             defn = taxonomy.get_skill(s.skill_id)
             if not defn:
                 continue
+            tracks = [tr for tr in defn.role_tracks if tr in track_scores]
+            # Kỹ năng xuất hiện ở >= 4/8 track (giao tiếp, problem solving...)
+            # không có giá trị phân biệt ngành nghề: nếu cộng đều cho mọi
+            # track thì chỉ cần một kỹ năng Communication là hệ thống báo
+            # "Backend" (LOI #7). Track được chọn theo điểm, rồi số kỹ năng
+            # đóng góp, rồi tên — để kết quả tất định, không phụ thuộc
+            # thứ tự dict.
+            if len(tracks) >= 4:
+                continue
             weight = s.ability_score * s.confidence
-            for tr in defn.role_tracks:
-                if tr in track_scores:
-                    track_scores[tr] += weight
+            for tr in tracks:
+                track_scores[tr] += weight
+                track_skill_counts[tr] += 1
 
-        sorted_tracks = sorted(track_scores.items(), key=lambda x: x[1], reverse=True)
+        sorted_tracks = sorted(
+            track_scores.items(),
+            key=lambda x: (-x[1], -track_skill_counts[x[0]], x[0]),
+        )
         primary_track = None
         secondary_track = None
         role_confidence = 0.0
