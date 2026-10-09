@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, BackgroundTasks, HTTPException
+import logging
 import time
 
 from ....application.container import ServiceContainer
@@ -47,8 +48,14 @@ from ....infrastructure.persistence.models.catalog import (
     QuestionSetReview as QuestionSetReviewModel,
 )
 
+from ....infrastructure.persistence.practice_evaluation_repository import (
+    PART_CONTENT,
+    save_practice_evaluation,
+)
 from ....infrastructure.queue.eval_queue import eval_pull_queue
 router = APIRouter(prefix="/api/v1/catalog", tags=["catalog"])
+
+logger = logging.getLogger(__name__)
 
 
 @router.get("/domains", response_model=list[DomainOut])
@@ -312,14 +319,35 @@ def get_question_detail(
 
 
 
+def verified_quiz_score(quiz_data: Any, selected_option_id: Any) -> float:
+    """Điểm quiz (0 hoặc 15) chỉ khi đáp án được xác minh từ quiz_data của câu hỏi.
+
+    Không dùng cờ is_quiz_correct do client gửi lên.
+    """
+    if not isinstance(quiz_data, dict):
+        return 0.0
+    options = quiz_data.get("options")
+    if not isinstance(options, list) or not options or selected_option_id is None:
+        return 0.0
+    selected = str(selected_option_id)
+    for option in options:
+        if isinstance(option, dict) and str(option.get("id")) == selected:
+            return 15.0 if option.get("is_correct") is True else 0.0
+    return 0.0
+
+
 @router.post("/questions/{question_id}/evaluate", response_model=QuestionEvaluationResultOut)
 def evaluate_question_answer(
     question_id: int,
     data: QuestionEvaluateIn,
     session: Any = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
+    user_id: int | None = Depends(get_optional_user_id),
 ) -> QuestionEvaluationResultOut:
     q = container.catalog_service.get_question(session, question_id)
+    # quiz_data chỉ có trên ORM row; domain QuestionBankItem không mang field này.
+    question_row = session.get(QuestionBankModel, question_id)
+    quiz_data = getattr(question_row, "quiz_data", None)
     role_name = "Software Engineer"
     if q.role_id:
         try:
@@ -328,12 +356,12 @@ def evaluate_question_answer(
         except Exception:
             pass
 
-    # 1. QUIZ SCORE (15% max): 15 points if correct, 0 if wrong
-    quiz_score = 0.0
-    if data.is_quiz_correct is True:
-        quiz_score = 15.0
-    elif data.is_quiz_correct is False:
-        quiz_score = 0.0
+    # 1. QUIZ SCORE (15% max): xác minh server-side từ quiz_data của câu hỏi.
+    # Không dùng cờ is_quiz_correct do client gửi lên.
+    quiz_options = quiz_data.get("options") if isinstance(quiz_data, dict) else None
+    has_quiz_options = isinstance(quiz_options, list) and len(quiz_options) > 0
+    quiz_attempted = has_quiz_options and data.selected_option_id is not None
+    quiz_score = verified_quiz_score(quiz_data, data.selected_option_id)
 
     # 2. TEXT STAR SCORE (35% max)
     text = (data.answer_text or "").strip()
@@ -374,8 +402,32 @@ def evaluate_question_answer(
         evidence = float(eval_data.evidence_score)
         llm_avg_pct = (clarity + structure + evidence) / 300.0
 
+        evaluation_id: int | None = None
         if words >= 20:
             text_score = round(llm_avg_pct * 35.0, 1)
+            # Chỉ lưu bằng chứng từ đánh giá LLM thật + phần quiz đã xác minh.
+            # Không lưu phần voice tính theo thời lượng ghi âm (không phản ánh năng lực).
+            if user_id:
+                content_score = quiz_score + text_score if quiz_attempted else text_score
+                content_max = 35.0 + (15.0 if quiz_attempted else 0.0)
+                try:
+                    saved_eval = save_practice_evaluation(
+                        session,
+                        user_id=int(user_id),
+                        question_id=question_id,
+                        part=PART_CONTENT,
+                        part_score=content_score,
+                        part_max=content_max,
+                        answer_text=text,
+                    )
+                    evaluation_id = int(saved_eval.id)
+                except Exception:
+                    logger.warning(
+                        "Failed to persist practice evaluation for user %s question %s",
+                        user_id,
+                        question_id,
+                        exc_info=True,
+                    )
 
         total_score = min(100, int(round(quiz_score + text_score + voice_score)))
         passed = total_score >= 70
@@ -435,6 +487,7 @@ def evaluate_question_answer(
                 voice_max=50.0,
                 total_score=float(total_score),
             ),
+            evaluation_id=evaluation_id,
         )
 
     # Heuristic score
@@ -770,6 +823,7 @@ async def enqueue_question_evaluation(
     data: EvaluationQueueIn,
     background_tasks: BackgroundTasks,
     container: ServiceContainer = Depends(get_container),
+    user_id: int | None = Depends(get_optional_user_id),
 ) -> EvaluationQueueOut:
     """
     Pipeline B: Asynchronous Background Enqueue for Question Evaluation.
@@ -778,8 +832,10 @@ async def enqueue_question_evaluation(
     """
     quiz_score = 15.0 if data.is_quiz_correct is True else 0.0
 
-    # Enqueue task in Pull MQ
-    task_id = eval_pull_queue.enqueue(data.model_dump())
+    # Enqueue task in Pull MQ (kèm user để worker lưu đánh giá đã xác minh)
+    payload = data.model_dump()
+    payload["user_id"] = user_id
+    task_id = eval_pull_queue.enqueue(payload)
 
     # Trigger background worker evaluation with LLM & Delivery telemetry
     background_tasks.add_task(eval_pull_queue.process_task_async, task_id, container)
@@ -929,11 +985,14 @@ async def enqueue_text_evaluation(
     data: TextEvaluationQueueIn,
     background_tasks: BackgroundTasks,
     container: ServiceContainer = Depends(get_container),
+    user_id: int | None = Depends(get_optional_user_id),
 ) -> EvaluationQueueOut:
     """
     Decoupled Endpoint: Enqueues Written Essay (35% STAR) to Background Pull MQ.
     """
-    task_id = eval_pull_queue.enqueue(data.model_dump())
+    payload = data.model_dump()
+    payload["user_id"] = user_id
+    task_id = eval_pull_queue.enqueue(payload)
     background_tasks.add_task(eval_pull_queue.process_text_task_async, task_id, container)
 
     return EvaluationQueueOut(
@@ -949,11 +1008,14 @@ async def enqueue_voice_evaluation(
     data: VoiceEvaluationQueueIn,
     background_tasks: BackgroundTasks,
     container: ServiceContainer = Depends(get_container),
+    user_id: int | None = Depends(get_optional_user_id),
 ) -> EvaluationQueueOut:
     """
     Decoupled Endpoint: Enqueues Spoken STT Transcript + Telemetry (50%) to Background Pull MQ.
     """
-    task_id = eval_pull_queue.enqueue(data.model_dump())
+    payload = data.model_dump()
+    payload["user_id"] = user_id
+    task_id = eval_pull_queue.enqueue(payload)
     background_tasks.add_task(eval_pull_queue.process_voice_task_async, task_id, container)
 
     return EvaluationQueueOut(

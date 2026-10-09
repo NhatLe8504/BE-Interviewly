@@ -115,3 +115,39 @@ class JobReadinessRecord(Base):
     computed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(),
     )
+
+
+class PracticeEvaluationRecord(Base):
+    """Đánh giá do SERVER tạo cho một câu trả lời luyện tập.
+
+    Đây là nguồn bằng chứng duy nhất cho module luyện tập: điểm phải do backend
+    tạo ra (LLM evaluator), gắn user + câu hỏi, kèm chính văn bản câu trả lời.
+    Điểm do client gửi lên (practice_history.questions_summary[].score) không
+    bao giờ được dùng làm bằng chứng.
+    """
+
+    __tablename__ = "practice_evaluations"
+    __table_args__ = (
+        Index("idx_practice_evaluations_user_question", "user_id", "question_id"),
+        Index("idx_practice_evaluations_created", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False,
+    )
+    question_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("question_bank.question_id", ondelete="CASCADE"), nullable=False,
+    )
+    # "content" = đánh giá nội dung câu trả lời (quiz đã xác minh + tự luận LLM)
+    # "voice"   = đánh giá nội dung + độ luyến láy khi nói (LLM voice evaluator)
+    part: Mapped[str] = mapped_column(String(16), nullable=False)
+    part_score: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    part_max: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    answer_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    method: Mapped[str] = mapped_column(String(16), nullable=False, default="llm")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
