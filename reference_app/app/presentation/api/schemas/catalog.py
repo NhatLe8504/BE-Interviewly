@@ -121,6 +121,7 @@ class QuestionOut(BaseModel):
     created_by: int | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    skill_ids: list[str] = Field(default_factory=list)
 
 
 class QuestionDetailOut(QuestionOut):
@@ -145,6 +146,7 @@ class QuestionCreateIn(BaseModel):
     sample_answer: str | None = None
     follow_up_questions: list[str] | None = None
     tips: list[str] | None = None
+    skill_ids: list[str] | None = None
 
 
 class QuestionUpdateIn(BaseModel):
@@ -164,6 +166,23 @@ class QuestionUpdateIn(BaseModel):
     sample_answer: str | None = None
     follow_up_questions: list[str] | None = None
     tips: list[str] | None = None
+    skill_ids: list[str] | None = None
+
+
+class SkillOptionOut(BaseModel):
+    id: str
+    name: str
+    category: str
+    role_tracks: list[str] = Field(default_factory=list)
+
+
+class SkillSuggestionIn(BaseModel):
+    question_text: str = Field(..., min_length=1)
+
+
+class SkillSuggestionOut(BaseModel):
+    suggested_skill_ids: list[str] = Field(default_factory=list)
+    reason: str | None = None
 
 
 class QuestionPageOut(BaseModel):

@@ -13,7 +13,7 @@ from ...domain.catalog import (
     validate_not_blank,
     validate_question_type,
 )
-from ...domain.errors import ConflictError, NotFoundError
+from ...domain.errors import ConflictError, DomainValidationError, NotFoundError
 from .commands import (
     CreateDomainCommand,
     CreateQuestionCommand,
@@ -24,6 +24,8 @@ from .commands import (
     UpdateRoleCommand,
 )
 from .ports import CatalogRepositoryPort
+from ..skills.question_tagger import audit_question
+from ..skills.taxonomy import get_default_taxonomy
 
 
 class CatalogService:
@@ -284,6 +286,13 @@ class CatalogService:
         if cmd.experience_level is not None:
             validate_catalog_experience_level(cmd.experience_level)
 
+        # Nhãn kỹ năng: admin gửi tay thì validate chặt theo taxonomy; để trống
+        # thì tự trích xuất bằng bằng chứng văn bản của chính câu hỏi.
+        if cmd.skill_ids is None:
+            skill_ids = self._auto_tag_skills(cmd.question_text, cmd.question_type)
+        else:
+            skill_ids = self._validate_skill_ids(cmd.skill_ids)
+
         return self.repo.add_question(
             session,
             domain_id=cmd.domain_id,
@@ -298,7 +307,31 @@ class CatalogService:
             sample_answer=cmd.sample_answer,
             follow_up_questions=cmd.follow_up_questions,
             tips=cmd.tips,
+            skill_ids=skill_ids,
         )
+
+    def _validate_skill_ids(self, raw_ids: list[str] | None) -> list[str]:
+        """Chuẩn hóa và xác minh nhãn kỹ năng do admin gửi theo taxonomy."""
+        taxonomy = get_default_taxonomy()
+        valid: list[str] = []
+        unknown: list[str] = []
+        for raw in raw_ids or []:
+            if not isinstance(raw, str) or not raw.strip():
+                continue
+            sid = taxonomy.normalize_skill_id(raw)
+            if sid is None:
+                unknown.append(raw.strip())
+            elif sid not in valid:
+                valid.append(sid)
+        if unknown:
+            raise DomainValidationError(
+                "skill_ids không có trong taxonomy: " + ", ".join(sorted(set(unknown)))
+            )
+        return valid
+
+    def _auto_tag_skills(self, question_text: str, question_type: str) -> list[str]:
+        """Gắn nhãn tự động từ bằng chứng văn bản của câu hỏi."""
+        return audit_question(0, question_text, question_type, []).final
 
     def update_question(
         self, session: Any, question_id: int, cmd: UpdateQuestionCommand,
@@ -332,6 +365,9 @@ class CatalogService:
         if cmd.star_template_id is not None and not self.repo.get_star_template_by_id(session, cmd.star_template_id):
             raise NotFoundError(f"star template {cmd.star_template_id} not found")
 
+        # Admin có thể thay nhãn kỹ năng (kể cả xóa hết bằng []); không gửi thì giữ nguyên.
+        skill_ids = self._validate_skill_ids(cmd.skill_ids) if cmd.skill_ids is not None else None
+
         return self.repo.update_question(
             session,
             question_id,
@@ -347,6 +383,7 @@ class CatalogService:
             sample_answer=cmd.sample_answer,
             follow_up_questions=cmd.follow_up_questions,
             tips=cmd.tips,
+            skill_ids=skill_ids,
             fields_set=cmd.fields_set if cmd.fields_set else None,
         )
 
