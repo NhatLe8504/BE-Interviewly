@@ -1,1 +1,1 @@
-﻿# Logging infrastructure
+# Logging infrastructure
