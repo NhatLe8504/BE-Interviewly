@@ -92,3 +92,34 @@ Qua rà soát trực tiếp bảng dữ liệu PostgreSQL và mã nguồn kiến
 - `job_readiness_checks.analysis_engine` lưu `jev` hoặc `heuristic`; UI chỉ ghi "TypeSafe Jev System One" khi Jev thực sự chạy, còn lại hiển thị nhãn thuật toán nội bộ.
 - Env: `JEV_API_KEY`, `JEV_API_URL`, `JEV_MODEL` (compose.yaml + .env.example). Key placeholder (`your_jev_api_key`) được coi như chưa cấu hình → fallback heuristic.
 - Test: `tests/unit/test_jev_adapter.py`, `tests/unit/test_job_readiness_jev_service.py`, `tests/integration/test_jev_adapter_http.py`, `tests/integration/test_readiness_engine_persistence.py`.
+
+---
+
+## 7. CHUẨN HÓA READINESS / ESTIMATOR / GẮN NHÃN CÂU HỎI (PHASE 4 — LOI #6, #7, P2)
+
+### 7.1 Readiness không còn đọc "biết một phần" thành "ready"
+- Kỹ năng `unknown` (chưa có bằng chứng hoặc confidence < 0.20) tính **0 điểm và vẫn nằm trong mẫu số** của `match_percent`.
+- `verdict = ready` chỉ khi: toàn bộ kỹ năng bắt buộc đạt (`met`), `match_percent >= 70` và `data_coverage >= 0.5`.
+- `verdict = insufficient_data` khi chưa có bằng chứng nào, hoặc độ phủ yêu cầu bắt buộc < 50%. Các verdict còn lại: `almost` (match >= 45, không có must gap), `not_ready`.
+- Ca tái hiện LOI #6 (5 must-have, chỉ Java + SQL có bằng chứng) trước đây trả 100%/ready, nay trả 40%/insufficient_data với ghi chú "2/5 kỹ năng".
+- Lưu ý: kết quả Jev (`analysis_engine = jev`) dùng match/verdict riêng của model; trạng thái từng kỹ năng của heuristic vẫn chỉ bị HẠ xuống, không nâng.
+
+### 7.2 Estimator chống bằng chứng rác và suy đoán ngành nghề
+- Bỏ sàn trọng số `max(0.05, ...)`: `grader_confidence = 0` không còn tích lũy thành confidence (100 bằng chứng cũ trước đây cho 0.76/middle, nay là 0.0/none).
+- Kỹ năng xuất hiện ở >= 4/8 role track (Communication, Problem Solving...) không tham gia chọn `primary_role_track`; chỉ có Communication trước đây ra "Backend/Senior", nay trả `None`.
+- Thứ tự chọn track tất định: điểm giảm dần → số kỹ năng đóng góp giảm dần → tên track tăng dần.
+- `extract_skills_from_text` bỏ qua các alias generic `go`, `js` (chúng vẫn được `normalize_skill` khi người dùng gửi đúng tag): "Go to our careers page" không còn thành Go, "Next.js" không còn kéo thêm JavaScript. Alias có ngữ cảnh được bổ sung: `go developer`, `go engineer`, `golang developer`.
+
+### 7.3 Tiện ích gắn nhãn câu hỏi (Phase 2 còn nợ)
+- `app/application/skills/question_tagger.py`:
+  - Nhãn công nghệ chỉ được giữ/thêm khi xuất hiện trong **chính câu hỏi**; không dùng `sample_answer`, `tips` hay domain để suy đoán.
+  - Nhãn kỹ năng mềm (`communication`, `problem-solving`) được giữ cho câu hỏi `behavioral`/`situational` theo quy tắc, không tự thêm.
+  - Id lạ ngoài taxonomy bị loại khỏi DB.
+  - `suggest_skill_ids_with_llm()` chỉ sinh gợi ý đã validate theo taxonomy id và **không ghi DB**.
+- CLI: `scripts/retag_question_skills.py` (`--report` mặc định, `--apply`, `--llm-suggest N`).
+- Áp dụng thật 2026-10-09: 15 câu quét, 8 câu đổi, 14 nhãn sai bị loại (ví dụ bỏ `java` khỏi câu critical bug, bỏ `postgresql`/`sql`/`rest-api` khỏi câu slow query, bỏ `docker`/`git` khỏi câu CI/CD), giữ lại bằng chứng thật (`nextjs` cho câu Next.js, `machine-learning` cho câu RAG, `ci-cd`). Ba câu (#20, #37, #40) hiện không còn nhãn nào — chấp nhận không ghi evidence hơn là ghi sai; gợi ý LLM được lưu riêng để rà lại, chưa áp dụng.
+- Test: `tests/unit/test_question_tagger.py`, `tests/unit/test_skill_taxonomy.py`.
+
+### 7.4 P2 đã xử lý
+- Metadata `/jobs/metadata/filters` trả `sort_options = [{id, name}]` đồng bộ với FE và các metadata khác (trước đây `{value, label}` làm option trống). Test: `tests/unit/test_jobs_api_contract.py`.
+- `UserSkillProfileCard` dùng `currentData`/`isFetching` của lazy query và có nhánh lỗi tải bằng chứng — không còn hiển thị bằng chứng của kỹ năng trước đó.
