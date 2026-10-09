@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from .errors import DomainValidationError
@@ -98,6 +98,9 @@ class QuestionBankItem:
     created_by: int | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+    # Nhãn kỹ năng phục vụ skill tracking (id chuẩn hóa theo taxonomy).
+    skill_ids: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         validate_not_blank(self.question_text, "question_text")

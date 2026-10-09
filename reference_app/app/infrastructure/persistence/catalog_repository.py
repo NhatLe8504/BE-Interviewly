@@ -84,6 +84,7 @@ def _to_question(row: QuestionBankModel) -> QuestionBankItem:
         created_by=row.created_by,
         created_at=row.created_at,
         updated_at=row.updated_at,
+        skill_ids=list(row.skill_ids or []),
     )
 
 
@@ -461,6 +462,7 @@ class SqlAlchemyCatalogRepository:
         sample_answer: str | None = None,
         follow_up_questions: list[str] | None = None,
         tips: list[str] | None = None,
+        skill_ids: list[str] | None = None,
     ) -> QuestionBankItem:
         row = QuestionBankModel(
             domain_id=domain_id,
@@ -476,6 +478,7 @@ class SqlAlchemyCatalogRepository:
             sample_answer=sample_answer,
             follow_up_questions=follow_up_questions,
             tips=tips,
+            skill_ids=skill_ids or [],
         )
         session.add(row)
         session.commit()
@@ -499,6 +502,7 @@ class SqlAlchemyCatalogRepository:
         sample_answer: str | None = None,
         follow_up_questions: list[str] | None = None,
         tips: list[str] | None = None,
+        skill_ids: list[str] | None = None,
         fields_set: frozenset[str] | None = None,
     ) -> QuestionBankItem:
         row = session.get(QuestionBankModel, question_id)
@@ -520,6 +524,8 @@ class SqlAlchemyCatalogRepository:
                 row.star_template_id = star_template_id
             if is_active is not None:
                 row.is_active = is_active
+            if skill_ids is not None:
+                row.skill_ids = skill_ids
         else:
             if "question_text" in fields_set and question_text is not None:
                 row.question_text = question_text
@@ -545,6 +551,8 @@ class SqlAlchemyCatalogRepository:
                 row.follow_up_questions = follow_up_questions
             if "tips" in fields_set:
                 row.tips = tips
+            if "skill_ids" in fields_set and skill_ids is not None:
+                row.skill_ids = skill_ids
 
         session.commit()
         session.refresh(row)

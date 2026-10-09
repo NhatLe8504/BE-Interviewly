@@ -57,6 +57,7 @@ class CreateQuestionCommand:
     sample_answer: str | None = None
     follow_up_questions: list[str] | None = None
     tips: list[str] | None = None
+    skill_ids: list[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -73,4 +74,5 @@ class UpdateQuestionCommand:
     sample_answer: str | None = None
     follow_up_questions: list[str] | None = None
     tips: list[str] | None = None
+    skill_ids: list[str] | None = None
     fields_set: frozenset[str] = field(default_factory=frozenset)
