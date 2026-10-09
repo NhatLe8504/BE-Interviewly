@@ -42,3 +42,11 @@ def test_bare_go_word_is_not_scanned_but_exact_tag_still_maps():
     assert "go" in {s.id for s in taxonomy.extract_skills_from_text("Golang Developer")}
     # Tag chính xác do người dùng/ hệ thống gửi vào vẫn chuẩn hóa được.
     assert taxonomy.normalize_skill_id("Go") == "go"
+
+
+def test_js_alias_does_not_match_inside_next_js():
+    taxonomy = get_default_taxonomy()
+    ids = {s.id for s in taxonomy.extract_skills_from_text("Ứng dụng Next.js có kích thước lớn")}
+    assert "nextjs" in ids
+    assert "javascript" not in ids
+    assert taxonomy.normalize_skill_id("js") == "javascript"
