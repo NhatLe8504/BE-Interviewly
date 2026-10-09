@@ -32,8 +32,11 @@ class FakeCatalogRepo:
         self.next_template_id = 1
         self.next_question_id = 1
 
-    def list_domains(self, session):
-        return list(self.domains.values())
+    def list_domains(self, session, *, is_active=None):
+        items = list(self.domains.values())
+        if is_active is not None:
+            items = [d for d in items if getattr(d, "is_active", True) == is_active]
+        return items
 
     def get_domain_by_id(self, session, domain_id: int):
         return self.domains.get(domain_id)
@@ -58,10 +61,13 @@ class FakeCatalogRepo:
     def delete_domain(self, session, domain_id: int):
         self.domains.pop(domain_id, None)
 
-    def list_roles(self, session, *, domain_id: int | None = None):
+    def list_roles(self, session, *, domain_id: int | None = None, is_active=None):
+        items = list(self.roles.values())
         if domain_id is not None:
-            return [r for r in self.roles.values() if r.domain_id == domain_id]
-        return list(self.roles.values())
+            items = [r for r in items if r.domain_id == domain_id]
+        if is_active is not None:
+            items = [r for r in items if getattr(r, "is_active", True) == is_active]
+        return items
 
     def get_role_by_id(self, session, role_id: int):
         return self.roles.get(role_id)
@@ -131,7 +137,7 @@ class FakeCatalogRepo:
     def get_question_by_id(self, session, question_id: int):
         return self.questions.get(question_id)
 
-    def add_question(self, session, *, domain_id, question_text, question_type, language="vi", role_id=None, experience_level=None, star_template_id=None, created_by=None):
+    def add_question(self, session, *, domain_id, question_text, question_type, language="vi", role_id=None, experience_level=None, star_template_id=None, created_by=None, quiz_data=None, sample_answer=None, follow_up_questions=None, tips=None, skill_ids=None):
         item = QuestionBankItem(
             question_id=self.next_question_id,
             domain_id=domain_id,
@@ -142,16 +148,17 @@ class FakeCatalogRepo:
             question_text=question_text,
             star_template_id=star_template_id,
             created_by=created_by,
+            skill_ids=list(skill_ids or []),
         )
         self.questions[self.next_question_id] = item
         self.next_question_id += 1
         return item
 
-    def update_question(self, session, question_id, *, question_text=None, question_type=None, language=None, role_id=None, experience_level=None, star_template_id=None, is_active=None, fields_set=None):
+    def update_question(self, session, question_id, *, domain_id=None, question_text=None, question_type=None, language=None, role_id=None, experience_level=None, star_template_id=None, is_active=None, quiz_data=None, sample_answer=None, follow_up_questions=None, tips=None, skill_ids=None, fields_set=None):
         q = self.questions[question_id]
         updated = QuestionBankItem(
             question_id=q.question_id,
-            domain_id=q.domain_id,
+            domain_id=domain_id if (fields_set and "domain_id" in fields_set) else (domain_id or q.domain_id),
             role_id=role_id if (fields_set and "role_id" in fields_set) else (role_id or q.role_id),
             experience_level=experience_level if (fields_set and "experience_level" in fields_set) else (experience_level or q.experience_level),
             language=language or q.language,
@@ -160,6 +167,7 @@ class FakeCatalogRepo:
             star_template_id=star_template_id if (fields_set and "star_template_id" in fields_set) else (star_template_id or q.star_template_id),
             is_active=is_active if (fields_set and "is_active" in fields_set) else (is_active if is_active is not None else q.is_active),
             created_by=q.created_by,
+            skill_ids=skill_ids if skill_ids is not None else q.skill_ids,
         )
         self.questions[question_id] = updated
         return updated
@@ -249,3 +257,70 @@ def test_question_crud_and_filter(catalog_env):
     service.delete_question(None, q.question_id)
     with pytest.raises(NotFoundError):
         service.get_question(None, q.question_id)
+
+
+def test_create_question_auto_tags_from_text(catalog_env):
+    service, _, domain_id, _, _ = catalog_env
+    q = service.create_question(
+        None,
+        CreateQuestionCommand(
+            domain_id=domain_id,
+            question_type="technical",
+            question_text="How do you structure a Next.js app with TypeScript?",
+        ),
+    )
+    assert "nextjs" in q.skill_ids
+    assert "typescript" in q.skill_ids
+
+
+def test_create_question_accepts_manual_skill_ids_and_rejects_unknown(catalog_env):
+    service, _, domain_id, _, _ = catalog_env
+    q = service.create_question(
+        None,
+        CreateQuestionCommand(
+            domain_id=domain_id,
+            question_type="technical",
+            question_text="Explain database indexing trade-offs.",
+            skill_ids=["SQL"],
+        ),
+    )
+    assert q.skill_ids == ["sql"]
+
+    with pytest.raises(DomainValidationError):
+        service.create_question(
+            None,
+            CreateQuestionCommand(
+                domain_id=domain_id,
+                question_type="technical",
+                question_text="Explain database indexing trade-offs.",
+                skill_ids=["not-a-real-skill"],
+            ),
+        )
+
+
+def test_update_question_replaces_and_clears_skill_ids(catalog_env):
+    service, _, domain_id, _, _ = catalog_env
+    q = service.create_question(
+        None,
+        CreateQuestionCommand(
+            domain_id=domain_id,
+            question_type="technical",
+            question_text="How do you structure a Next.js app with TypeScript?",
+        ),
+    )
+    assert q.skill_ids
+
+    # Không gửi skill_ids -> giữ nguyên nhãn cũ.
+    kept = service.update_question(None, q.question_id, UpdateQuestionCommand(question_text="Next.js rendering modes?"))
+    assert kept.skill_ids == q.skill_ids
+
+    # Gửi nhãn mới -> thay thế hoàn toàn.
+    replaced = service.update_question(None, q.question_id, UpdateQuestionCommand(skill_ids=["sql"], fields_set=frozenset({"skill_ids"})))
+    assert replaced.skill_ids == ["sql"]
+
+    # Gửi [] -> xóa hết nhãn.
+    cleared = service.update_question(None, q.question_id, UpdateQuestionCommand(skill_ids=[], fields_set=frozenset({"skill_ids"})))
+    assert cleared.skill_ids == []
+
+    with pytest.raises(DomainValidationError):
+        service.update_question(None, q.question_id, UpdateQuestionCommand(skill_ids=["ghost-skill"], fields_set=frozenset({"skill_ids"})))
