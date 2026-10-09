@@ -303,11 +303,18 @@ def build_services(
 
     # Automated Job Ingestion Worker
     from .application.job_aggregator.worker import JobIngestionWorker
+    from .infrastructure.company_branding import SerperCompanyBrandingLookup
+    serper_key = getattr(settings, "serper_api_key", "")
+    branding_lookup = SerperCompanyBrandingLookup(
+        api_key=serper_key,
+        redis_client=redis_client,
+    ) if serper_key else None
     job_worker = JobIngestionWorker(
         session_factory=session_factory,
         redis_client=redis_client,
-        serper_api_key=getattr(settings, "serper_api_key", ""),
+        serper_api_key=serper_key,
         crawl_interval_seconds=3600,
+        branding_lookup=branding_lookup,
     )
 
     return ServiceContainer(

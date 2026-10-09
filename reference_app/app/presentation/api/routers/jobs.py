@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+import os
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -53,6 +54,7 @@ def _to_job_item_out(job: Any) -> JobItemOut:
             branding_source_url=job.company.branding_source_url,
             branding_license_url=job.company.branding_license_url,
             branding_reuse_allowed=branding_allowed,
+            branding_candidates=getattr(job.company, "branding_candidates", {}) or {},
             location=job.company.location,
         )
     return JobItemOut(
@@ -164,22 +166,35 @@ async def sync_jobs(
     session: Session = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
 ) -> dict[str, Any]:
-    if getattr(container, "job_worker", None):
-        stats = await container.job_worker.run_cycle(query=query)
-        return {"status": "ok", "stats": stats}
-
-    api_key = getattr(container.settings, "serper_api_key", "")
-    if not api_key:
-        import os
-        api_key = os.environ.get("SERPER_API_KEY", "")
-
+    api_key = getattr(container.settings, "serper_api_key", "") or os.environ.get("SERPER_API_KEY", "")
     service = JobAggregatorService(
         session=session,
         serper_api_key=api_key,
         redis_client=getattr(container, "redis_client", None),
     )
+    if getattr(container, "job_worker", None):
+        stats = await container.job_worker.run_cycle(query=query)
+        enriched = await service.backfill_missing_branding(limit=50)
+        return {"status": "ok", "stats": stats, "enriched_companies": enriched}
+
     saved = await service.run_ingestion(query=query)
-    return {"status": "ok", "synced_jobs": saved}
+    enriched = await service.backfill_missing_branding(limit=50)
+    return {"status": "ok", "synced_jobs": saved, "enriched_companies": enriched}
+
+
+@router.post("/backfill-branding", status_code=status.HTTP_200_OK)
+async def backfill_branding(
+    session: Session = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> dict[str, Any]:
+    api_key = getattr(container.settings, "serper_api_key", "") or os.environ.get("SERPER_API_KEY", "")
+    service = JobAggregatorService(
+        session=session,
+        serper_api_key=api_key,
+        redis_client=getattr(container, "redis_client", None),
+    )
+    enriched = await service.backfill_missing_branding(limit=50)
+    return {"status": "ok", "enriched_companies": enriched}
 
 
 @router.get("/{job_id}", response_model=JobDetailOut)

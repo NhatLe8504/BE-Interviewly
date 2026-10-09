@@ -21,6 +21,7 @@ class JobIngestionWorker:
         redis_client: Any = None,
         serper_api_key: str = "",
         crawl_interval_seconds: int = 3600,
+        branding_lookup: Any = None,
     ) -> None:
         self.session_factory = session_factory
         self.redis_client = redis_client
@@ -29,7 +30,7 @@ class JobIngestionWorker:
         self.lock_key = "interviewly:lock:job_ingestion"
         self.lock_ttl_seconds = 600
 
-        self.crawler_adapter = RecipeBasedCrawlerAdapter()
+        self.crawler_adapter = RecipeBasedCrawlerAdapter(branding_lookup=branding_lookup)
         self.is_running = False
         self._task: asyncio.Task[None] | None = None
         self.last_run_stats: dict[str, Any] = {
