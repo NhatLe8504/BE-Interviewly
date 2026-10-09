@@ -126,6 +126,8 @@ class JobReadinessEvaluator:
         must_scores: list[float] = []
         nice_scores: list[float] = []
         recommended_skills: list[str] = []
+        must_total = 0
+        must_known = 0
 
         all_specs = [(sid, "must") for sid in must_skill_ids] + [(sid, "nice") for sid in nice_skill_ids]
 
@@ -137,11 +139,17 @@ class JobReadinessEvaluator:
             u_level_num = LEVEL_NAME_TO_NUM.get(u_level, 0)
             u_confidence = user_est.confidence if user_est else 0.0
 
+            if importance == "must":
+                must_total += 1
+
             if u_level == "none" or u_confidence < 0.20:
                 status = "unknown"
+                cov = 0.0
                 recommended_skills.append(sid)
             else:
                 known_count += 1
+                if importance == "must":
+                    must_known += 1
                 diff = u_level_num - target_level_num
                 if diff >= 0:
                     status = "met"
@@ -155,10 +163,10 @@ class JobReadinessEvaluator:
                     cov = 0.0
                     recommended_skills.append(sid)
 
-                if importance == "must":
-                    must_scores.append(cov)
-                else:
-                    nice_scores.append(cov)
+            if importance == "must":
+                must_scores.append(cov)
+            else:
+                nice_scores.append(cov)
 
             items.append(
                 JobRequirementItem(
@@ -176,51 +184,61 @@ class JobReadinessEvaluator:
             )
 
         data_coverage = round(known_count / max(1, total_reqs), 2)
+        must_coverage = (must_known / must_total) if must_total else data_coverage
 
-        # Match calculation
-        if known_count == 0:
-            match_pct = 0
+        # Match: kỹ năng chưa có bằng chứng (unknown) tính 0 điểm và VẪN nằm
+        # trong mẫu số. Trước đây unknown bị loại khỏi mẫu số nên "đạt
+        # trong phần đã biết" bị đọc thành "đạt toàn bộ yêu cầu" (LOI #6).
+        must_avg = sum(must_scores) / len(must_scores) if must_scores else None
+        nice_avg = sum(nice_scores) / len(nice_scores) if nice_scores else None
+        if must_avg is not None and nice_avg is not None:
+            match_pct = round(100 * (0.75 * must_avg + 0.25 * nice_avg))
+        elif must_avg is not None:
+            match_pct = round(100 * must_avg)
+        elif nice_avg is not None:
+            match_pct = round(100 * nice_avg)
         else:
-            must_avg = sum(must_scores) / max(1, len(must_scores)) if must_scores else 1.0
-            nice_avg = sum(nice_scores) / max(1, len(nice_scores)) if nice_scores else 1.0
-            if must_scores and nice_scores:
-                match_pct = round(100 * (0.75 * must_avg + 0.25 * nice_avg))
-            elif must_scores:
-                match_pct = round(100 * must_avg)
-            else:
-                match_pct = round(100 * nice_avg)
+            match_pct = 0
 
-        # Verdict
-        has_must_gap = any(it.importance == "must" and it.status == "gap" for it in items)
-        if data_coverage < 0.35:
+        # Verdict: "ready" chỉ khi toàn bộ kỹ năng bắt buộc đã có bằng chứng
+        # đạt chuẩn và độ phủ dữ liệu không quá thấp (LOI #6).
+        must_items = [it for it in items if it.importance == "must"]
+        has_must_gap = any(it.status == "gap" for it in must_items)
+        must_all_met = all(it.status == "met" for it in must_items) if must_items else True
+        must_unresolved = any(it.status in ("unknown", "partial") for it in must_items)
+
+        if known_count == 0 or must_coverage < 0.5:
             verdict = "insufficient_data"
-        elif match_pct >= 75 and not has_must_gap:
+        elif match_pct >= 70 and must_all_met and data_coverage >= 0.5:
             verdict = "ready"
-        elif match_pct >= 50:
+        elif match_pct >= 45 and not has_must_gap:
             verdict = "almost"
         else:
             verdict = "not_ready"
 
         # Explanation
+        must_note = f" (yêu cầu bắt buộc: {must_known}/{must_total})" if must_total else ""
+
         if verdict == "insufficient_data":
             explanation = (
-                f"Hệ thống mới chỉ có dữ liệu {known_count}/{total_reqs} kỹ năng theo yêu cầu của công việc. "
+                f"Hệ thống mới có bằng chứng cho {known_count}/{total_reqs} kỹ năng của vị trí này{must_note}. "
                 "Hãy hoàn thành thêm các buổi luyện tập để AI đánh giá chính xác độ sẵn sàng của bạn."
             )
         elif verdict == "ready":
             explanation = (
-                f"Trình độ của bạn đáp ứng {match_pct}% yêu cầu chính của vị trí {job_title}. "
-                "Các kỹ năng cốt lõi đều đạt chuẩn, bạn hoàn toàn tự tin ứng tuyển hoặc luyện tập thêm một buổi trước khi vào vòng thật!"
+                f"Bạn đáp ứng {match_pct}% yêu cầu của vị trí {job_title} và đã có bằng chứng đạt toàn bộ kỹ năng bắt buộc. "
+                "Bạn có thể tự tin ứng tuyển, hoặc luyện thêm một buổi mô phỏng trước khi vào vòng thật."
             )
         elif verdict == "almost":
             explanation = (
-                f"Bạn đạt {match_pct}% độ tương thích với vị trí này. "
+                f"Bạn đạt {match_pct}% độ tương thích với vị trí này dựa trên {known_count}/{total_reqs} kỹ năng đã có bằng chứng{must_note}. "
                 "Bạn đã có nền tảng vững nhưng còn một vài kỹ năng cần củng cố thêm trước khi ứng tuyển."
             )
         else:
+            gap_note = " Bạn còn thiếu hoặc chưa đạt một số kỹ năng bắt buộc." if (has_must_gap or must_unresolved) else ""
             explanation = (
-                f"Độ tương thích hiện tại đạt {match_pct}%. "
-                "Vị trí này đòi hỏi cấp bậc và kỹ năng chuyên sâu hơn. Hãy ôn tập theo các kỹ năng được gợi ý bên dưới."
+                f"Độ tương thích hiện tại đạt {match_pct}% trên {known_count}/{total_reqs} kỹ năng đã có bằng chứng{must_note}.{gap_note} "
+                "Hãy ôn tập theo các kỹ năng được gợi ý bên dưới."
             )
 
         return JobReadinessAssessment(

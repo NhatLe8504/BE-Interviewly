@@ -62,3 +62,65 @@ def test_job_readiness_gap_cannot_be_ready():
     # Must gap exists (junior/beginner vs senior), verdict must not be ready
     assert assessment.verdict != "ready"
     assert "spring-boot" in assessment.recommended_skills or "java" in assessment.recommended_skills
+
+def test_unknown_requirements_stay_in_match_denominator():
+    """LOI #6: chỉ 2/5 yêu cầu có bằng chứng thì không được báo 100% hay ready."""
+    now = datetime.now(timezone.utc)
+    user_skills = {
+        "java": SkillEstimateResult("java", 3.2, "middle", 0.85, 5, 3, now),
+        "sql": SkillEstimateResult("sql", 3.2, "middle", 0.85, 5, 3, now),
+    }
+
+    assessment = JobReadinessEvaluator.evaluate(
+        job_id="test_job_loi6",
+        job_title="Backend Engineer",
+        job_seniority="mid",
+        skills_required=["Java", "SQL", "Kafka", "Docker", "Redis"],
+        technologies=[],
+        cleaned_jd_text="",
+        user_skills=user_skills,
+    )
+
+    assert assessment.match_percent == 40
+    assert assessment.data_coverage == 0.4
+    assert assessment.verdict == "insufficient_data"
+    unknown = {it.skill_id for it in assessment.requirements if it.status == "unknown"}
+    assert {"kafka", "docker", "redis"} <= unknown
+
+
+def test_ready_requires_verified_must_haves_and_real_coverage():
+    """Ready đòi hỏi mọi kỹ năng bắt buộc đã được kiểm chứng và độ phủ dữ liệu >= 50%."""
+    now = datetime.now(timezone.utc)
+    # Trường hợp 1: toàn bộ must-have đạt nhưng chỉ 1/4 kỹ năng có bằng chứng -> không ready.
+    thin = {
+        "java": SkillEstimateResult("java", 3.2, "middle", 0.85, 5, 3, now),
+    }
+    assessment = JobReadinessEvaluator.evaluate(
+        job_id="test_job_thin",
+        job_title="Backend Engineer",
+        job_seniority="mid",
+        skills_required=["Java"],
+        technologies=["Kafka", "Docker", "Redis"],
+        cleaned_jd_text="",
+        user_skills=thin,
+    )
+    assert assessment.match_percent == 75
+    assert assessment.verdict == "almost"
+
+    # Trường hợp 2: must-have đầy đủ bằng chứng, độ phủ 50% -> ready.
+    enough = {
+        "java": SkillEstimateResult("java", 3.2, "middle", 0.85, 5, 3, now),
+        "sql": SkillEstimateResult("sql", 3.2, "middle", 0.85, 5, 3, now),
+    }
+    assessment2 = JobReadinessEvaluator.evaluate(
+        job_id="test_job_enough",
+        job_title="Backend Engineer",
+        job_seniority="mid",
+        skills_required=["Java", "SQL"],
+        technologies=["Kafka", "Docker"],
+        cleaned_jd_text="",
+        user_skills=enough,
+    )
+    assert assessment2.verdict == "ready"
+    assert assessment2.match_percent == 75
+    assert assessment2.data_coverage == 0.5
