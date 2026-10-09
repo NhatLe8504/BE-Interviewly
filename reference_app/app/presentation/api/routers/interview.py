@@ -149,6 +149,15 @@ def submit_turn(
         )
         container.evaluation_service.evaluate_turn(session, eval_cmd)
 
+    if is_completed:
+        try:
+            from ....application.skills.service import UserSkillService
+            skill_svc = UserSkillService(session=session)
+            skill_svc.sync_from_interview_session(session_id)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("Failed to auto-track skills from interview session %s: %s", session_id, e)
+
     return TurnSubmitResultOut(
         submitted_turn=TurnOut(
             turn_id=saved_turn.turn_id,

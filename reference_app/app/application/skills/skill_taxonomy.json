@@ -27,7 +27,7 @@
     "aliases": [
       "python",
       "python3",
-      "py"
+      "py3"
     ]
   },
   {
@@ -39,8 +39,8 @@
       "devops"
     ],
     "aliases": [
-      "go",
       "golang",
+      "go language",
       "go-lang",
       "go lang"
     ]
@@ -56,7 +56,8 @@
     ],
     "aliases": [
       "typescript",
-      "ts"
+      "ts language",
+      "typescript lang"
     ]
   },
   {
@@ -368,8 +369,7 @@
     ],
     "aliases": [
       "react native",
-      "react-native",
-      "rn"
+      "react-native"
     ]
   },
   {
@@ -637,8 +637,7 @@
       "rest api",
       "restful",
       "restful api",
-      "rest apis",
-      "rest"
+      "rest apis"
     ]
   },
   {
@@ -720,6 +719,63 @@
       "authorization",
       "web security",
       "owasp"
+    ]
+  },
+  {
+    "id": "problem-solving",
+    "name": "Problem Solving & Debugging",
+    "category": "concept",
+    "role_tracks": [
+      "backend",
+      "frontend",
+      "fullstack",
+      "devops",
+      "mobile"
+    ],
+    "aliases": [
+      "problem solving",
+      "troubleshooting",
+      "debugging",
+      "root cause analysis",
+      "giai quyet van de"
+    ]
+  },
+  {
+    "id": "communication",
+    "name": "Communication & Teamwork",
+    "category": "concept",
+    "role_tracks": [
+      "backend",
+      "frontend",
+      "fullstack",
+      "devops",
+      "data",
+      "mobile"
+    ],
+    "aliases": [
+      "communication",
+      "team collaboration",
+      "soft skills",
+      "giao tiep",
+      "lam viec nhom"
+    ]
+  },
+  {
+    "id": "machine-learning",
+    "name": "Machine Learning & AI",
+    "category": "concept",
+    "role_tracks": [
+      "ai_ml",
+      "data",
+      "backend"
+    ],
+    "aliases": [
+      "machine learning",
+      "deep learning",
+      "rag",
+      "llm",
+      "retrieval augmented generation",
+      "artificial intelligence"
     ]
   }
 ]

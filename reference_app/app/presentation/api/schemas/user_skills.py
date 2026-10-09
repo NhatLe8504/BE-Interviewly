@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 from pydantic import BaseModel, Field
 
@@ -12,6 +13,19 @@ class SkillLevelItemOut(BaseModel):
     confidence: float
     evidence_count: int
     max_difficulty_passed: int
+
+
+class SkillEvidenceItemOut(BaseModel):
+    id: int
+    skill_id: str
+    source_type: str
+    source_id: str
+    score: float
+    question_difficulty: int
+    grader_confidence: float
+    evidence_quote: str | None = None
+    input_mode: str = "text"
+    created_at: datetime
 
 
 class UserCareerProfileOut(BaseModel):

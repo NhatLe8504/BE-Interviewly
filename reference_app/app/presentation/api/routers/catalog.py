@@ -527,6 +527,13 @@ def save_practice_history(
         questions_summary=summary_str,
     )
     saved = container.catalog_service.repo.save_practice_history(session, record)
+    if user_id:
+        try:
+            from ....application.skills.service import UserSkillService
+            skill_svc = UserSkillService(session=session)
+            skill_svc.sync_from_practice_history_record(saved)
+        except Exception as e:
+            logger.warning("Failed to auto-track skills from practice history: %s", e)
     parsed_summary = []
     if saved.questions_summary:
         try:

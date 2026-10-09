@@ -14,7 +14,7 @@ from ....application.skills.service import UserSkillService
 from ....application.skills.taxonomy import get_default_taxonomy
 from ..dependencies import get_container, get_current_user_id, get_session
 from ..schemas.profile import ChangePasswordIn, MessageOut, ProfileOut, ProfileUpdateIn
-from ..schemas.user_skills import SkillLevelItemOut, UserCareerProfileOut
+from ..schemas.user_skills import SkillEvidenceItemOut, SkillLevelItemOut, UserCareerProfileOut
 
 router = APIRouter(prefix="/api/v1/profile", tags=["profile"])
 
@@ -55,7 +55,7 @@ def get_my_skill_profile(
 
     return UserCareerProfileOut(
         user_id=user_id,
-        primary_role_track=career_rec.primary_role_track if career_rec else "backend",
+        primary_role_track=career_rec.primary_role_track if career_rec else None,
         secondary_role_track=career_rec.secondary_role_track if career_rec else None,
         role_confidence=float(career_rec.role_confidence) if career_rec else 0.0,
         overall_level=career_rec.overall_level if career_rec else "none",
@@ -107,3 +107,28 @@ def change_my_password(
         ),
     )
     return MessageOut(message="Password changed successfully")
+
+
+@router.get("/skills/{skill_id}/evidence", response_model=list[SkillEvidenceItemOut])
+def get_my_skill_evidence(
+    skill_id: str,
+    user_id: int = Depends(get_current_user_id),
+    session: Session = Depends(get_session),
+) -> list[SkillEvidenceItemOut]:
+    skill_svc = UserSkillService(session=session)
+    evs = skill_svc.get_skill_evidence(user_id, skill_id)
+    return [
+        SkillEvidenceItemOut(
+            id=e.id,
+            skill_id=e.skill_id,
+            source_type=e.source_type,
+            source_id=e.source_id,
+            score=float(e.score),
+            question_difficulty=e.question_difficulty,
+            grader_confidence=float(e.grader_confidence),
+            evidence_quote=e.evidence_quote,
+            input_mode=e.input_mode,
+            created_at=e.created_at,
+        )
+        for e in evs
+    ]
