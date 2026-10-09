@@ -44,8 +44,10 @@ class VoiceInterviewOrchestrator:
         selected_stages: list[str] | None = None,
         questions_per_stage: dict[str, int] | None = None,
         session_factory: Any = None,
+        evaluation_service: Any = None,
     ) -> None:
         self.session_factory = session_factory
+        self.evaluation_service = evaluation_service
         self.current_intent_ctx: QuestionIntentContext | None = None
         self.session_id = session_id
         self.connection = connection
@@ -77,6 +79,7 @@ class VoiceInterviewOrchestrator:
         self.conversation_history: list[dict[str, str]] = []
         self._initial_opening_text: str | None = None
         self._has_unvoiced_opening: bool = False
+        self._background_tasks: set[asyncio.Task] = set()
 
         self._load_existing_turns_from_db()
 
@@ -155,9 +158,26 @@ class VoiceInterviewOrchestrator:
         finally:
             db.close()
 
-    def _persist_ai_turn(self, turn_id: int, message_text: str) -> None:
+    async def _emit_question_context(self) -> None:
+        if self.current_intent_ctx and self.connection.is_open():
+            await self.connection.send_event({
+                "type": VoiceEventType.QUESTION_CONTEXT.value,
+                "question_id": self.current_intent_ctx.question_id,
+                "topic_label": self.current_intent_ctx.topic_label,
+                "stage_key": self.current_intent_ctx.stage_key,
+                "difficulty": self.current_intent_ctx.difficulty,
+            })
+
+    def _persist_ai_turn(
+        self,
+        turn_id: int,
+        message_text: str,
+        intent_ctx: QuestionIntentContext | None = None,
+    ) -> None:
         if not self.session_factory or not message_text.strip():
             return
+        question_id = intent_ctx.question_id if intent_ctx else None
+        stage_key = intent_ctx.stage_key if intent_ctx else None
         db = self.session_factory()
         try:
             from ...infrastructure.persistence.models.session import InterviewTurn as OrmInterviewTurn
@@ -171,6 +191,8 @@ class VoiceInterviewOrchestrator:
                 existing.message_text = message_text.strip()
                 existing.speaker = TurnSpeaker.ai
                 existing.audio_url = "voice_streamed"
+                if question_id is not None:
+                    existing.question_id = int(question_id)
             else:
                 turn_rec = OrmInterviewTurn(
                     session_id=self.session_id,
@@ -178,8 +200,14 @@ class VoiceInterviewOrchestrator:
                     speaker=TurnSpeaker.ai,
                     message_text=message_text.strip(),
                     audio_url="voice_streamed",
+                    question_id=int(question_id) if question_id is not None else None,
                 )
                 db.add(turn_rec)
+            if question_id is not None and stage_key:
+                # Câu hỏi ngân hàng đã thực sự được hỏi ở lượt này.
+                QuestionSelectionService.mark_selection_used(
+                    db, self.session_id, stage_key, int(question_id), turn_id,
+                )
             db.commit()
             self._has_unvoiced_opening = False
         except Exception as exc:
@@ -399,14 +427,7 @@ class VoiceInterviewOrchestrator:
 
         # Resolve intent for current stage if DB session is available
         self._resolve_next_intent()
-        if self.current_intent_ctx and self.connection.is_open():
-            await self.connection.send_event({
-                "type": VoiceEventType.QUESTION_CONTEXT.value,
-                "question_id": self.current_intent_ctx.question_id,
-                "topic_label": self.current_intent_ctx.topic_label,
-                "stage_key": self.current_intent_ctx.stage_key,
-                "difficulty": self.current_intent_ctx.difficulty,
-            })
+        await self._emit_question_context()
 
         # Broadcast conversation history if available
         if self.conversation_history and self.connection.is_open():
@@ -517,6 +538,15 @@ class VoiceInterviewOrchestrator:
             else:
                 is_session_finishing = True
 
+        # Resolve câu hỏi ngân hàng kế tiếp TRƯỚC khi sinh câu hỏi mới để lượt
+        # được liên kết thật với question_bank (hoặc None nếu không có).
+        if not is_session_finishing:
+            self._resolve_next_intent(exclude_used=True)
+            await self._emit_question_context()
+
+        # Chấm điểm + tracking câu trả lời vừa gửi, chạy nền để không chặn hội thoại.
+        self._schedule_answer_evaluation(self.current_turn_id, clean_text)
+
         # Spawn background LLM streaming + sentence TTS pipeline
         self._active_task = asyncio.create_task(
             self._run_llm_and_tts_pipeline(
@@ -546,6 +576,8 @@ class VoiceInterviewOrchestrator:
                 })
 
             await self.set_state(VoiceSessionState.THINK)
+            self._resolve_next_intent(exclude_used=True)
+            await self._emit_question_context()
             prompt = self._build_opening_question()
             self._active_task = asyncio.create_task(
                 self._stream_predefined_text(prompt),
@@ -657,6 +689,7 @@ class VoiceInterviewOrchestrator:
         self.current_turn_id = turn_id
         gen_id = f"gen_{self.session_id}_{turn_id}_{self._generation_counter}"
         self.current_generation_id = gen_id
+        turn_intent = self.current_intent_ctx
 
         splitter = StreamingSentenceSplitter(min_sentence_chars=12)
         full_ai_response: list[str] = []
@@ -735,7 +768,7 @@ class VoiceInterviewOrchestrator:
                 final_text = "".join(full_ai_response).strip()
                 if final_text:
                     self.conversation_history.append({"role": "assistant", "content": final_text})
-                    self._persist_ai_turn(turn_id, final_text)
+                    self._persist_ai_turn(turn_id, final_text, turn_intent)
 
                 if is_session_finishing:
                     await self.set_state(VoiceSessionState.COMPLETED)
@@ -822,6 +855,7 @@ class VoiceInterviewOrchestrator:
         gen_id = f"gen_{self.session_id}_{self.current_turn_id}_{self._generation_counter}"
         self.current_generation_id = gen_id
         turn_id = self.current_turn_id
+        turn_intent = self.current_intent_ctx
 
         try:
             splitter = StreamingSentenceSplitter(min_sentence_chars=12)
@@ -849,7 +883,7 @@ class VoiceInterviewOrchestrator:
 
             if not self.is_generation_cancelled(gen_id):
                 self.conversation_history.append({"role": "assistant", "content": text})
-                self._persist_ai_turn(turn_id, text)
+                self._persist_ai_turn(turn_id, text, turn_intent)
                 if self.connection.is_open():
                     await self.connection.send_event({
                         "type": VoiceEventType.DONE.value,
@@ -874,7 +908,7 @@ class VoiceInterviewOrchestrator:
                 })
             await self.set_state(VoiceSessionState.LISTEN)
 
-    def _resolve_next_intent(self) -> None:
+    def _resolve_next_intent(self, *, exclude_used: bool = False) -> None:
         if not self.session_factory:
             return
         cur_stage = self.get_current_stage()
@@ -899,30 +933,37 @@ class VoiceInterviewOrchestrator:
                         chosen = items[idx]
 
                     if chosen:
+                        # Câu hỏi sinh từ kịch bản JD, KHÔNG thuộc ngân hàng câu hỏi
+                        # -> không gắn question_id để tránh gán kỹ năng sai.
                         self.current_intent_ctx = QuestionIntentContext(
-                            question_id=int(chosen.get("order_index", 1)),
+                            question_id=None,
                             intent=chosen.get("question_text", ""),
                             stage_key=cur_stage.id,
                             difficulty=int(chosen.get("difficulty", 3)),
                             topic_label=chosen.get("competency_name") or chosen.get("section_type", "Chuyên môn"),
-                            expected_signals=chosen.get("expected_signals", []),
-                            red_flags=chosen.get("red_flags", []),
-                            sample_answer=chosen.get("sample_good_answer", ""),
                         )
                         return
             except Exception:
                 pass
 
+            exclude_used_ids = (
+                QuestionSelectionService.get_used_question_ids(db, self.session_id)
+                if exclude_used else []
+            )
             intents = QuestionSelectionService.sample_questions_for_stage(
                 session=db,
                 session_id=self.session_id,
                 stage_key=cur_stage.id,
                 source_mode="auto_random",
                 target_count=1,
+                exclude_used_ids=exclude_used_ids,
             )
             if intents:
                 self.current_intent_ctx = intents[0]
                 db.commit()
+            else:
+                # Hết câu hỏi phù hợp -> để AI hỏi tự do, KHÔNG liên kết bừa.
+                self.current_intent_ctx = None
         except Exception:
             db.rollback()
         finally:
@@ -934,7 +975,12 @@ class VoiceInterviewOrchestrator:
         and restarting AI generation.
         """
         await self.cancel_current_generation()
-        if not self.session_factory or not self.current_intent_ctx:
+        if (
+            not self.session_factory
+            or not self.current_intent_ctx
+            or self.current_intent_ctx.question_id is None
+        ):
+            # Chỉ reroll được câu hỏi đến từ ngân hàng câu hỏi.
             return
 
         db = self.session_factory()
@@ -944,7 +990,7 @@ class VoiceInterviewOrchestrator:
                 session=db,
                 session_id=self.session_id,
                 stage_key=cur_stage.id,
-                current_question_id=self.current_intent_ctx.question_id,
+                current_question_id=int(self.current_intent_ctx.question_id),
             )
             if new_intent:
                 self.current_intent_ctx = new_intent
@@ -969,8 +1015,82 @@ class VoiceInterviewOrchestrator:
         finally:
             db.close()
 
+    def _schedule_answer_evaluation(self, turn_number: int, answer_text: str) -> None:
+        if not self.session_factory or not self.evaluation_service:
+            return
+        task = asyncio.create_task(
+            self._evaluate_and_track_answer(turn_number, answer_text),
+        )
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
+    async def _evaluate_and_track_answer(self, turn_number: int, answer_text: str) -> None:
+        try:
+            await asyncio.to_thread(
+                self._evaluate_and_track_answer_sync, turn_number, answer_text,
+            )
+        except Exception as exc:
+            logging.getLogger("VoiceOrchestrator").warning(
+                "Failed to evaluate answer for turn #%d: %s", turn_number, exc,
+            )
+
+    def _evaluate_and_track_answer_sync(self, turn_number: int, answer_text: str) -> None:
+        if not self.session_factory or not self.evaluation_service:
+            return
+        if getattr(self.evaluation_service, "evaluator", None) is None:
+            return
+        db = self.session_factory()
+        try:
+            from ...infrastructure.persistence.models.session import InterviewTurn as OrmInterviewTurn
+            from ..evaluation.commands import EvaluateTurnCommand
+
+            turn_rec = (
+                db.query(OrmInterviewTurn)
+                .filter_by(session_id=self.session_id, turn_number=turn_number)
+                .first()
+            )
+            if turn_rec is None or not (turn_rec.message_text or "").strip():
+                return
+            self.evaluation_service.evaluate_turn(
+                db,
+                EvaluateTurnCommand(
+                    session_id=self.session_id,
+                    turn_id=turn_rec.turn_id,
+                    question_text=turn_rec.message_text.strip(),
+                    answer_text=answer_text,
+                    role_name=self.role_name,
+                    level=self.level,
+                    language=self.language,
+                ),
+            )
+            if turn_rec.question_id:
+                from ..skills.service import UserSkillService
+                UserSkillService(session=db).sync_interview_turn(self.session_id, turn_number)
+        finally:
+            db.close()
+
+    def _schedule_session_tracking_sync(self) -> None:
+        if not self.session_factory:
+            return
+        task = asyncio.create_task(asyncio.to_thread(self._sync_session_tracking_sync))
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
+    def _sync_session_tracking_sync(self) -> None:
+        db = self.session_factory()
+        try:
+            from ..skills.service import UserSkillService
+            UserSkillService(session=db).sync_from_interview_session(self.session_id)
+        except Exception as exc:
+            logging.getLogger("VoiceOrchestrator").warning(
+                "Failed to sync session tracking #%d: %s", self.session_id, exc,
+            )
+        finally:
+            db.close()
+
     async def handle_stop_session(self) -> None:
         await self.cancel_current_generation()
+        self._schedule_session_tracking_sync()
         await self.set_state(VoiceSessionState.COMPLETED)
         if self.connection.is_open():
             await self.connection.send_event({

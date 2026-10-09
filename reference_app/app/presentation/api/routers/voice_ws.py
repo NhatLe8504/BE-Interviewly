@@ -168,6 +168,7 @@ async def handle_voice_websocket_session(
         voice="vi-VN-HoaiMyNeural" if language == "vi" else "en-US-JennyNeural",
         system_prompt=None,
         session_factory=session_factory,
+        evaluation_service=getattr(container, "evaluation_service", None),
     )
 
     try:
