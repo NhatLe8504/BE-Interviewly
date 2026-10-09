@@ -26,7 +26,11 @@
   },
   "job_id_extraction": {
     "type": "numeric_or_code",
-    "priority": ["job_id", "code", "slug"]
+    "priority": [
+      "job_id",
+      "code",
+      "slug"
+    ]
   },
   "detail": {
     "fetch_method": "http_get",
@@ -40,6 +44,41 @@
       "description_html": "description",
       "requirements_html": "requirement"
     }
+  },
+  "company_branding": {
+    "collection_enabled": true,
+    "reuse_allowed": true,
+    "license_url": "https://career.vng.com.vn",
+    "reject_asset_patterns": [
+      "placeholder",
+      "default[-_]logo",
+      "default[-_]cover"
+    ],
+    "allowed_page_hosts": [
+      "career.vng.com.vn"
+    ],
+    "allowed_image_hosts": [
+      "d20fxs96r49620.cloudfront.net"
+    ],
+    "company_url_from_job_pattern": "https://career\\.vng\\.com\\.vn/.*",
+    "company_url_template": "https://career.vng.com.vn/vi/tim-kiem-viec-lam",
+    "company_page_path_pattern": "/(?:vi/)?tim-kiem-viec-lam/?",
+    "serper_query_template": "site:career.vng.com.vn \"VNG Careers\" \"{company_name}\"",
+    "company_name_selectors": [
+      "meta[property='og:title']"
+    ],
+    "company_aliases": {
+      "vng corporation": [
+        "VNG Careers"
+      ]
+    },
+    "logo_selectors": [
+      "img[alt='VNG Career Site Header']"
+    ],
+    "banner_selectors": [
+      "img[alt='banner']"
+    ],
+    "serper_image_query_template": "site:career.vng.com.vn {company_name}"
   },
   "normalization_rules": {
     "key_format": "vng:{company}:{title}:{job_id}",

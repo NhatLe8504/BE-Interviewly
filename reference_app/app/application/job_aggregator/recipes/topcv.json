@@ -85,9 +85,22 @@
         "heading_selector": ".title, h3, .job-description__item--title",
         "content_selector": ".text, .job-description__item--content",
         "mappings": {
-          "description": ["mô tả", "mô tả công việc", "job description"],
-          "requirements": ["yêu cầu", "yêu cầu ứng viên", "skills", "requirements"],
-          "benefits": ["quyền lợi", "quyền lợi được hưởng", "benefits"]
+          "description": [
+            "mô tả",
+            "mô tả công việc",
+            "job description"
+          ],
+          "requirements": [
+            "yêu cầu",
+            "yêu cầu ứng viên",
+            "skills",
+            "requirements"
+          ],
+          "benefits": [
+            "quyền lợi",
+            "quyền lợi được hưởng",
+            "benefits"
+          ]
         }
       },
       "deadline": {
@@ -99,6 +112,65 @@
         "attribute": "text"
       }
     }
+  },
+  "company_branding": {
+    "collection_enabled": true,
+    "reuse_allowed": true,
+    "license_url": "https://www.topcv.vn/dieu-khoan-su-dung",
+    "reject_asset_patterns": [
+      "placeholder",
+      "default[-_]logo",
+      "default[-_]cover"
+    ],
+    "allowed_page_hosts": [
+      "www.topcv.vn",
+      "topcv.vn"
+    ],
+    "allowed_image_hosts": [
+      "cdn-new.topcv.vn",
+      "cdn.topcv.vn",
+      "static.topcv.vn"
+    ],
+    "company_page_path_pattern": "/cong-ty/[^/]+/[0-9]+\\.html",
+    "company_link_selectors": [
+      ".job-detail__company a[href*='/cong-ty/']",
+      "a.company[href*='/cong-ty/']"
+    ],
+    "serper_query_template": "site:topcv.vn/cong-ty/ \"{company_name}\"",
+    "detail_company_name_selectors": [
+      ".name-company",
+      ".company-name a",
+      ".company-name"
+    ],
+    "company_name_selectors": [
+      "h1",
+      ".company-title",
+      ".company-name"
+    ],
+    "logo_selectors": [
+      ".job-detail__company .logo img",
+      ".company-logo img",
+      ".company-image-logo img"
+    ],
+    "banner_selectors": [
+      ".company-cover img",
+      ".cover-company img",
+      ".company-cover"
+    ],
+    "serper_image_query_template": "site:topcv.vn {company_name}",
+    "logo_patterns": [
+      "company_logos",
+      "pictureofcompany",
+      "logo",
+      "avatar"
+    ],
+    "banner_patterns": [
+      "company_covers",
+      "company_profile",
+      "cover",
+      "cms",
+      "banner"
+    ]
   },
   "normalization_rules": {
     "key_format": "topcv:{company}:{title}:{job_id}",
