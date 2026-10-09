@@ -20,7 +20,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.application.skills.question_tagger import audit_question, suggest_skill_ids_with_llm
+from app.application.skills.question_tagger import audit_question
+from app.infrastructure.llm.question_tagging import suggest_skill_ids_with_llm
 from app.config import Settings
 from app.infrastructure.database import create_engine_from_url
 from app.infrastructure.persistence.models.catalog import QuestionBank

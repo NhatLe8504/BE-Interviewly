@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-import re
 from dataclasses import dataclass, field
 
 from .taxonomy import SkillTaxonomy, get_default_taxonomy
@@ -60,7 +58,7 @@ def audit_question(
 ) -> QuestionTagAudit:
     """Soi nhãn kỹ năng của một câu hỏi dựa trên bằng chứng văn bản.
 
-    - Nhãn công nghệ chỉ được giữ/ thêm khi xuất hiện trong câu hỏi.
+    - Nhãn công nghệ chỉ được giữ/thêm khi xuất hiện trong câu hỏi.
     - Nhãn kỹ năng mềm được giữ cho câu hỏi hành vi/tình huống,
       không tự thêm mới.
     - Id lạ (không có trong taxonomy) bị loại khỏi DB.
@@ -106,61 +104,3 @@ def build_tagging_prompt(question_text: str, taxonomy: SkillTaxonomy | None = No
         "Trả về JSON đúng định dạng {\"skill_ids\": [\"id1\", \"id2\"]}. "
         "Chỉ gắn những kỹ năng mà câu hỏi thực sự kiểm tra; nếu không chắc thì trả về danh sách rỗng."
     )
-
-
-def _extract_json_ids(content: str) -> list[str]:
-    if not content:
-        return []
-    match = re.search(r"\{.*\}", content, re.DOTALL)
-    if not match:
-        return []
-    try:
-        data = json.loads(match.group(0))
-    except Exception:
-        return []
-    raw = data.get("skill_ids")
-    if not isinstance(raw, list):
-        return []
-    return [item for item in raw if isinstance(item, str)]
-
-
-def suggest_skill_ids_with_llm(
-    question_text: str,
-    *,
-    taxonomy: SkillTaxonomy | None = None,
-    base_url: str,
-    api_key: str,
-    model: str,
-    timeout: float = 30.0,
-) -> list[str]:
-    """Gọi LLM để gợi ý nhãn, sau đó chỉ giữ id hợp lệ trong taxonomy.
-
-    Kết quả chỉ dùng để người dùng rà lại; hàm này không ghi DB.
-    """
-    taxonomy = taxonomy or get_default_taxonomy()
-    import httpx
-
-    resp = httpx.post(
-        base_url.rstrip("/") + "/chat/completions",
-        headers={"Authorization": f"Bearer {api_key}"},
-        json={
-            "model": model,
-            "messages": [{"role": "user", "content": build_tagging_prompt(question_text, taxonomy)}],
-            "temperature": 0,
-        },
-        timeout=timeout,
-    )
-    resp.raise_for_status()
-    payload = resp.json()
-    content = ""
-    try:
-        content = payload["choices"][0]["message"]["content"]
-    except (KeyError, IndexError, TypeError):
-        return []
-
-    valid: list[str] = []
-    for raw_id in _extract_json_ids(content):
-        sid = taxonomy.normalize_skill_id(raw_id)
-        if sid and sid not in valid:
-            valid.append(sid)
-    return valid
