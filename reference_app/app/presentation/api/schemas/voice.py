@@ -76,3 +76,33 @@ class VoiceInterruptedOut(BaseModel):
     type: Literal["interrupted"] = "interrupted"
     generation_id: str
     turn_id: int
+
+
+class VoiceOptionItem(BaseModel):
+    id: str
+    name: str
+    provider: str
+    language: str
+    gender: str
+    description: str
+    is_default: bool = False
+    is_premium: bool = False
+    is_locked: bool = False
+    lock_reason: str | None = None
+
+
+class STTEngineItem(BaseModel):
+    id: str
+    name: str
+    provider: str
+    description: str
+    is_default: bool = False
+    is_premium: bool = False
+    is_locked: bool = False
+    lock_reason: str | None = None
+
+
+class VoiceOptionsOut(BaseModel):
+    is_premium_user: bool
+    voices: list[VoiceOptionItem]
+    stt_engines: list[STTEngineItem]

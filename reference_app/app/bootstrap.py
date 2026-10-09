@@ -137,6 +137,7 @@ from .infrastructure.report.reportlab_pdf import ReportLabPdfGenerator
 from .infrastructure.security import JwtTokenService, Pbkdf2PasswordHasher
 from .infrastructure.speech.text_analyzer import RegexSpeechTextAnalyzer
 from .infrastructure.tts.edge_tts_adapter import EdgeTTSAdapter
+from .infrastructure.tts.elevenlabs_adapter import ElevenLabsTTSAdapter
 from .infrastructure.storage.cloudinary_storage import CloudinaryStorageService
 
 
@@ -302,8 +303,10 @@ def build_services(
     cache_service = CacheService(cache=cache_adapter)
 
 
-    # Edge TTS
-    tts_adapter = EdgeTTSAdapter()
+    # Edge & ElevenLabs TTS
+    edge_tts = EdgeTTSAdapter()
+    eleven_key = getattr(settings, "elevenlabs_api_key", "")
+    tts_adapter = ElevenLabsTTSAdapter(api_key=eleven_key, fallback_adapter=edge_tts)
 
     # Automated Job Ingestion Worker
     from .application.job_aggregator.worker import JobIngestionWorker
