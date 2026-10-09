@@ -37,11 +37,13 @@ Qua rà soát trực tiếp bảng dữ liệu PostgreSQL và mã nguồn kiến
      $$\text{score}_{\text{norm}} = \frac{\text{overall\_score}}{10.0}$$
 2. **Module Luyện tập theo bộ đề (`practice_history`)**:
    - `average_score`: Lưu kiểu `NUMERIC(5,2)` trong đoạn **0.00 đến 100.00**.
-   - `questions_summary`: Lưu mảng JSON các object:
-     `{"question_id": int, "question_text": str, "score": float, "passed": bool}`
-     Trường `score` ở đây nằm trong thang **0.0 đến 100.0** (hoặc 0..1 nếu normalized).
-   - Công thức chuẩn hóa về thang `[0.0, 1.0]`:
-     $$\text{score}_{\text{norm}} = \begin{cases} \frac{\text{score}}{100.0} & \text{nếu score} > 1.0 \\ \text{score} & \text{nếu score} \le 1.0 \end{cases}$$
+   - `questions_summary`: mảng JSON các object:
+     `{"question_id": int, "question_text": str, "score": float, "passed": bool, "evaluation_ids": [int]}`
+     Trường `score` là điểm hiển thị phía client, thang **0.0 đến 100.0**.
+   - **Chỉ dùng bằng chứng đã xác minh (P1-3)**: `score` trong `questions_summary` KHÔNG được dùng để ghi `user_skill_evidence`. Evidence chỉ lấy từ bảng `practice_evaluations` — nơi server (LLM evaluator) tự lưu đánh giá kèm câu trả lời thật — thông qua `evaluation_ids`, sau khi kiểm tra đúng `user_id` và đúng `question_id`.
+   - Công thức chuẩn hóa bằng chứng:
+     $$\text{score}_{\text{norm}} = \frac{\sum \text{part\_score}}{\sum \text{part\_max}} \quad \text{(clamp } [0.0, 1.0] \text{)}$$
+     Không còn nhánh "nếu score ≤ 1.0 thì giữ nguyên": mọi điểm practice theo thang 0–100, điểm 1/100 = 1% (trước đây bị hiểu thành 100%).
 3. **Module Phỏng vấn theo JD (`interview_scripts`)**:
    - `interview_scripts.items`: Chứa JSON mảng các câu hỏi phỏng vấn được sinh theo JD.
    - Mỗi item chứa tiêu chí đánh giá, độ khó và danh sách kỹ năng mục tiêu.
