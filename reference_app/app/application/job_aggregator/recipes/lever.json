@@ -11,7 +11,12 @@
   "listing": {
     "url_template": "https://api.lever.co/v0/postings/{company_handle}?mode=json",
     "method": "GET",
-    "supported_companies": ["palantir", "linear", "deliveroo", "reddit"],
+    "supported_companies": [
+      "palantir",
+      "linear",
+      "deliveroo",
+      "reddit"
+    ],
     "json_paths": {
       "root": "$",
       "job_id": "id",
@@ -36,6 +41,43 @@
       "lists[].text",
       "lists[].content"
     ]
+  },
+  "company_branding": {
+    "collection_enabled": true,
+    "reuse_allowed": true,
+    "license_url": "https://jobs.lever.co",
+    "reject_asset_patterns": [
+      "placeholder",
+      "default[-_]logo",
+      "default[-_]cover"
+    ],
+    "allowed_page_hosts": [
+      "jobs.lever.co"
+    ],
+    "allowed_image_hosts": [
+      "lever-client-logos.s3-us-west-2.amazonaws.com",
+      "lever-client-logos.s3.us-west-2.amazonaws.com"
+    ],
+    "company_url_from_job_pattern": "https://jobs\\.lever\\.co/(?P<board>[^/?]+)(?:/[^?]+)?(?:\\?.*)?",
+    "company_url_template": "https://jobs.lever.co/{board}",
+    "company_page_path_pattern": "/[^/]+/?",
+    "serper_query_template": "site:jobs.lever.co \"{company_name}\"",
+    "company_name_selectors": [
+      "title",
+      "meta[property='og:title']"
+    ],
+    "identity_clean_pattern": "\\s+jobs$",
+    "company_aliases": {
+      "palantir": [
+        "Palantir Technologies"
+      ]
+    },
+    "logo_selectors": [
+      ".main-header-logo img",
+      "meta[property='og:image']"
+    ],
+    "banner_selectors": [],
+    "serper_image_query_template": "site:jobs.lever.co {company_name}"
   },
   "normalization_rules": {
     "key_format": "lever:{company}:{title}:{job_id}",

@@ -46,7 +46,11 @@
   },
   "job_id_extraction": {
     "type": "slug_or_data_key",
-    "priority": ["data-job-key", "slug_suffix", "slug"]
+    "priority": [
+      "data-job-key",
+      "slug_suffix",
+      "slug"
+    ]
   },
   "detail": {
     "fetch_method": "http_get",
@@ -76,7 +80,10 @@
         "attribute": "text"
       },
       "section_headings": {
-        "selectors": ["h2", "h3"],
+        "selectors": [
+          "h2",
+          "h3"
+        ],
         "known_sections": [
           "Top 3 reasons to join us",
           "Job description",
@@ -84,6 +91,57 @@
         ]
       }
     }
+  },
+  "company_branding": {
+    "collection_enabled": true,
+    "reuse_allowed": true,
+    "license_url": "https://itviec.com/terms-and-conditions",
+    "reject_asset_patterns": [
+      "placeholder",
+      "default[-_]logo",
+      "default[-_]cover"
+    ],
+    "allowed_page_hosts": [
+      "itviec.com",
+      "www.itviec.com"
+    ],
+    "allowed_image_hosts": [
+      "itviec.com",
+      "www.itviec.com"
+    ],
+    "company_page_path_pattern": "/companies/[^/]+/?",
+    "company_link_selectors": [
+      "a[href^='/companies/']"
+    ],
+    "serper_query_template": "site:itviec.com/companies/ \"{company_name}\"",
+    "detail_company_name_selectors": [
+      ".employer-name",
+      ".company-name"
+    ],
+    "company_name_selectors": [
+      "h1"
+    ],
+    "logo_selectors": [
+      "img.employer-logo",
+      "img[alt$='Big Logo']"
+    ],
+    "banner_selectors": [
+      ".photo-grid img[alt*='Office']",
+      ".photo-grid img"
+    ],
+    "serper_image_query_template": "site:itviec.com {company_name}",
+    "logo_patterns": [
+      "logo",
+      "avatar",
+      "employer-logo"
+    ],
+    "banner_patterns": [
+      "photo-grid",
+      "office",
+      "001.jpg",
+      "LOW_",
+      "cover"
+    ]
   },
   "normalization_rules": {
     "key_format": "itviec:{company}:{title}:{job_id}",

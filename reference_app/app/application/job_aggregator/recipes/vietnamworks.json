@@ -54,6 +54,60 @@
       "pointer_content_template": "{ptr}:T[0-9a-f]+,(.*?)(?:\\\\\\\\n|\\\",\\[|$)"
     }
   },
+  "company_branding": {
+    "collection_enabled": true,
+    "reuse_allowed": true,
+    "license_url": "https://www.vietnamworks.com/terms-of-use",
+    "reject_asset_patterns": [
+      "placeholder",
+      "default[-_]logo",
+      "default[-_]cover"
+    ],
+    "allowed_page_hosts": [
+      "www.vietnamworks.com",
+      "vietnamworks.com"
+    ],
+    "allowed_image_hosts": [
+      "images.vietnamworks.com",
+      "images02.vietnamworks.com"
+    ],
+    "company_page_path_pattern": "/nha-tuyen-dung/[^/]+/?",
+    "company_link_selectors": [
+      "a[href*='/nha-tuyen-dung/']"
+    ],
+    "serper_query_template": "site:vietnamworks.com/nha-tuyen-dung/ \"{company_name}\"",
+    "structured_media": {
+      "company_name_field": "companyName",
+      "logo_fields": [
+        "companyLogoURL",
+        "companyLogo"
+      ],
+      "banner_fields": [
+        "jobImageURLs"
+      ]
+    },
+    "asset_path_patterns": {
+      "company_logo_url": [
+        "/pictureofcompany/"
+      ],
+      "company_banner_url": [
+        "/company_profile/"
+      ]
+    },
+    "serper_image_query_template": "site:vietnamworks.com {company_name}",
+    "logo_patterns": [
+      "pictureofcompany",
+      "logo",
+      "kms-logo"
+    ],
+    "banner_patterns": [
+      "company_profile",
+      "companyprofile",
+      "our-story",
+      "banner",
+      "cover"
+    ]
+  },
   "normalization_rules": {
     "key_format": "vietnamworks:{company}:{title}:{job_id}",
     "source_badge": "via VietnamWorks",

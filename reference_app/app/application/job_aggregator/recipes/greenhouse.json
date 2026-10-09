@@ -11,7 +11,12 @@
   "listing": {
     "url_template": "https://boards-api.greenhouse.io/v1/boards/{board_token}/jobs?content=true",
     "method": "GET",
-    "supported_boards": ["canonical", "gitlab", "cloudflare", "stripe"],
+    "supported_boards": [
+      "canonical",
+      "gitlab",
+      "cloudflare",
+      "stripe"
+    ],
     "json_paths": {
       "root": "jobs",
       "job_id": "id",
@@ -34,6 +39,48 @@
       "location": "location.name",
       "description": "content"
     }
+  },
+  "company_branding": {
+    "collection_enabled": true,
+    "reuse_allowed": true,
+    "license_url": "https://job-boards.greenhouse.io",
+    "reject_asset_patterns": [
+      "placeholder",
+      "default[-_]logo",
+      "default[-_]cover"
+    ],
+    "allowed_page_hosts": [
+      "job-boards.greenhouse.io",
+      "boards.greenhouse.io"
+    ],
+    "allowed_image_hosts": [
+      "recruiting.cdn.greenhouse.io",
+      "s8-recruiting.cdn.greenhouse.io"
+    ],
+    "company_url_from_job_pattern": "https://(?:job-boards|boards)\\.greenhouse\\.io/(?P<board>[^/?]+)(?:/jobs/[^?]+)?(?:\\?.*)?",
+    "company_url_template": "https://job-boards.greenhouse.io/{board}",
+    "company_page_path_pattern": "/[^/]+/?",
+    "serper_query_template": "site:job-boards.greenhouse.io \"{company_name}\"",
+    "company_name_selectors": [
+      "meta[property='og:title']"
+    ],
+    "identity_clean_pattern": "^Jobs at\\s+",
+    "logo_selectors": [
+      "img[alt$=' Logo']",
+      "meta[property='og:image']"
+    ],
+    "banner_selectors": [
+      "img.banner"
+    ],
+    "asset_path_patterns": {
+      "company_logo_url": [
+        "/logos/"
+      ],
+      "company_banner_url": [
+        "/banners/"
+      ]
+    },
+    "serper_image_query_template": "site:job-boards.greenhouse.io {company_name}"
   },
   "normalization_rules": {
     "key_format": "greenhouse:{board}:{title}:{job_id}",

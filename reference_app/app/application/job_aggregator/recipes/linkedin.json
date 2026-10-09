@@ -49,7 +49,11 @@
     "direct_page_template": "https://www.linkedin.com/jobs/view/{job_id}",
     "fields": {
       "title": {
-        "selectors": ["h1", "h2", ".top-card-layout__title"],
+        "selectors": [
+          "h1",
+          "h2",
+          ".top-card-layout__title"
+        ],
         "attribute": "text"
       },
       "company": {
@@ -74,6 +78,37 @@
         "text_selector": ".description__job-criteria-text"
       }
     }
+  },
+  "company_branding": {
+    "collection_enabled": false,
+    "reuse_allowed": false,
+    "license_url": "",
+    "reject_asset_patterns": [
+      "placeholder",
+      "default[-_]logo",
+      "default[-_]cover"
+    ],
+    "allowed_page_hosts": [
+      "www.linkedin.com"
+    ],
+    "allowed_image_hosts": [
+      "media.licdn.com"
+    ],
+    "company_page_path_pattern": "/company/[^/]+/?",
+    "company_link_selectors": [
+      "a.topcard__org-name-link"
+    ],
+    "detail_company_name_selectors": [
+      "a.topcard__org-name-link"
+    ],
+    "company_name_selectors": [
+      "h1"
+    ],
+    "logo_selectors": [
+      ".top-card-layout__entity-image"
+    ],
+    "banner_selectors": [],
+    "serper_image_query_template": "site:linkedin.com/company/ {company_name}"
   },
   "normalization_rules": {
     "key_format": "linkedin:{company}:{title}:{job_id}",
