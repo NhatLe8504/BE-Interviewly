@@ -30,6 +30,7 @@ def build_follow_up_user_prompt(
     last_answer: str,
     turn_number: int,
     is_final_turn: bool = False,
+    seed_intent: str | None = None,
 ) -> str:
     if is_final_turn:
         return (
@@ -39,12 +40,18 @@ def build_follow_up_user_prompt(
             "Hãy đưa ra một nhận xét ngắn gọn mang tính động viên và một câu hỏi kết thúc tổng kết hoặc cảm ơn ứng viên đã hoàn thành buổi phỏng vấn."
         )
 
-    return (
+    prompt = (
         f"Lượt phỏng vấn số: {turn_number}.\n"
         f"Câu hỏi bạn vừa hỏi: '{last_question}'\n"
         f"Câu trả lời của ứng viên: '{last_answer}'\n\n"
         "Dựa vào câu trả lời trên, hãy đặt một câu hỏi follow-up tiếp theo thật sắc bén, đào sâu vào kỹ năng thực tế của ứng viên. Chỉ trả về nội dung câu hỏi mới, không lặp lại lời chào."
     )
+    if seed_intent and seed_intent.strip():
+        prompt += (
+            f"\n\nCÂU HỎI TIẾP THEO BẮT BUỘC phải kiểm tra năng lực/chủ đề: \"{seed_intent.strip()}\". "
+            "Hãy diễn đạt thành tình huống thực tế gắn với câu trả lời vừa rồi, không đọc nguyên văn câu hỏi hạt giống."
+        )
+    return prompt
 
 
 def build_rubric_evaluator_system_prompt(language: str = "vi") -> str:

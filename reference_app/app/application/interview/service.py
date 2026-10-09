@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import select, func
 from ...infrastructure.persistence.models.session_plan import InterviewSessionConfig
 from .question_selection import QuestionSelectionService
-from .intent_composer import QuestionIntentComposer
+from .intent_composer import QuestionIntentComposer, QuestionIntentContext
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -110,8 +110,10 @@ class InterviewService:
             turn_number=1,
             question_text=first_question,
             speaker=TurnSpeaker.ai.value,
+            question_id=first_intent.question_id if first_intent else None,
         )
         created_turn = self.turns.add_turn(session, turn_item)
+        self._mark_question_used(session, created_session.session_id, first_intent, 1)
         return created_session, created_turn
 
     def _validate_selected_questions(
@@ -189,6 +191,14 @@ class InterviewService:
         next_turn_number = command.turn_number + 1
         is_next_final = next_turn_number >= MAX_INTERVIEW_TURNS
 
+        next_intent = None if is_next_final else self._resolve_intent_for_turn(
+            session=session,
+            session_id=command.session_id,
+            turn_number=next_turn_number,
+            domain_id=existing_session.domain_id,
+            role_id=existing_session.role_id,
+        )
+
         next_question = self.llm.generate_follow_up(
             history=history,
             last_question=turn.question_text,
@@ -198,6 +208,7 @@ class InterviewService:
             level=level,
             language=language,
             is_final_turn=is_next_final,
+            seed_intent=next_intent.intent if next_intent else None,
         )
 
         next_turn = InterviewTurn(
@@ -206,9 +217,81 @@ class InterviewService:
             turn_number=next_turn_number,
             question_text=next_question,
             speaker=TurnSpeaker.ai.value,
+            question_id=next_intent.question_id if next_intent else None,
         )
         created_next_turn = self.turns.add_turn(session, next_turn)
+        self._mark_question_used(session, command.session_id, next_intent, next_turn_number)
         return saved_turn, created_next_turn, False
+
+    def _resolve_intent_for_turn(
+        self,
+        session: Any,
+        session_id: int,
+        turn_number: int,
+        domain_id: int | None = None,
+        role_id: int | None = None,
+    ) -> QuestionIntentContext | None:
+        """Chọn câu hỏi ngân hàng cho lượt kế tiếp.
+
+        Ưu tiên câu hỏi đã được lên kế hoạch cho stage (pool tạo lúc start);
+        nếu hết pool thì sample thêm, loại trừ câu đã hỏi. Trả None khi không
+        có DB/ngân hàng câu hỏi để KHÔNG gán liên kết giả.
+        """
+        if session is None or not hasattr(session, "execute"):
+            return None
+        config = self._config_for_turn(session, session_id, turn_number)
+        stage_key = str(config.stage_key) if config is not None else "technical"
+        intent = QuestionSelectionService.take_planned_selection(
+            session, session_id, stage_key,
+        )
+        if intent is not None:
+            return intent
+        used_ids = QuestionSelectionService.get_used_question_ids(session, session_id)
+        intents = QuestionSelectionService.sample_questions_for_stage(
+            session=session,
+            session_id=session_id,
+            stage_key=stage_key,
+            source_mode=str(config.source_mode) if config is not None else "auto_random",
+            target_count=1,
+            selected_question_ids=(
+                list(config.selected_question_ids or []) if config is not None else None
+            ),
+            domain_id=domain_id,
+            role_id=role_id,
+            exclude_used_ids=used_ids,
+        )
+        return intents[0] if intents else None
+
+    @staticmethod
+    def _config_for_turn(session: Any, session_id: int, turn_number: int) -> Any | None:
+        configs = list(
+            session.execute(
+                select(InterviewSessionConfig)
+                .where(InterviewSessionConfig.session_id == session_id)
+                .order_by(InterviewSessionConfig.stage_order.asc())
+            ).scalars().all()
+        )
+        if not configs:
+            return None
+        cumulative = 0
+        for cfg in configs:
+            cumulative += int(cfg.max_turns or 1)
+            if turn_number <= cumulative:
+                return cfg
+        return configs[-1]
+
+    @staticmethod
+    def _mark_question_used(
+        session: Any, session_id: int, intent: QuestionIntentContext | None, turn_number: int,
+    ) -> None:
+        if intent is None or intent.question_id is None or session is None:
+            return
+        if not hasattr(session, "execute"):
+            return
+        QuestionSelectionService.mark_selection_used(
+            session, session_id, intent.stage_key, intent.question_id, turn_number,
+        )
+        session.commit()
 
     def complete_session(
         self, session: Any, command: CompleteSessionCommand, total_score: Decimal | None = None,

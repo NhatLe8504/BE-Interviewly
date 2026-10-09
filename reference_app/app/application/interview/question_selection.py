@@ -107,22 +107,88 @@ class QuestionSelectionService:
                 was_rerolled=False,
             )
             session.add(record)
-
-            intent_text = q.intent or q.question_text
-            contexts.append(
-                QuestionIntentContext(
-                    question_id=q.question_id,
-                    intent=intent_text,
-                    stage_key=stage_key,
-                    difficulty=q.difficulty or 3,
-                    question_type=q.question_type.value if hasattr(q.question_type, "value") else str(q.question_type),
-                    raw_question_text=q.question_text,
-                    topic_label=intent_text[:60] + ("..." if len(intent_text) > 60 else ""),
-                )
-            )
+            contexts.append(cls._context_from_question(q, stage_key))
 
         session.flush()
         return contexts
+
+    @staticmethod
+    def _context_from_question(question: QuestionBank, stage_key: str) -> QuestionIntentContext:
+        intent_text = question.intent or question.question_text
+        return QuestionIntentContext(
+            question_id=int(question.question_id),
+            intent=intent_text,
+            stage_key=stage_key,
+            difficulty=question.difficulty or 3,
+            question_type=question.question_type.value if hasattr(question.question_type, "value") else str(question.question_type),
+            raw_question_text=question.question_text,
+            topic_label=intent_text[:60] + ("..." if len(intent_text) > 60 else ""),
+        )
+
+    @staticmethod
+    def get_used_question_ids(session: Any, session_id: int) -> list[int]:
+        """Các câu hỏi ngân hàng đã thực sự được hỏi (gắn vào một lượt) trong session."""
+        stmt = select(SessionQuestionSelection.question_id).where(
+            SessionQuestionSelection.session_id == session_id,
+            SessionQuestionSelection.used_at_turn.is_not(None),
+        )
+        return [int(qid) for qid in session.execute(stmt).scalars().all()]
+
+    @classmethod
+    def take_planned_selection(
+        cls, session: Any, session_id: int, stage_key: str,
+    ) -> QuestionIntentContext | None:
+        """Lấy câu hỏi chưa dùng sớm nhất trong số câu hỏi đã được lên kế hoạch cho stage.
+
+        Dùng cho luồng text: session tạo sẵn một pool câu hỏi theo stage config,
+        mỗi lượt lấy lần lượt từ pool thay vì random lại.
+        """
+        stmt = (
+            select(SessionQuestionSelection)
+            .where(
+                SessionQuestionSelection.session_id == session_id,
+                SessionQuestionSelection.stage_key == stage_key,
+                SessionQuestionSelection.used_at_turn.is_(None),
+                SessionQuestionSelection.was_rerolled == False,  # noqa: E712
+            )
+            .order_by(SessionQuestionSelection.selection_order.asc())
+        )
+        selection = session.execute(stmt).scalars().first()
+        if selection is None:
+            return None
+        question = session.get(QuestionBank, selection.question_id)
+        if (
+            question is None
+            or not question.is_active
+            or question.moderation_status != QuestionModerationStatus.approved
+        ):
+            return None
+        return cls._context_from_question(question, stage_key)
+
+    @staticmethod
+    def mark_selection_used(
+        session: Any,
+        session_id: int,
+        stage_key: str,
+        question_id: int,
+        turn_number: int,
+    ) -> bool:
+        """Đánh dấu câu hỏi ngân hàng đã được hỏi ở lượt `turn_number` (idempotent)."""
+        stmt = (
+            select(SessionQuestionSelection)
+            .where(
+                SessionQuestionSelection.session_id == session_id,
+                SessionQuestionSelection.stage_key == stage_key,
+                SessionQuestionSelection.question_id == question_id,
+                SessionQuestionSelection.used_at_turn.is_(None),
+            )
+            .order_by(SessionQuestionSelection.selection_order.asc())
+        )
+        selection = session.execute(stmt).scalars().first()
+        if selection is None:
+            return False
+        selection.used_at_turn = int(turn_number)
+        return True
 
     @classmethod
     def reroll_question(
@@ -172,13 +238,4 @@ class QuestionSelectionService:
         session.add(new_record)
         session.flush()
 
-        intent_text = new_q.intent or new_q.question_text
-        return QuestionIntentContext(
-            question_id=new_q.question_id,
-            intent=intent_text,
-            stage_key=stage_key,
-            difficulty=new_q.difficulty or 3,
-            question_type=new_q.question_type.value if hasattr(new_q.question_type, "value") else str(new_q.question_type),
-            raw_question_text=new_q.question_text,
-            topic_label=intent_text[:60] + ("..." if len(intent_text) > 60 else ""),
-        )
+        return cls._context_from_question(new_q, stage_key)

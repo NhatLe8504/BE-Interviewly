@@ -6,7 +6,7 @@ from typing import Any
 
 @dataclass(frozen=True)
 class QuestionIntentContext:
-    question_id: int
+    question_id: int | None
     intent: str
     stage_key: str
     difficulty: int = 3

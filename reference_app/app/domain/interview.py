@@ -135,6 +135,7 @@ class InterviewTurn:
     duration_seconds: float = 0.0
     audio_url: str | None = None
     speaker: str = TurnSpeaker.candidate.value
+    question_id: int | None = None
 
     def __post_init__(self) -> None:
         if self.session_id <= 0:
@@ -164,4 +165,5 @@ class InterviewTurn:
             duration_seconds=duration_seconds,
             audio_url=audio_url,
             speaker=self.speaker,
+            question_id=self.question_id,
         )

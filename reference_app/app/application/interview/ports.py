@@ -56,6 +56,7 @@ class LLMInterviewerPort(Protocol):
         level: str,
         language: str = "vi",
         is_final_turn: bool = False,
+        seed_intent: str | None = None,
     ) -> str:
         ...
 

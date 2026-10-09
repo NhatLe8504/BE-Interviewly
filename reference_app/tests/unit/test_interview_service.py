@@ -94,7 +94,8 @@ class FakeLLMInterviewer:
         return f"Tell me about your experience as a {role}."
 
     def generate_follow_up(
-        self, history, last_question, last_answer, turn_number, role, level, language="vi", is_final_turn=False,
+        self, history, last_question, last_answer, turn_number, role, level, language="vi",
+        is_final_turn=False, seed_intent=None,
     ) -> str:
         if is_final_turn:
             return "Thank you, this concludes our interview."
