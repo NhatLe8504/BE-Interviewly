@@ -108,14 +108,6 @@ async def list_jobs(
     container: ServiceContainer = Depends(get_container),
 ) -> JobListResponse:
     effective_tech = technology
-    if sort_by == "match" and not effective_tech and user_id and user_id > 0:
-        skill_svc = UserSkillService(session=session)
-        prof = skill_svc.get_user_career_profile(user_id)
-        if prof and prof.top_skills:
-            # Boost primary top skill as default filter hint if none selected
-            top_sids = [s.get("skill_id") for s in prof.top_skills if s.get("skill_id")]
-            if top_sids:
-                effective_tech = top_sids[0]
 
     service = JobAggregatorService(
         session=session,
@@ -163,6 +155,15 @@ def get_filter_metadata(
         {"value": "title_asc", "label": "Tiêu đề A-Z"},
     ]
     return JobFilterMetadataOut(**filters)
+
+
+@router.get("/sync/status")
+def get_sync_status(
+    container: ServiceContainer = Depends(get_container),
+) -> dict[str, Any]:
+    if getattr(container, "job_worker", None):
+        return container.job_worker.last_run_stats
+    return {"status": "unsupported", "message": "Worker not attached"}
 
 
 @router.post("/sync", status_code=status.HTTP_200_OK)

@@ -80,7 +80,7 @@ class UserCareerProfileRecord(Base):
     user_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("users.user_id", ondelete="CASCADE"), primary_key=True,
     )
-    primary_role_track: Mapped[str] = mapped_column(String(50), nullable=False, default="backend")
+    primary_role_track: Mapped[str | None] = mapped_column(String(50), nullable=True, default=None)
     secondary_role_track: Mapped[str | None] = mapped_column(String(50), nullable=True)
     role_confidence: Mapped[Decimal] = mapped_column(Numeric(4, 2), nullable=False, default=Decimal("0.00"))
     overall_level: Mapped[str] = mapped_column(String(20), nullable=False, default="none")
