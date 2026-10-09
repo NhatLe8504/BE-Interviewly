@@ -31,7 +31,7 @@ class SkillEstimateResult:
 
 @dataclass
 class CareerProfileResult:
-    primary_role_track: str
+    primary_role_track: str | None
     secondary_role_track: str | None
     role_confidence: float
     overall_level: str
@@ -164,7 +164,7 @@ class SkillLevelEstimator:
                     track_scores[tr] += weight
 
         sorted_tracks = sorted(track_scores.items(), key=lambda x: x[1], reverse=True)
-        primary_track = "backend"
+        primary_track = None
         secondary_track = None
         role_confidence = 0.0
 
@@ -207,7 +207,7 @@ class SkillLevelEstimator:
         # Overall level: median level of top 5 skills in primary track
         track_skills = [
             s for s in sorted_by_ability
-            if taxonomy.get_skill(s.skill_id) and primary_track in taxonomy.get_skill(s.skill_id).role_tracks
+            if taxonomy.get_skill(s.skill_id) and (primary_track and primary_track in taxonomy.get_skill(s.skill_id).role_tracks)
         ]
         overall_level = "none"
         if track_skills:

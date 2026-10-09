@@ -16,7 +16,7 @@ class SkillLevelItemOut(BaseModel):
 
 class UserCareerProfileOut(BaseModel):
     user_id: int
-    primary_role_track: str
+    primary_role_track: str | None = None
     secondary_role_track: str | None = None
     role_confidence: float = 0.0
     overall_level: str = "none"

@@ -18,7 +18,7 @@ from ...infrastructure.persistence.models.user_skills import (
     UserSkillLevelRecord,
 )
 from .estimator import EvidenceInput, SkillEstimateResult, SkillLevelEstimator
-from .readiness import JobReadinessAssessment, JobReadinessEvaluator
+from .readiness import JobReadinessAssessment, JobReadinessEvaluator, JobRequirementItem
 from .taxonomy import get_default_taxonomy
 
 logger = logging.getLogger(__name__)
@@ -167,8 +167,7 @@ class UserSkillService:
 
     def get_user_career_profile(self, user_id: int) -> UserCareerProfileRecord | None:
         rec = self.session.get(UserCareerProfileRecord, user_id)
-        if not rec or (not rec.top_skills and rec.overall_level == "none"):
-            self.sync_from_practice_history(user_id)
+        if not rec:
             return self.recalculate_user_skills(user_id)
         return rec
 
@@ -299,26 +298,15 @@ class UserSkillService:
             raw_score = float(eval_rec.overall_score) if eval_rec.overall_score is not None else 5.0
             norm_score = max(0.0, min(1.0, raw_score / 10.0))
 
-            # Determine skills for this turn
+            # Determine skills for this turn from pre-tagged question bank
             extracted_skills: list[str] = []
             if turn.question_id:
                 qb = self.session.get(QuestionBank, turn.question_id)
-                if qb:
-                    if getattr(qb, "skill_ids", None):
-                        extracted_skills.extend(qb.skill_ids)
-                    if not extracted_skills and qb.question_text:
-                        for s in self.taxonomy.extract_skills_from_text(qb.question_text):
-                            extracted_skills.append(s.id)
-
-            if not extracted_skills and turn.message_text:
-                for s in self.taxonomy.extract_skills_from_text(turn.message_text):
-                    extracted_skills.append(s.id)
-
-            # If still none, check domain
-            if not extracted_skills and session_rec.domain:
-                d_skills = self.taxonomy.get_skills_for_role(session_rec.domain.domain_name.lower())
-                if d_skills:
-                    extracted_skills.append(d_skills[0].id)
+                if qb and getattr(qb, "skill_ids", None):
+                    for sid in qb.skill_ids:
+                        norm_sid = self.taxonomy.normalize_skill_id(sid)
+                        if norm_sid:
+                            extracted_skills.append(norm_sid)
 
             for sid in set(extracted_skills):
                 self.record_evidence(
@@ -351,19 +339,31 @@ class UserSkillService:
             except Exception:
                 continue
             for q in items:
-                q_text = q.get("question_text", "")
+                qid = q.get("question_id")
+                if not qid:
+                    continue
+                try:
+                    qid_int = int(qid)
+                except (ValueError, TypeError):
+                    continue
+                q_rec = self.session.get(QuestionBank, qid_int)
+                if not q_rec or not q_rec.skill_ids:
+                    continue
                 raw_score = float(q.get("score", 0))
                 norm_score = max(0.0, min(1.0, raw_score / 100.0 if raw_score > 1.0 else raw_score))
-                skills = self.taxonomy.extract_skills_from_text(q_text)
-                for s in skills:
-                    qid = q.get("question_id", "0")
+                diff = q_rec.difficulty or 2
+                q_text = q_rec.question_text or q.get("question_text", "")
+                for sid in q_rec.skill_ids:
+                    norm_sid = self.taxonomy.normalize_skill_id(sid)
+                    if not norm_sid:
+                        continue
                     self.record_evidence(
                         user_id=user_id,
-                        skill_id=s.id,
+                        skill_id=norm_sid,
                         source_type="practice_history",
-                        source_id=f"hist_{h.history_id}_q_{qid}",
+                        source_id=f"hist_{h.history_id}_q_{qid_int}",
                         score=norm_score,
-                        question_difficulty=2,
+                        question_difficulty=diff,
                         grader_confidence=0.85,
                         evidence_quote=q_text[:250],
                     )
