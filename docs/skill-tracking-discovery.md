@@ -83,7 +83,7 @@ Qua rà soát trực tiếp bảng dữ liệu PostgreSQL và mã nguồn kiến
 
 - Endpoint thật: `POST https://api.typesafe.ai/v1/systemone` với body `{model, state, questions}`; response `{model, answers, usage}`. Jev không có kiểu trả lời văn bản tự do — chỉ `score` / `choice` / `noul`.
 - `JevSystemOneAdapter` dựng `state` giới hạn (tối đa 12 requirement, JD excerpt 700 ký tự, chỉ kỹ năng thuộc JD) và các câu hỏi:
-  - `overall_match`: score 0–10 → `match_percent = score × 10`.
+  - `overall_match`: score 0–9 (API giới hạn tối đa 10 mức điểm) → `match_percent = score / 9 × 100`.
   - `verdict`: choice `ready | almost | not_ready | insufficient_data`.
   - `skill__<skill_id>`: score 0–5 (0 = không có bằng chứng, 3 = đạt yêu cầu) cho tối đa 6 kỹ năng must-have.
 - Diễn giải tiếng Việt được soạn cục bộ từ dữ liệu cấu trúc (không thêm một LLM call thứ hai).

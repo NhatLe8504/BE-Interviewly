@@ -80,6 +80,7 @@ def test_adapter_http_round_trip(systemone_server):
     assert set(received["payload"]["questions"]) == {"overall_match", "verdict", "skill__python", "skill__sql"}
 
     assert result is not None
-    assert result.match_percent == 50
+    # Thang điểm tổng 0..9 -> 5/9 = 56%.
+    assert result.match_percent == 56
     assert result.verdict == "almost"
     assert result.skill_ratings["python"].status == "met"

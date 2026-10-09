@@ -29,19 +29,20 @@ MAX_SKILL_QUESTIONS = 6
 MAX_REQUIREMENTS_IN_STATE = 12
 MAX_JD_EXCERPT_CHARS = 700
 
-# 11 mức 0..10 cho câu hỏi điểm tổng (match_percent = score * 10).
+# 10 mức 0..9 cho câu hỏi điểm tổng (API giới hạn tối đa 10 mức).
+# match_percent = score / 9 * 100.
+OVERALL_MATCH_MAX_SCORE = 9.0
 OVERALL_MATCH_CRITERIA: tuple[str, ...] = (
     "0 - No verified evidence for any requirement.",
     "1 - Isolated evidence only; every must-have skill is far below the required level.",
     "2 - Sparse evidence; most must-have skills are far below the required level.",
-    "3 - About one third of must-have skills roughly at level; major must-have gaps remain.",
+    "3 - Around one third of must-have skills roughly at level; major must-have gaps remain.",
     "4 - Around half of must-have skills at level; several must-have skills still below the required level.",
     "5 - Most must-have skills at level; a few must-have gaps remain.",
-    "6 - Most must-have skills at level; one or two small must-have gaps remain.",
-    "7 - All must-have skills at level; nice-to-have skills partially below level.",
-    "8 - All must-have skills at level with solid surplus; most nice-to-have skills covered.",
-    "9 - All requirements at or above level, verified by consistent evidence.",
-    "10 - Every requirement clearly exceeded with strong, consistent verified evidence.",
+    "6 - All must-have skills at level; nice-to-have skills partially below level.",
+    "7 - All must-have skills at level with solid surplus; most nice-to-have skills covered.",
+    "8 - All requirements at or above level, verified by consistent evidence.",
+    "9 - Every requirement clearly exceeded with strong, consistent verified evidence.",
 )
 
 VERDICT_CHOICES: dict[str, str] = {
@@ -266,12 +267,12 @@ class JevSystemOneAdapter:
         if not isinstance(answers, dict):
             return None
 
-        overall = self._read_score(answers.get("overall_match"), 0.0, 10.0)
+        overall = self._read_score(answers.get("overall_match"), 0.0, OVERALL_MATCH_MAX_SCORE)
         if overall is None:
             logger.warning("Jev response has no usable 'overall_match' score answer")
             return None
         overall_score, confidence = overall
-        match_percent = int(round(min(max(overall_score, 0.0), 10.0) * 10))
+        match_percent = int(round(min(max(overall_score, 0.0), OVERALL_MATCH_MAX_SCORE) / OVERALL_MATCH_MAX_SCORE * 100))
 
         verdict = self._read_choice(answers.get("verdict"))
         if verdict not in VERDICT_CHOICES:
