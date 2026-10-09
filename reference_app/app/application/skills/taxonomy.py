@@ -7,6 +7,12 @@ import re
 from typing import Any
 
 
+# Alias quá ngắn/generic vẫn được chấp nhận khi người dùng gứi đúng từ khóa
+# (normalize_skill) nhưng KHÔNG được quét trong văn bản tự do, vì sẽ khớp nhầm
+# (ví dụ "go" trong "go to our careers page" bị gán thành ngôn ngữ Go).
+SCAN_EXCLUDED_ALIASES = frozenset({"go"})
+
+
 @dataclass(frozen=True)
 class SkillDefinition:
     id: str
@@ -73,7 +79,7 @@ class SkillTaxonomy:
         # Sort aliases by length descending to match multi-word phrases first (e.g. 'spring boot' before 'spring')
         sorted_aliases = sorted(self._alias_map.items(), key=lambda x: len(x[0]), reverse=True)
         for alias, skill_id in sorted_aliases:
-            if skill_id in found:
+            if skill_id in found or alias in SCAN_EXCLUDED_ALIASES:
                 continue
             # Word boundary regex
             pattern = r"(?:\b|\A)" + re.escape(alias) + r"(?:\b|\Z)"
