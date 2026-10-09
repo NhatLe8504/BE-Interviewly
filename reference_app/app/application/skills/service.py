@@ -339,45 +339,72 @@ class UserSkillService:
         recorded = 0
 
         for turn in session_rec.turns:
-            answer_text = (turn.transcribed_text or "").strip()
-            if not answer_text:
-                continue
-
-            eval_rec = getattr(turn, "evaluation", None)
-            if not eval_rec or eval_rec.overall_score is None:
-                continue
-
-            if not turn.question_id:
-                # Không xác định được câu hỏi -> bỏ qua thay vì gán kỹ năng sai.
-                continue
-
-            qb = self.session.get(QuestionBank, turn.question_id)
-            if not qb or not qb.skill_ids:
-                continue
-
-            raw_score = float(eval_rec.overall_score)  # constraint DB: 0..10
-            norm_score = max(0.0, min(1.0, raw_score / 10.0))
-            diff = qb.difficulty or 3
-
-            for sid in set(qb.skill_ids):
-                norm_sid = self.taxonomy.normalize_skill_id(sid)
-                if not norm_sid:
-                    continue
-                self.record_evidence(
-                    user_id=user_id,
-                    skill_id=norm_sid,
-                    source_type="interview_session",
-                    source_id=f"session_{session_id}_turn_{turn.turn_id}",
-                    score=norm_score,
-                    question_difficulty=diff,
-                    grader_confidence=0.90,
-                    evidence_quote=answer_text[:300],
-                    input_mode="voice" if turn.audio_url else "text",
-                )
-                recorded += 1
+            recorded += self._record_turn_evidence(user_id, session_id, turn)
 
         if recorded > 0:
             self.recalculate_user_skills(user_id)
+        return recorded
+
+    def sync_interview_turn(self, session_id: int, turn_number: int) -> int:
+        """Ghi bằng chứng cho MỘT lượt đã được server chấm điểm.
+
+        Dùng cho luồng voice/JD realtime: mỗi câu trả lời được đánh giá và
+        đồng bộ ngay, không cần chờ kết thúc buổi phỏng vấn.
+        """
+        session_rec = self.session.get(InterviewSession, session_id)
+        if not session_rec or not session_rec.candidate_id:
+            return 0
+        turn = next(
+            (t for t in session_rec.turns if int(t.turn_number) == int(turn_number)),
+            None,
+        )
+        if turn is None:
+            return 0
+        recorded = self._record_turn_evidence(
+            session_rec.candidate_id, session_id, turn,
+        )
+        if recorded > 0:
+            self.recalculate_user_skills(session_rec.candidate_id)
+        return recorded
+
+    def _record_turn_evidence(self, user_id: int, session_id: int, turn: Any) -> int:
+        answer_text = (turn.transcribed_text or "").strip()
+        if not answer_text:
+            return 0
+
+        eval_rec = getattr(turn, "evaluation", None)
+        if not eval_rec or eval_rec.overall_score is None:
+            return 0
+
+        if not turn.question_id:
+            # Không xác định được câu hỏi -> bỏ qua thay vì gán kỹ năng sai.
+            return 0
+
+        qb = self.session.get(QuestionBank, turn.question_id)
+        if not qb or not qb.skill_ids:
+            return 0
+
+        raw_score = float(eval_rec.overall_score)  # constraint DB: 0..10
+        norm_score = max(0.0, min(1.0, raw_score / 10.0))
+        diff = qb.difficulty or 3
+
+        recorded = 0
+        for sid in set(qb.skill_ids):
+            norm_sid = self.taxonomy.normalize_skill_id(sid)
+            if not norm_sid:
+                continue
+            self.record_evidence(
+                user_id=user_id,
+                skill_id=norm_sid,
+                source_type="interview_session",
+                source_id=f"session_{session_id}_turn_{turn.turn_id}",
+                score=norm_score,
+                question_difficulty=diff,
+                grader_confidence=0.90,
+                evidence_quote=answer_text[:300],
+                input_mode="voice" if turn.audio_url else "text",
+            )
+            recorded += 1
         return recorded
 
     @staticmethod
