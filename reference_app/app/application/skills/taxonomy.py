@@ -9,8 +9,9 @@ from typing import Any
 
 # Alias quá ngắn/generic vẫn được chấp nhận khi người dùng gứi đúng từ khóa
 # (normalize_skill) nhưng KHÔNG được quét trong văn bản tự do, vì sẽ khớp nhầm
-# (ví dụ "go" trong "go to our careers page" bị gán thành ngôn ngữ Go).
-SCAN_EXCLUDED_ALIASES = frozenset({"go"})
+# (ví dụ "go" trong "go to our careers page" bị gán thành Go, hoặc "js"
+# trong "Next.js" bị gán thành JavaScript).
+SCAN_EXCLUDED_ALIASES = frozenset({"go", "js"})
 
 
 @dataclass(frozen=True)
