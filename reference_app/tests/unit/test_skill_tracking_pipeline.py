@@ -238,6 +238,52 @@ def test_interview_sync_voice_mode_when_audio_present():
     assert svc.record_evidence.call_args_list[0].kwargs["input_mode"] == "voice"
 
 
+def test_sync_interview_turn_records_only_requested_turn():
+    turn_1 = MagicMock()
+    turn_1.turn_id = 5
+    turn_1.turn_number = 1
+    turn_1.transcribed_text = ANSWER
+    turn_1.question_id = 20
+    turn_1.audio_url = None
+    turn_1.evaluation.overall_score = None  # lượt 1 chưa được chấm
+
+    turn_2 = MagicMock()
+    turn_2.turn_id = 6
+    turn_2.turn_number = 2
+    turn_2.transcribed_text = ANSWER
+    turn_2.question_id = 20
+    turn_2.audio_url = "voice_streamed"
+    turn_2.evaluation.overall_score = Decimal("8.0")
+
+    session_rec = MagicMock()
+    session_rec.candidate_id = 27
+    session_rec.turns = [turn_1, turn_2]
+
+    session = MagicMock()
+    session.get.side_effect = lambda model, key: session_rec if key == 99 else _question(["sql"])
+    svc = _service(session)
+
+    assert svc.sync_interview_turn(99, 2) == 1
+    kwargs = svc.record_evidence.call_args_list[0].kwargs
+    assert kwargs["source_id"] == "session_99_turn_6"
+    assert kwargs["input_mode"] == "voice"
+    assert kwargs["score"] == pytest.approx(0.8)
+
+
+def test_sync_interview_turn_absent_turn_is_noop():
+    session_rec = MagicMock()
+    session_rec.candidate_id = 27
+    session_rec.turns = []
+
+    session = MagicMock()
+    session.get.side_effect = lambda model, key: session_rec if key == 99 else None
+    svc = _service(session)
+
+    assert svc.sync_interview_turn(99, 3) == 0
+    svc.record_evidence.assert_not_called()
+    svc.recalculate_user_skills.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # Quiz: điểm trắc nghiệm phải xác minh từ quiz_data, không tin client
 # ---------------------------------------------------------------------------
