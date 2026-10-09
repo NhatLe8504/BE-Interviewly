@@ -167,7 +167,8 @@ class UserSkillService:
 
     def get_user_career_profile(self, user_id: int) -> UserCareerProfileRecord | None:
         rec = self.session.get(UserCareerProfileRecord, user_id)
-        if not rec:
+        if not rec or (not rec.top_skills and rec.overall_level == "none"):
+            self.sync_from_practice_history(user_id)
             return self.recalculate_user_skills(user_id)
         return rec
 
@@ -333,6 +334,40 @@ class UserSkillService:
                 )
                 recorded += 1
 
+        if recorded > 0:
+            self.recalculate_user_skills(user_id)
+        return recorded
+
+    def sync_from_practice_history(self, user_id: int) -> int:
+        import json
+        stmt = select(PracticeHistoryRecord).where(PracticeHistoryRecord.user_id == user_id)
+        history_items = list(self.session.scalars(stmt).all())
+        recorded = 0
+        for h in history_items:
+            if not h.questions_summary:
+                continue
+            try:
+                items = json.loads(h.questions_summary)
+            except Exception:
+                continue
+            for q in items:
+                q_text = q.get("question_text", "")
+                raw_score = float(q.get("score", 0))
+                norm_score = max(0.0, min(1.0, raw_score / 100.0 if raw_score > 1.0 else raw_score))
+                skills = self.taxonomy.extract_skills_from_text(q_text)
+                for s in skills:
+                    qid = q.get("question_id", "0")
+                    self.record_evidence(
+                        user_id=user_id,
+                        skill_id=s.id,
+                        source_type="practice_history",
+                        source_id=f"hist_{h.history_id}_q_{qid}",
+                        score=norm_score,
+                        question_difficulty=2,
+                        grader_confidence=0.85,
+                        evidence_quote=q_text[:250],
+                    )
+                    recorded += 1
         if recorded > 0:
             self.recalculate_user_skills(user_id)
         return recorded
