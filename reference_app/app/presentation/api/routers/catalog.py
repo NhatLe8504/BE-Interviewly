@@ -133,6 +133,7 @@ def list_questions(
             "created_by": q.created_by,
             "created_at": q.created_at,
             "updated_at": q.updated_at,
+            "skill_ids": q.skill_ids,
         }
         out_items.append(QuestionOut.model_validate(q_dict))
     return QuestionPageOut(
@@ -209,6 +210,7 @@ def get_questions_batch(
                 "sample_answer": getattr(session.get(QuestionBankModel, q.question_id), "sample_answer", None),
                 "follow_up_questions": getattr(session.get(QuestionBankModel, q.question_id), "follow_up_questions", None),
                 "tips": getattr(session.get(QuestionBankModel, q.question_id), "tips", None),
+                "skill_ids": list(getattr(session.get(QuestionBankModel, q.question_id), "skill_ids", None) or []),
             })
         )
     return results
@@ -256,6 +258,7 @@ def post_questions_batch(
                 "sample_answer": getattr(session.get(QuestionBankModel, q.question_id), "sample_answer", None),
                 "follow_up_questions": getattr(session.get(QuestionBankModel, q.question_id), "follow_up_questions", None),
                 "tips": getattr(session.get(QuestionBankModel, q.question_id), "tips", None),
+                "skill_ids": list(getattr(session.get(QuestionBankModel, q.question_id), "skill_ids", None) or []),
             })
         )
     return results
@@ -309,6 +312,7 @@ def get_question_detail(
         "created_by": q.created_by,
         "created_at": q.created_at,
         "updated_at": q.updated_at,
+        "skill_ids": q.skill_ids,
         "star_template": tmpl_out,
         "quiz_data": getattr(raw_row, "quiz_data", None) if raw_row else None,
         "sample_answer": getattr(raw_row, "sample_answer", None) if raw_row else None,
@@ -953,6 +957,7 @@ def get_question_set_detail(
                 sample_answer=q.sample_answer,
                 follow_up_questions=q.follow_up_questions,
                 tips=q.tips,
+                skill_ids=list(getattr(q, "skill_ids", None) or []),
             )
         )
 

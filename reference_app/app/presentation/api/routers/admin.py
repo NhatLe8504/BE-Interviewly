@@ -15,6 +15,8 @@ from ....application.catalog.commands import (
     UpdateRoleCommand,
 )
 from ....application.container import ServiceContainer
+from ....application.skills.taxonomy import get_default_taxonomy
+from ....infrastructure.llm.question_tagging import suggest_skill_ids_with_llm
 from ....infrastructure.logging.server_log_store import global_server_log_store
 from ..dependencies import get_container, get_session, require_admin
 from ..helpers.cache import invalidate_cache
@@ -54,6 +56,9 @@ from ..schemas.catalog import (
     RoleAdminSummaryOut,
     RoleOut,
     RoleUpdateIn,
+    SkillOptionOut,
+    SkillSuggestionIn,
+    SkillSuggestionOut,
     CatalogStatusUpdateIn,
     StarTemplateCreateIn,
     StarTemplateOut,
@@ -198,6 +203,7 @@ def list_audit_logs(
     table_name: str | None = Query(None),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    admin_id: int = Depends(require_admin),
     session: Any = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
 ) -> AuditLogPageOut:
@@ -221,6 +227,7 @@ def get_server_logs(
     method: str | None = Query(None),
     status_code: int | None = Query(None),
     tail_lines: int = Query(60, ge=1, le=200),
+    admin_id: int = Depends(require_admin),
 ) -> dict[str, Any]:
     """
     Get live server terminal lines and API route logs recorded within the last 24 hours.
@@ -562,6 +569,7 @@ def create_question(
             sample_answer=data.sample_answer,
             follow_up_questions=data.follow_up_questions,
             tips=data.tips,
+            skill_ids=data.skill_ids,
         ),
     )
     container.admin_service.repo.record_audit(
@@ -600,6 +608,7 @@ def update_question(
             sample_answer=data.sample_answer,
             follow_up_questions=data.follow_up_questions,
             tips=data.tips,
+            skill_ids=data.skill_ids,
             fields_set=frozenset(data.model_fields_set),
         ),
     )
@@ -631,6 +640,46 @@ def delete_question(
         action="delete",
     )
     invalidate_cache(container, "catalog:")
+
+
+@router.get("/skills", response_model=list[SkillOptionOut])
+def list_skill_options(
+    admin_id: int = Depends(require_admin),
+) -> list[SkillOptionOut]:
+    """Danh mục nhãn kỹ năng để UI admin tìm kiếm và gán nhãn câu hỏi."""
+    taxonomy = get_default_taxonomy()
+    return [
+        SkillOptionOut(
+            id=skill.id,
+            name=skill.name,
+            category=skill.category,
+            role_tracks=list(skill.role_tracks),
+        )
+        for skill in taxonomy.all_skills()
+    ]
+
+
+@router.post("/questions/skill-suggestions", response_model=SkillSuggestionOut)
+def suggest_question_skills(
+    data: SkillSuggestionIn,
+    admin_id: int = Depends(require_admin),
+    container: ServiceContainer = Depends(get_container),
+) -> SkillSuggestionOut:
+    """LLM gợi ý nhãn kỹ năng cho nội dung câu hỏi; chỉ để admin rà lại, không ghi DB."""
+    api_key = container.settings.openai_api_key or ""
+    if not api_key.startswith("gsk_"):
+        return SkillSuggestionOut(reason="llm_not_configured")
+    try:
+        suggested = suggest_skill_ids_with_llm(
+            data.question_text.strip(),
+            base_url=container.settings.openai_base_url,
+            api_key=api_key,
+            model=container.settings.openai_model,
+            timeout=20.0,
+        )
+    except Exception:
+        return SkillSuggestionOut(reason="llm_error")
+    return SkillSuggestionOut(suggested_skill_ids=suggested)
 
 
 @router.post("/question-sets", response_model=QuestionSetDetailOut, status_code=201)
