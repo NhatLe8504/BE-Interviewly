@@ -1,9 +1,7 @@
 import httpx
 
-from app.application.skills.question_tagger import (
-    audit_question,
-    suggest_skill_ids_with_llm,
-)
+from app.application.skills.question_tagger import audit_question
+from app.infrastructure.llm.question_tagging import suggest_skill_ids_with_llm
 
 
 def test_technical_label_without_text_evidence_is_dropped():
