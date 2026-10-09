@@ -75,6 +75,7 @@ class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPo
         level: str,
         language: str = "vi",
         is_final_turn: bool = False,
+        seed_intent: str | None = None,
     ) -> str:
         if not self.api_key:
             if is_final_turn:
@@ -88,6 +89,7 @@ class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPo
             last_answer=last_answer,
             turn_number=turn_number,
             is_final_turn=is_final_turn,
+            seed_intent=seed_intent,
         )
         messages = [{"role": "system", "content": system}]
         messages.extend(history[-6:])

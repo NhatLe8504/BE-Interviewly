@@ -26,9 +26,11 @@ class ClaudeLLMAdapter(LLMInterviewerPort, RubricEvaluatorPort):
         level: str,
         language: str = "vi",
         is_final_turn: bool = False,
+        seed_intent: str | None = None,
     ) -> str:
         return self._fallback.generate_follow_up(
             history, last_question, last_answer, turn_number, role, level, language, is_final_turn,
+            seed_intent,
         )
 
     async def stream_question(self, prompt: str, system_prompt: str | None = None) -> AsyncIterator[str]:

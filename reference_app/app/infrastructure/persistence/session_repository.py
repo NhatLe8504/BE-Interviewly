@@ -48,6 +48,7 @@ def _to_domain_turn(row: DbTurn) -> InterviewTurn:
         answer_text=row.transcribed_text,
         audio_url=row.audio_url,
         speaker=row.speaker.value if row.speaker else "candidate",
+        question_id=row.question_id,
     )
 
 
@@ -99,6 +100,7 @@ class SqlAlchemySessionRepository(InterviewSessionRepoPort, InterviewTurnRepoPor
             message_text=turn.question_text,
             transcribed_text=turn.answer_text,
             audio_url=turn.audio_url,
+            question_id=turn.question_id,
         )
         session.add(db_turn)
         session.commit()
@@ -121,6 +123,8 @@ class SqlAlchemySessionRepository(InterviewSessionRepoPort, InterviewTurnRepoPor
         if row is not None:
             row.transcribed_text = turn.answer_text
             row.audio_url = turn.audio_url
+            if turn.question_id is not None:
+                row.question_id = turn.question_id
             session.commit()
             session.refresh(row)
             return _to_domain_turn(row)
