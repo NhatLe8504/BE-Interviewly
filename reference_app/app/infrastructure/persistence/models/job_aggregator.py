@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     Boolean,
@@ -50,6 +50,7 @@ class JobCompanyRecord(Base):
     branding_source_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     branding_license_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     branding_reuse_allowed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    branding_candidates: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     website_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     industry: Mapped[str | None] = mapped_column(String(100), nullable=True)
     location: Mapped[str | None] = mapped_column(String(200), nullable=True)

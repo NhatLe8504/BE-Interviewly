@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
@@ -33,29 +34,114 @@ def approved_asset_url(value: Any, source_url: str, allowed_hosts: list[str]) ->
     if not isinstance(value, str) or not value.strip():
         return None
     url = urljoin(source_url, value.strip())
-    parsed = urlparse(url)
-    if parsed.scheme != "https" or parsed.hostname not in allowed_hosts or parsed.username or parsed.password:
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme == "http" and parsed.hostname in allowed_hosts:
+            url = parsed._replace(scheme="https").geturl()
+            parsed = urlparse(url)
+        if parsed.port:
+            return None
+    except ValueError:
+        return None
+    if len(url) > 1000 or parsed.scheme != "https" or parsed.hostname not in allowed_hosts or parsed.username or parsed.password:
         return None
     return url
 
 
-def collect_company_branding(
-    soup: BeautifulSoup, source_url: str, company_name: str, recipe: dict[str, Any]
+def structured_company_branding(soup: BeautifulSoup, source_url: str, company_name: str, policy: dict[str, Any]) -> dict[str, Any]:
+    mapping = policy.get("structured_media", {})
+    if not mapping:
+        return {}
+    nodes: list[Any] = []
+    decoder = json.JSONDecoder()
+    for script in soup.find_all("script"):
+        content = script.string or script.get_text()
+        try:
+            if script.get("id") == "__NEXT_DATA__" or script.get("type") == "application/json":
+                nodes.append(json.loads(content))
+            elif content.startswith("self.__next_f.push("):
+                frame, _offset = decoder.raw_decode(content[len("self.__next_f.push("):])
+                if isinstance(frame, list) and len(frame) > 1 and isinstance(frame[1], str):
+                    for row in frame[1].splitlines():
+                        record = row.partition(":")[2]
+                        if record.startswith(("{", "[")):
+                            try:
+                                payload, _offset = decoder.raw_decode(record)
+                                nodes.append(payload)
+                            except ValueError:
+                                continue
+        except (TypeError, ValueError):
+            continue
+    expected_names = {normalized_text(name.strip()) for name in [company_name, *policy.get("company_aliases", {}).get(normalized_text(company_name), [])]}
+    result = {}
+    for _node_index in range(10000):
+        if not nodes:
+            break
+        node = nodes.pop()
+        if isinstance(node, list):
+            nodes.extend(node)
+            continue
+        if not isinstance(node, dict):
+            continue
+        name = node.get(mapping.get("company_name_field", "companyName"))
+        if isinstance(name, str) and normalized_text(name.strip()) in expected_names:
+            for field, keys in (("company_logo_url", mapping.get("logo_fields", [])), ("company_banner_url", mapping.get("banner_fields", []))):
+                if field in result:
+                    continue
+                for key in keys:
+                    values = node.get(key, [])
+                    for value in values if isinstance(values, list) else [values]:
+                        candidate = approved_asset_url(value, source_url, policy.get("allowed_image_hosts", []))
+                        patterns = policy.get("asset_path_patterns", {}).get(field, [])
+                        if candidate and (not patterns or any(re.search(pattern, urlparse(candidate).path) for pattern in patterns)):
+                            result[field] = candidate
+                            break
+                    if field in result:
+                        break
+        nodes.extend(value for value in node.values() if isinstance(value, (dict, list)))
+    if result:
+        result["branding_source_url"] = source_url
+    return result
+
+
+def extract_company_branding(
+    soup: BeautifulSoup, source_url: str, company_name: str, recipe: dict[str, Any],
+    *, is_company_page: bool = False,
 ) -> dict[str, Any]:
     policy = recipe.get("company_branding", {})
-    license_url = policy.get("license_url", "")
-    if policy.get("reuse_allowed") is not True or not license_url.startswith("https://"):
-        return {}
+    structured = structured_company_branding(soup, source_url, company_name, policy)
+    if structured:
+        return structured
     posting = job_structured_data(soup)
     organization = posting.get("hiringOrganization") or {}
     if not isinstance(organization, dict):
         return {}
     organization_name = organization.get("name", "")
+    identity_selectors = policy.get("company_name_selectors", []) if is_company_page else policy.get("detail_company_name_selectors", [])
+    if policy.get("company_name_selector"):
+        identity_selectors = [policy["company_name_selector"], *identity_selectors]
     if not organization_name:
-        selector = policy.get("company_name_selector")
-        company_heading = soup.select_one(selector) if selector else None
-        organization_name = company_heading.get_text(" ", strip=True) if company_heading else ""
-    if normalized_text(organization_name.strip()) != normalized_text(company_name.strip()):
+        for selector in identity_selectors:
+            company_heading = soup.select_one(selector)
+            if company_heading:
+                organization_name = company_heading.get("content") or company_heading.get_text(" ", strip=True)
+                if organization_name:
+                    break
+    identity_pattern = policy.get("identity_clean_pattern")
+    if identity_pattern:
+        organization_name = re.sub(identity_pattern, "", organization_name, flags=re.I).strip()
+    expected_names = [company_name, *policy.get("company_aliases", {}).get(normalized_text(company_name), [])]
+    clean_company = re.sub(
+        r"^(CÔNG TY|Công ty|TỔNG CÔNG TY|Tổng công ty|TẬP ĐOÀN)\s+(TNHH\s+MTV|TNHH|CỔ PHẦN|Cổ phần|CP|MTV)\s*",
+        "",
+        company_name,
+        flags=re.IGNORECASE,
+    ).strip()
+    if clean_company and clean_company != company_name:
+        expected_names.append(clean_company)
+    norm_expected = {normalized_text(name.strip()) for name in expected_names if name.strip()}
+    norm_org = normalized_text(organization_name.strip())
+    if norm_org not in norm_expected and not any(norm_org in exp or exp in norm_org for exp in norm_expected if len(exp) >= 4):
         return {}
     allowed_hosts = policy.get("allowed_image_hosts", [])
     result: dict[str, Any] = {}
@@ -67,18 +153,37 @@ def collect_company_branding(
         ("company_banner_url", policy.get("banner_selectors", [])),
     ):
         for selector in selectors:
-            image = soup.select_one(selector)
-            if not image:
-                continue
-            candidate = approved_asset_url(image.get("src") or image.get("data-src"), source_url, allowed_hosts)
-            if candidate:
-                result[field] = candidate
+            for image in soup.select(selector):
+                values = [image.get(attribute) for attribute in ("data-src", "data-original", "src", "content")]
+                background = re.search(r"url\([\"\']?([^\"\')]+)", image.get("style", ""))
+                if background:
+                    values.append(background.group(1))
+                for value in values:
+                    candidate = approved_asset_url(value, source_url, allowed_hosts)
+                    if candidate and not any(re.search(pattern, candidate, re.I) for pattern in policy.get("reject_asset_patterns", [])):
+                        path_patterns = policy.get("asset_path_patterns", {}).get(field, [])
+                        if not path_patterns or any(re.search(pattern, urlparse(candidate).path) for pattern in path_patterns):
+                            result[field] = candidate
+                            break
+                if field in result:
+                    break
+            if field in result:
                 break
     if result:
-        result.update(
-            branding_reuse_allowed=True, branding_source_url=source_url,
-            branding_license_url=license_url,
-        )
+        result["branding_source_url"] = source_url
+    return result
+
+
+def collect_company_branding(
+    soup: BeautifulSoup, source_url: str, company_name: str, recipe: dict[str, Any]
+) -> dict[str, Any]:
+    policy = recipe.get("company_branding", {})
+    license_url = policy.get("license_url", "")
+    if policy.get("reuse_allowed") is not True or not license_url.startswith("https://"):
+        return {}
+    result = extract_company_branding(soup, source_url, company_name, recipe)
+    if result:
+        result.update(branding_reuse_allowed=True, branding_license_url=license_url)
     return result
 
 

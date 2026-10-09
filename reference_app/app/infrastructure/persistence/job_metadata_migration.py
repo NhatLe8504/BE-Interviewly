@@ -19,6 +19,7 @@ def migrate_job_metadata(engine) -> None:
             "branding_source_url": "VARCHAR(1000)",
             "branding_license_url": "VARCHAR(1000)",
             "branding_reuse_allowed": "BOOLEAN NOT NULL DEFAULT FALSE",
+            "branding_candidates": "JSON NOT NULL DEFAULT '{}'",
         },
         "job_postings": {
             "country_codes": "JSON NOT NULL DEFAULT '[]'",

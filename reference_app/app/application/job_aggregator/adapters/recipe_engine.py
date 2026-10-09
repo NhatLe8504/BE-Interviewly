@@ -16,6 +16,7 @@ import httpx
 from ....domain.job_aggregator import compute_job_fingerprint
 from .base import BaseJobSourceAdapter
 from .company_branding import collect_company_branding, job_structured_data, page_job_metadata
+from ..ports import CompanyBrandingLookup
 
 logger = logging.getLogger(__name__)
 
@@ -124,8 +125,14 @@ class DomainRecipeRegistry:
 
 
 class RecipeBasedCrawlerAdapter(BaseJobSourceAdapter):
-    def __init__(self, registry: DomainRecipeRegistry | None = None, timeout: float = 12.0) -> None:
+    def __init__(
+        self,
+        registry: DomainRecipeRegistry | None = None,
+        branding_lookup: CompanyBrandingLookup | None = None,
+        timeout: float = 12.0,
+    ) -> None:
         self.registry = registry or DomainRecipeRegistry()
+        self.branding_lookup = branding_lookup
         self.timeout = timeout
 
     async def fetch_jobs(self, query: str = "", limit: int = 20) -> list[dict[str, Any]]:
@@ -168,31 +175,37 @@ class RecipeBasedCrawlerAdapter(BaseJobSourceAdapter):
         return all_results[:limit]
 
     async def _enrich_company_branding(self, jobs: list[dict[str, Any]], recipe: dict[str, Any]) -> None:
-        if recipe.get("company_branding", {}).get("reuse_allowed") is not True:
+        policy = recipe.get("company_branding", {})
+        if policy.get("collection_enabled") is not True and policy.get("reuse_allowed") is not True:
             return
-        allowed_hosts = {
-            "job-boards.greenhouse.io", "boards.greenhouse.io", "jobs.lever.co", "www.topcv.vn",
-            "itviec.com", "www.vietnamworks.com", "www.linkedin.com", "career.vng.com.vn",
-        }
         company_assets: dict[str, dict[str, Any]] = {}
-        async with httpx.AsyncClient(timeout=self.timeout, headers=BROWSER_HEADERS) as client:
-            for job in jobs:
-                company_name = job.get("company_name", "")
-                if job.get("company_banner_url") or job.get("company_logo_url"):
-                    continue
-                if company_name not in company_assets:
-                    company_assets[company_name] = {}
-                    source_url = job.get("original_apply_url", "")
-                    if urlparse(source_url).hostname not in allowed_hosts:
-                        continue
+        for job in jobs:
+            company_name = job.get("company_name", "").strip()
+            if not company_name:
+                continue
+            if job.get("company_banner_url") and job.get("company_logo_url"):
+                continue
+            if company_name not in company_assets:
+                company_assets[company_name] = {}
+                if self.branding_lookup is not None:
                     try:
-                        response = await client.get(source_url)
-                        if response.status_code == 200:
-                            company_assets[company_name] = collect_company_branding(
-                                BeautifulSoup(response.text, "html.parser"), source_url, company_name, recipe,
-                            )
-                    except httpx.HTTPError:
-                        continue
+                        company_assets[company_name] = await self.branding_lookup.lookup(job, recipe)
+                    except Exception as exc:
+                        logger.debug("Failed branding lookup for %s: %s", company_name, exc)
+                elif policy.get("reuse_allowed") is True:
+                    source_url = job.get("original_apply_url", "")
+                    allowed_hosts = set(policy.get("allowed_page_hosts", []))
+                    if urlparse(source_url).hostname in allowed_hosts:
+                        try:
+                            async with httpx.AsyncClient(timeout=self.timeout, headers=BROWSER_HEADERS) as client:
+                                response = await client.get(source_url)
+                                if response.status_code == 200:
+                                    company_assets[company_name] = collect_company_branding(
+                                        BeautifulSoup(response.text, "html.parser"), source_url, company_name, recipe,
+                                    )
+                        except httpx.HTTPError:
+                            pass
+            if company_assets.get(company_name):
                 job.update(company_assets[company_name])
 
     async def _crawl_topcv(self, recipe: dict[str, Any], limit: int = 5) -> list[dict[str, Any]]:
