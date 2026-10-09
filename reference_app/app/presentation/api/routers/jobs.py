@@ -146,13 +146,15 @@ def get_filter_metadata(
 ) -> JobFilterMetadataOut:
     service = JobAggregatorService(session=session)
     filters = service.get_filter_metadata(country_code=country_code)
-    # Ensure sort_options includes 'match'
+    # Contract thống nhất với các metadata khác (countries/sources) và FE:
+    # mỗi option là {id, name}. Trước đây router trả {value, label} làm FE
+    # đọc option.id/option.name ra undefined (LOI P2).
     filters["sort_options"] = [
-        {"value": "recent", "label": "Mới cập nhật"},
-        {"value": "posted", "label": "Ngày đăng tuyển"},
-        {"value": "match", "label": "Phù hợp với tôi"},
-        {"value": "salary_desc", "label": "Lương cao nhất"},
-        {"value": "title_asc", "label": "Tiêu đề A-Z"},
+        {"id": "recent", "name": "Mới cập nhật dữ liệu"},
+        {"id": "posted", "name": "Mới đăng tuyển"},
+        {"id": "match", "name": "Phù hợp với tôi"},
+        {"id": "salary_desc", "name": "Lương cao nhất"},
+        {"id": "title_asc", "name": "Tên công việc A – Z"},
     ]
     return JobFilterMetadataOut(**filters)
 
