@@ -144,6 +144,7 @@ class QuestionBank(Base):
     sample_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
     follow_up_questions: Mapped[list | None] = mapped_column(JSON, nullable=True)
     tips: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    skill_ids: Mapped[list[str] | None] = mapped_column(JSON, nullable=True, default=list)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(),
     )

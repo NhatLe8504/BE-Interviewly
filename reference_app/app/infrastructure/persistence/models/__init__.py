@@ -22,6 +22,7 @@ from . import session as session
 from . import system as system
 from . import user as user
 from . import onboarding as onboarding
+from . import user_skills as user_skills
 from .billing import PaymentTransaction, SubscriptionPlan, UserSubscription
 from .catalog import JobDomain, JobRole, QuestionBank, StarGuidanceTemplate, PracticeHistoryRecord, QuestionSetReview, QuestionSet, QuestionSetItem
 from .session import (
@@ -35,6 +36,12 @@ from .session import (
 from .system import AuditLog, ModerationLog
 from .session_plan import InterviewSessionConfig, SessionQuestionSelection
 from .user import CandidateProfile, User
+from .user_skills import (
+    UserSkillEvidenceRecord,
+    UserSkillLevelRecord,
+    UserCareerProfileRecord,
+    JobReadinessRecord,
+)
 
 __all__ = [
     "AnswerEvaluation",
@@ -65,6 +72,10 @@ __all__ = [
     "JobAnalysisRecord",
     "InterviewBlueprintRecord",
     "InterviewScriptRecord",
+    "UserSkillEvidenceRecord",
+    "UserSkillLevelRecord",
+    "UserCareerProfileRecord",
+    "JobReadinessRecord",
     "job_aggregator",
     "jd_interview",
     "billing",
@@ -72,5 +83,5 @@ __all__ = [
     "session",
     "system",
     "user",
+    "user_skills",
 ]
-
