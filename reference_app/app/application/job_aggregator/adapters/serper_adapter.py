@@ -12,6 +12,7 @@ import httpx
 
 from ....domain.job_aggregator import compute_job_fingerprint
 from .base import BaseJobSourceAdapter
+from ..ports import CompanyBrandingLookup
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +45,17 @@ def make_deterministic_job_key(source_id: str, company_name: str, job_title: str
 
 
 class SerperGoogleJobsAdapter(BaseJobSourceAdapter):
-    def __init__(self, api_key: str, timeout: float = 12.0) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        timeout: float = 12.0,
+        branding_lookup: CompanyBrandingLookup | None = None,
+        recipe_registry: Any = None,
+    ) -> None:
         self.api_key = api_key
         self.timeout = timeout
+        self.branding_lookup = branding_lookup
+        self.recipe_registry = recipe_registry
         self.endpoint = "https://google.serper.dev/search"
 
     @staticmethod
@@ -110,6 +119,18 @@ class SerperGoogleJobsAdapter(BaseJobSourceAdapter):
             for out in crawl_outputs:
                 if isinstance(out, dict) and out:
                     results.append(out)
+
+        if self.branding_lookup and self.recipe_registry:
+            for job in results:
+                sid = job.get("source_id", "")
+                recipe = self.recipe_registry.get(sid)
+                if recipe:
+                    try:
+                        assets = await self.branding_lookup.lookup(job, recipe)
+                        if assets:
+                            job.update(assets)
+                    except Exception as exc:
+                        logger.debug("Failed branding lookup for Serper job %s: %s", job.get("title"), exc)
 
         logger.info("Successfully crawled %d individual jobs with full JD details", len(results))
         return results

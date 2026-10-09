@@ -43,6 +43,7 @@ class SqlAlchemyJobAggregatorRepository:
         self, company_name: str, location: str | None = None, logo_url: str | None = None,
         banner_url: str | None = None, branding_source_url: str | None = None,
         branding_license_url: str | None = None, branding_reuse_allowed: bool = False,
+        branding_candidates: dict[str, Any] | None = None,
     ) -> JobCompanyRecord:
         clean_name = " ".join((company_name or "").split()) or "Chưa rõ doanh nghiệp tuyển dụng"
         slug = re.sub(r"[^a-z0-9]+", "-", clean_name.lower()).strip("-") or "company"
@@ -63,13 +64,17 @@ class SqlAlchemyJobAggregatorRepository:
             )
             self.session.add(company)
             self.session.flush()
-        if branding_reuse_allowed and branding_source_url and branding_license_url:
+        if branding_candidates and not getattr(company, "branding_candidates", None):
+            company.branding_candidates = dict(branding_candidates)
+            self.session.flush()
+        if (branding_reuse_allowed or (banner_url or logo_url)) and branding_source_url:
             if logo_url:
                 company.logo_url = logo_url
             if banner_url:
                 company.banner_url = banner_url
             company.branding_source_url = branding_source_url
-            company.branding_license_url = branding_license_url
+            if branding_license_url:
+                company.branding_license_url = branding_license_url
             company.branding_reuse_allowed = True
             self.session.flush()
         return company
@@ -135,6 +140,7 @@ class SqlAlchemyJobAggregatorRepository:
             branding_source_url=job_dict.get("branding_source_url"),
             branding_license_url=job_dict.get("branding_license_url"),
             branding_reuse_allowed=job_dict.get("branding_reuse_allowed", False),
+            branding_candidates=job_dict.get("branding_candidates"),
         )
 
         # 2. Hierarchical duplicate search
