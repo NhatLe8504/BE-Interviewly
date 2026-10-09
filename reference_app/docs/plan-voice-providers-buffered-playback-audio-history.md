@@ -87,6 +87,8 @@ Keep small application ports, with infrastructure adapters injected in bootstrap
 
 Initial premium STT: Scribe v2 batch transcription after recording stops. This matches the existing review-before-send workflow and avoids a second realtime WebSocket/PCM pipeline in the first release. Show an honest transcription state, not fake interim text. Realtime Scribe is a later optional enhancement, not required for this task.
 
+Preserve verbatim recognition (no_verbatim=false): keep raw STT text/timestamps separate from the candidate-reviewed submitted text. Do not use automatic transcript rewriting or remove filler words and then score that edited text as original speech delivery. Leave optional diarization/entity/editing extras off unless explicitly required; verify their costs before enabling them.
+
 Initial TTS candidate: Eleven Flash v2.5, subject to actual key/model availability and language sample checks. Official docs list Vietnamese support. Do not blindly use Eleven Multilingual v2 for all eight languages; its documented language set does not include Vietnamese. Evaluate a higher-quality supported model only with measured samples; do not assume the latest advertised model uses the same API or supports all voices.
 
 Voice catalog: fetch real account metadata server-side, curate/allowlist usable voice IDs and expose only display-safe fields. Do not expose private training files, arbitrary custom voices, raw account metadata or guessed voice IDs. Cache metadata with bounded TTL. If no successful catalog is available, show an honest unavailable state rather than fabricated voice rows.
