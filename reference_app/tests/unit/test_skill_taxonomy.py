@@ -31,3 +31,14 @@ def test_role_track_filtering():
     assert "java" in ids
     assert "spring-boot" in ids
     assert "postgresql" in ids
+
+def test_bare_go_word_is_not_scanned_but_exact_tag_still_maps():
+    taxonomy = get_default_taxonomy()
+    scanned = {s.id for s in taxonomy.extract_skills_from_text("Go to our careers page. Docker, Kubernetes.")}
+    assert "go" not in scanned
+    assert "docker" in scanned
+    # Tiêu đề có ngữ cảnh tuyển dụng vẫn nhận đúng Go.
+    assert "go" in {s.id for s in taxonomy.extract_skills_from_text("We are hiring a Go Developer")}
+    assert "go" in {s.id for s in taxonomy.extract_skills_from_text("Golang Developer")}
+    # Tag chính xác do người dùng/ hệ thống gửi vào vẫn chuẩn hóa được.
+    assert taxonomy.normalize_skill_id("Go") == "go"
