@@ -62,7 +62,7 @@ def _get_or_create_orchestrator(container: ServiceContainer):
     return orchestrator
 
 
-def _init_job(session: Session, user_id: int, source_type: str, checksum: str) -> str:
+def _init_job(session: Session, user_id: int, source_type: str, checksum: str, is_public: bool = False) -> str:
     job_id = f"jd_{uuid.uuid4().hex[:12]}"
     job = JDGenerationJob(
         job_id=job_id,
@@ -72,6 +72,7 @@ def _init_job(session: Session, user_id: int, source_type: str, checksum: str) -
         status=JDJobStatus.PENDING.value,
         stage="INITIALIZED",
         progress_pct=5,
+        is_public=is_public,
     )
     session.add(job)
     session.commit()
@@ -87,7 +88,7 @@ async def submit_jd_text(
 ) -> JDJobStatusOut:
     effective_user_id = user_id if user_id and user_id > 0 else 1
     checksum = NormalizedJD.calculate_checksum(payload.text)
-    job_id = _init_job(session, effective_user_id, JDSourceType.text.value, checksum)
+    job_id = _init_job(session, effective_user_id, JDSourceType.text.value, checksum, is_public=payload.is_public)
 
     orchestrator = _get_or_create_orchestrator(container)
     orchestrator.queue_manager.enqueue(
@@ -126,7 +127,7 @@ async def submit_jd_url(
 ) -> JDJobStatusOut:
     effective_user_id = user_id if user_id and user_id > 0 else 1
     checksum = NormalizedJD.calculate_checksum(payload.url)
-    job_id = _init_job(session, effective_user_id, JDSourceType.url.value, checksum)
+    job_id = _init_job(session, effective_user_id, JDSourceType.url.value, checksum, is_public=payload.is_public)
 
     orchestrator = _get_or_create_orchestrator(container)
     orchestrator.queue_manager.enqueue(
@@ -162,6 +163,7 @@ async def submit_jd_file(
     duration_minutes: int = Form(45),
     difficulty: int | None = Form(None),
     language: str = Form("vi"),
+    is_public: bool = Form(False),
     user_id: int | None = Depends(get_optional_user_id),
     session: Session = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
@@ -172,7 +174,7 @@ async def submit_jd_file(
         raise HTTPException(status_code=400, detail="Tệp tải lên không có dữ liệu")
 
     checksum = NormalizedJD.calculate_checksum(file.filename or "file")
-    job_id = _init_job(session, effective_user_id, JDSourceType.file.value, checksum)
+    job_id = _init_job(session, effective_user_id, JDSourceType.file.value, checksum, is_public=is_public)
 
     orchestrator = _get_or_create_orchestrator(container)
     orchestrator.queue_manager.enqueue(
@@ -202,6 +204,72 @@ async def submit_jd_file(
     )
 
 
+def _format_job_summary(job: JDGenerationJob) -> JDJobSummaryOut:
+    role = "Software Engineer"
+    seniority = "junior"
+    company = ""
+    focus_areas: list[str] = []
+    total_questions = 0
+    estimated_minutes = 45
+
+    if job.analysis:
+        role = job.analysis.job_title or role
+        seniority = job.analysis.seniority or seniority
+        company = job.analysis.company_name or ""
+        focus_areas = job.analysis.required_skills or []
+
+    if job.blueprint:
+        role = job.blueprint.target_role or role
+        seniority = job.blueprint.seniority or seniority
+        if job.blueprint.competencies:
+            focus_areas = job.blueprint.competencies
+        if job.blueprint.total_duration_minutes:
+            estimated_minutes = job.blueprint.total_duration_minutes
+
+    if job.script:
+        total_questions = job.script.total_questions
+        estimated_minutes = job.script.estimated_minutes
+
+    return JDJobSummaryOut(
+        job_id=job.job_id,
+        status=job.status,
+        stage=job.stage,
+        progress_pct=job.progress_pct,
+        source_type=job.source_type,
+        role=role,
+        seniority=seniority,
+        company_name=company,
+        focus_areas=focus_areas,
+        total_questions=total_questions,
+        estimated_minutes=estimated_minutes,
+        session_id=job.session_id,
+        created_at=job.created_at.isoformat() if job.created_at else None,
+        is_public=bool(getattr(job, "is_public", False)),
+        error=job.error_message,
+    )
+
+
+@router.get("/community-jobs", response_model=list[JDJobSummaryOut])
+def get_community_jd_jobs(
+    limit: int = 30,
+    offset: int = 0,
+    session: Session = Depends(get_session),
+) -> list[JDJobSummaryOut]:
+    """Lấy danh sách các bộ đề JD đã tạo thành công và được chia sẻ công khai bởi cộng đồng."""
+    query = (
+        session.query(JDGenerationJob)
+        .filter(
+            JDGenerationJob.is_public.is_(True),
+            JDGenerationJob.status == JDJobStatus.COMPLETED.value,
+        )
+        .order_by(JDGenerationJob.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    jobs = query.all()
+    return [_format_job_summary(job) for job in jobs]
+
+
 @router.get("/my-jobs", response_model=list[JDJobSummaryOut])
 def get_my_jd_jobs(
     limit: int = 30,
@@ -227,52 +295,7 @@ def get_my_jd_jobs(
             .all()
         )
 
-    summaries: list[JDJobSummaryOut] = []
-    for job in jobs:
-        role = "Software Engineer"
-        seniority = "junior"
-        company = ""
-        focus_areas: list[str] = []
-        total_questions = 0
-        estimated_minutes = 45
-
-        if job.analysis:
-            role = job.analysis.job_title or role
-            seniority = job.analysis.seniority or seniority
-            company = job.analysis.company_name or ""
-            focus_areas = job.analysis.required_skills or []
-
-        if job.blueprint:
-            role = job.blueprint.target_role or role
-            seniority = job.blueprint.seniority or seniority
-            if job.blueprint.competencies:
-                focus_areas = job.blueprint.competencies
-            if job.blueprint.total_duration_minutes:
-                estimated_minutes = job.blueprint.total_duration_minutes
-
-        if job.script:
-            total_questions = job.script.total_questions
-            estimated_minutes = job.script.estimated_minutes
-
-        summaries.append(
-            JDJobSummaryOut(
-                job_id=job.job_id,
-                status=job.status,
-                stage=job.stage,
-                progress_pct=job.progress_pct,
-                source_type=job.source_type,
-                role=role,
-                seniority=seniority,
-                company_name=company,
-                focus_areas=focus_areas,
-                total_questions=total_questions,
-                estimated_minutes=estimated_minutes,
-                session_id=job.session_id,
-                created_at=job.created_at.isoformat() if job.created_at else None,
-                error=job.error_message,
-            )
-        )
-    return summaries
+    return [_format_job_summary(job) for job in jobs]
 
 
 @router.get("/jobs/{job_id}/status", response_model=JDJobStatusOut)

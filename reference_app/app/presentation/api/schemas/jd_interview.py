@@ -9,6 +9,7 @@ class JDTextSubmissionIn(BaseModel):
     duration_minutes: int = Field(default=45, ge=15, le=90, description="Thời lượng phỏng vấn mục tiêu (phút)")
     difficulty: int | None = Field(default=None, ge=1, le=5, description="Độ khó mong muốn (1-5)")
     language: str = Field(default="vi", description="Ngôn ngữ phỏng vấn (vi hoặc en)")
+    is_public: bool = Field(default=False, description="Chia sẻ công khai với cộng đồng")
 
 
 class JDUrlSubmissionIn(BaseModel):
@@ -16,6 +17,7 @@ class JDUrlSubmissionIn(BaseModel):
     duration_minutes: int = Field(default=45, ge=15, le=90, description="Thời lượng phỏng vấn mục tiêu (phút)")
     difficulty: int | None = Field(default=None, ge=1, le=5, description="Độ khó mong muốn (1-5)")
     language: str = Field(default="vi", description="Ngôn ngữ phỏng vấn (vi hoặc en)")
+    is_public: bool = Field(default=False, description="Chia sẻ công khai với cộng đồng")
 
 
 class JDJobStatusOut(BaseModel):
@@ -41,6 +43,7 @@ class JDJobSummaryOut(BaseModel):
     estimated_minutes: int = 45
     session_id: int | None = None
     created_at: str | None = None
+    is_public: bool = False
     error: str | None = None
 
 
