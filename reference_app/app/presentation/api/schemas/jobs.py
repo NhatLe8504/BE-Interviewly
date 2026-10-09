@@ -16,6 +16,7 @@ class JobCompanyOut(BaseModel):
     branding_source_url: str | None = None
     branding_license_url: str | None = None
     branding_reuse_allowed: bool = False
+    branding_candidates: dict[str, Any] = {}
     location: str | None = None
 
 

@@ -23,6 +23,7 @@ class JobAggregatorService:
         session: Session,
         serper_api_key: str = "",
         redis_client: Any = None,
+        branding_lookup: Any = None,
     ) -> None:
         self.session = session
         self.repo = SqlAlchemyJobAggregatorRepository(session)
@@ -30,10 +31,21 @@ class JobAggregatorService:
         self.redis = redis_client
         self._lock_key = "interviewly:lock:job_ingestion"
         self.recipe_registry = DomainRecipeRegistry()
-        self.recipe_adapter = RecipeBasedCrawlerAdapter(registry=self.recipe_registry)
+        if branding_lookup is None and serper_api_key:
+            from ...infrastructure.company_branding import SerperCompanyBrandingLookup
+            branding_lookup = SerperCompanyBrandingLookup(api_key=serper_api_key, redis_client=redis_client)
+        self.branding_lookup = branding_lookup
+        self.recipe_adapter = RecipeBasedCrawlerAdapter(
+            registry=self.recipe_registry,
+            branding_lookup=branding_lookup,
+        )
         self._adapters = [
             self.recipe_adapter,
-            SerperGoogleJobsAdapter(api_key=serper_api_key),
+            SerperGoogleJobsAdapter(
+                api_key=serper_api_key,
+                branding_lookup=branding_lookup,
+                recipe_registry=self.recipe_registry,
+            ),
             GreenhouseAdapter(),
             SeedFallbackAdapter(),
         ]
@@ -90,6 +102,62 @@ class JobAggregatorService:
             self._release_lock()
 
         return total_saved
+
+    async def backfill_missing_branding(self, limit: int = 50) -> int:
+        if not self.branding_lookup:
+            return 0
+        from ...infrastructure.persistence.models.job_aggregator import JobPostingRecord
+        from sqlalchemy import select
+        from sqlalchemy.orm import joinedload
+        postings = self.session.scalars(
+            select(JobPostingRecord)
+            .options(joinedload(JobPostingRecord.company))
+            .where(JobPostingRecord.status == "ACTIVE")
+        ).all()
+        updated_companies: set[int] = set()
+        for p in postings:
+            if not p.company or p.company.company_id in updated_companies:
+                continue
+            if p.company.banner_url and p.company.logo_url and p.company.branding_reuse_allowed:
+                continue
+            recipe = self.recipe_registry.get(p.source_id)
+            if not recipe:
+                continue
+            job_dummy = {
+                "company_name": p.company.company_name,
+                "original_apply_url": p.original_apply_url,
+            }
+            try:
+                assets = await self.branding_lookup.lookup(job_dummy, recipe)
+                if assets:
+                    logo = assets.get("company_logo_url")
+                    banner = assets.get("company_banner_url")
+                    src = assets.get("branding_source_url")
+                    lic = assets.get("branding_license_url")
+                    allowed = assets.get("branding_reuse_allowed", False)
+                    cand = assets.get("branding_candidates")
+                    if logo:
+                        p.company.logo_url = logo
+                    if banner:
+                        p.company.banner_url = banner
+                        if not p.thumbnail_url:
+                            p.thumbnail_url = banner
+                    if src:
+                        p.company.branding_source_url = src
+                    if lic:
+                        p.company.branding_license_url = lic
+                    if allowed or (banner or logo):
+                        p.company.branding_reuse_allowed = True
+                    if cand:
+                        p.company.branding_candidates = dict(cand)
+                    updated_companies.add(p.company.company_id)
+                    if len(updated_companies) >= limit:
+                        break
+            except Exception as exc:
+                logger.debug("Backfill branding error for %s: %s", p.company.company_name, exc)
+        if updated_companies:
+            self.session.commit()
+        return len(updated_companies)
 
     def list_jobs(
         self,
