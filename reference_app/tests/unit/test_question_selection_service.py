@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 from app.application.interview.intent_composer import QuestionIntentComposer, QuestionIntentContext
@@ -148,3 +148,83 @@ def test_intent_composer_enforces_anti_verbatim_guardrail():
     assert "TUYỆT ĐỐI KHÔNG ĐƯỢC đọc nguyên văn" in prompt
     assert "chuyển hóa ý định kiểm tra" in prompt
     assert "Xử lý dead-letter queue" in prompt
+
+
+def test_planned_selection_is_taken_in_order_and_marked_used(db_session):
+    intents = QuestionSelectionService.sample_questions_for_stage(
+        session=db_session,
+        session_id=500,
+        stage_key="technical",
+        source_mode="auto_random",
+        target_count=2,
+    )
+    assert len(intents) == 2
+
+    first = QuestionSelectionService.take_planned_selection(db_session, 500, "technical")
+    assert first is not None
+    assert first.question_id == intents[0].question_id
+
+    assert QuestionSelectionService.mark_selection_used(
+        db_session, 500, "technical", first.question_id, turn_number=1,
+    ) is True
+    db_session.commit()
+
+    second = QuestionSelectionService.take_planned_selection(db_session, 500, "technical")
+    assert second is not None
+    assert second.question_id == intents[1].question_id
+
+    assert QuestionSelectionService.mark_selection_used(
+        db_session, 500, "technical", second.question_id, turn_number=2,
+    ) is True
+    db_session.commit()
+
+    # Hết câu hỏi chưa dùng -> không trả về gì thay vì lặp lại câu cũ
+    assert QuestionSelectionService.take_planned_selection(db_session, 500, "technical") is None
+    assert sorted(QuestionSelectionService.get_used_question_ids(db_session, 500)) == sorted(
+        [first.question_id, second.question_id]
+    )
+
+
+def test_mark_selection_used_is_idempotent(db_session):
+    from app.infrastructure.persistence.models.session_plan import SessionQuestionSelection
+
+    QuestionSelectionService.sample_questions_for_stage(
+        session=db_session,
+        session_id=501,
+        stage_key="technical",
+        source_mode="auto_random",
+        target_count=1,
+    )
+    ctx = QuestionSelectionService.take_planned_selection(db_session, 501, "technical")
+    assert ctx is not None
+
+    assert QuestionSelectionService.mark_selection_used(
+        db_session, 501, "technical", ctx.question_id, turn_number=1,
+    ) is True
+    db_session.commit()
+
+    # Lần thứ hai không được ghi đè used_at_turn của lượt đầu
+    assert QuestionSelectionService.mark_selection_used(
+        db_session, 501, "technical", ctx.question_id, turn_number=2,
+    ) is False
+    db_session.commit()
+
+    row = db_session.execute(
+        select(SessionQuestionSelection).where(SessionQuestionSelection.session_id == 501)
+    ).scalars().first()
+    assert row.used_at_turn == 1
+
+
+def test_take_planned_selection_rejects_unapproved_question(db_session):
+    from app.infrastructure.persistence.models.session_plan import SessionQuestionSelection
+
+    db_session.add(SessionQuestionSelection(
+        session_id=502,
+        stage_key="technical",
+        question_id=3,  # câu pending, không được duyệt
+        selection_order=1,
+        was_rerolled=False,
+    ))
+    db_session.commit()
+
+    assert QuestionSelectionService.take_planned_selection(db_session, 502, "technical") is None
