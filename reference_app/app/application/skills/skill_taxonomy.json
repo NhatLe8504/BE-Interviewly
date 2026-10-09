@@ -1,0 +1,725 @@
+[
+  {
+    "id": "java",
+    "name": "Java",
+    "category": "language",
+    "role_tracks": [
+      "backend"
+    ],
+    "aliases": [
+      "java",
+      "core java",
+      "java 8",
+      "java 11",
+      "java 17",
+      "java 21"
+    ]
+  },
+  {
+    "id": "python",
+    "name": "Python",
+    "category": "language",
+    "role_tracks": [
+      "backend",
+      "data",
+      "ai_ml"
+    ],
+    "aliases": [
+      "python",
+      "python3",
+      "py"
+    ]
+  },
+  {
+    "id": "go",
+    "name": "Go",
+    "category": "language",
+    "role_tracks": [
+      "backend",
+      "devops"
+    ],
+    "aliases": [
+      "go",
+      "golang",
+      "go-lang",
+      "go lang"
+    ]
+  },
+  {
+    "id": "typescript",
+    "name": "TypeScript",
+    "category": "language",
+    "role_tracks": [
+      "frontend",
+      "fullstack",
+      "backend"
+    ],
+    "aliases": [
+      "typescript",
+      "ts"
+    ]
+  },
+  {
+    "id": "javascript",
+    "name": "JavaScript",
+    "category": "language",
+    "role_tracks": [
+      "frontend",
+      "fullstack",
+      "backend"
+    ],
+    "aliases": [
+      "javascript",
+      "js",
+      "ecmascript",
+      "es6"
+    ]
+  },
+  {
+    "id": "csharp",
+    "name": "C#",
+    "category": "language",
+    "role_tracks": [
+      "backend"
+    ],
+    "aliases": [
+      "c#",
+      "csharp",
+      "c sharp",
+      ".net c#"
+    ]
+  },
+  {
+    "id": "cplusplus",
+    "name": "C++",
+    "category": "language",
+    "role_tracks": [
+      "backend"
+    ],
+    "aliases": [
+      "c++",
+      "cpp",
+      "cplusplus"
+    ]
+  },
+  {
+    "id": "rust",
+    "name": "Rust",
+    "category": "language",
+    "role_tracks": [
+      "backend",
+      "devops"
+    ],
+    "aliases": [
+      "rust",
+      "rustlang"
+    ]
+  },
+  {
+    "id": "php",
+    "name": "PHP",
+    "category": "language",
+    "role_tracks": [
+      "backend"
+    ],
+    "aliases": [
+      "php",
+      "php7",
+      "php8"
+    ]
+  },
+  {
+    "id": "kotlin",
+    "name": "Kotlin",
+    "category": "language",
+    "role_tracks": [
+      "mobile",
+      "backend"
+    ],
+    "aliases": [
+      "kotlin"
+    ]
+  },
+  {
+    "id": "swift",
+    "name": "Swift",
+    "category": "language",
+    "role_tracks": [
+      "mobile"
+    ],
+    "aliases": [
+      "swift",
+      "swiftui",
+      "ios swift"
+    ]
+  },
+  {
+    "id": "dart",
+    "name": "Dart",
+    "category": "language",
+    "role_tracks": [
+      "mobile"
+    ],
+    "aliases": [
+      "dart"
+    ]
+  },
+  {
+    "id": "sql",
+    "name": "SQL",
+    "category": "language",
+    "role_tracks": [
+      "backend",
+      "data"
+    ],
+    "aliases": [
+      "sql",
+      "t-sql",
+      "pl/sql",
+      "ansi sql"
+    ]
+  },
+  {
+    "id": "spring-boot",
+    "name": "Spring Boot",
+    "category": "framework",
+    "role_tracks": [
+      "backend"
+    ],
+    "aliases": [
+      "spring boot",
+      "springboot",
+      "spring",
+      "spring framework",
+      "spring-boot",
+      "spring mvc",
+      "spring cloud"
+    ]
+  },
+  {
+    "id": "react",
+    "name": "React",
+    "category": "framework",
+    "role_tracks": [
+      "frontend",
+      "fullstack"
+    ],
+    "aliases": [
+      "react",
+      "react.js",
+      "reactjs",
+      "react js"
+    ]
+  },
+  {
+    "id": "nextjs",
+    "name": "Next.js",
+    "category": "framework",
+    "role_tracks": [
+      "frontend",
+      "fullstack"
+    ],
+    "aliases": [
+      "next.js",
+      "nextjs",
+      "next js"
+    ]
+  },
+  {
+    "id": "vue",
+    "name": "Vue",
+    "category": "framework",
+    "role_tracks": [
+      "frontend"
+    ],
+    "aliases": [
+      "vue",
+      "vue.js",
+      "vuejs",
+      "vue js",
+      "vue 3",
+      "vue2"
+    ]
+  },
+  {
+    "id": "angular",
+    "name": "Angular",
+    "category": "framework",
+    "role_tracks": [
+      "frontend"
+    ],
+    "aliases": [
+      "angular",
+      "angularjs",
+      "angular 2+"
+    ]
+  },
+  {
+    "id": "nodejs",
+    "name": "Node.js",
+    "category": "framework",
+    "role_tracks": [
+      "backend",
+      "fullstack"
+    ],
+    "aliases": [
+      "node.js",
+      "nodejs",
+      "node",
+      "node js"
+    ]
+  },
+  {
+    "id": "express",
+    "name": "Express.js",
+    "category": "framework",
+    "role_tracks": [
+      "backend"
+    ],
+    "aliases": [
+      "express",
+      "express.js",
+      "expressjs"
+    ]
+  },
+  {
+    "id": "nestjs",
+    "name": "NestJS",
+    "category": "framework",
+    "role_tracks": [
+      "backend"
+    ],
+    "aliases": [
+      "nestjs",
+      "nest.js",
+      "nest js"
+    ]
+  },
+  {
+    "id": "fastapi",
+    "name": "FastAPI",
+    "category": "framework",
+    "role_tracks": [
+      "backend",
+      "ai_ml"
+    ],
+    "aliases": [
+      "fastapi",
+      "fast api"
+    ]
+  },
+  {
+    "id": "django",
+    "name": "Django",
+    "category": "framework",
+    "role_tracks": [
+      "backend"
+    ],
+    "aliases": [
+      "django",
+      "django rest framework",
+      "drf"
+    ]
+  },
+  {
+    "id": "dotnet",
+    "name": ".NET",
+    "category": "framework",
+    "role_tracks": [
+      "backend"
+    ],
+    "aliases": [
+      ".net",
+      "dotnet",
+      ".net core",
+      "asp.net",
+      "asp.net core",
+      "dotnet core"
+    ]
+  },
+  {
+    "id": "laravel",
+    "name": "Laravel",
+    "category": "framework",
+    "role_tracks": [
+      "backend"
+    ],
+    "aliases": [
+      "laravel"
+    ]
+  },
+  {
+    "id": "flutter",
+    "name": "Flutter",
+    "category": "framework",
+    "role_tracks": [
+      "mobile"
+    ],
+    "aliases": [
+      "flutter"
+    ]
+  },
+  {
+    "id": "react-native",
+    "name": "React Native",
+    "category": "framework",
+    "role_tracks": [
+      "mobile"
+    ],
+    "aliases": [
+      "react native",
+      "react-native",
+      "rn"
+    ]
+  },
+  {
+    "id": "tailwind",
+    "name": "Tailwind CSS",
+    "category": "framework",
+    "role_tracks": [
+      "frontend"
+    ],
+    "aliases": [
+      "tailwind",
+      "tailwindcss",
+      "tailwind css"
+    ]
+  },
+  {
+    "id": "postgresql",
+    "name": "PostgreSQL",
+    "category": "database",
+    "role_tracks": [
+      "backend",
+      "data"
+    ],
+    "aliases": [
+      "postgresql",
+      "postgres",
+      "psql"
+    ]
+  },
+  {
+    "id": "mysql",
+    "name": "MySQL",
+    "category": "database",
+    "role_tracks": [
+      "backend"
+    ],
+    "aliases": [
+      "mysql",
+      "mariadb"
+    ]
+  },
+  {
+    "id": "mongodb",
+    "name": "MongoDB",
+    "category": "database",
+    "role_tracks": [
+      "backend"
+    ],
+    "aliases": [
+      "mongodb",
+      "mongo"
+    ]
+  },
+  {
+    "id": "redis",
+    "name": "Redis",
+    "category": "database",
+    "role_tracks": [
+      "backend"
+    ],
+    "aliases": [
+      "redis",
+      "redis cache"
+    ]
+  },
+  {
+    "id": "elasticsearch",
+    "name": "Elasticsearch",
+    "category": "database",
+    "role_tracks": [
+      "backend",
+      "data"
+    ],
+    "aliases": [
+      "elasticsearch",
+      "elastic search",
+      "opensearch"
+    ]
+  },
+  {
+    "id": "kafka",
+    "name": "Kafka",
+    "category": "infra",
+    "role_tracks": [
+      "backend",
+      "data"
+    ],
+    "aliases": [
+      "kafka",
+      "apache kafka"
+    ]
+  },
+  {
+    "id": "rabbitmq",
+    "name": "RabbitMQ",
+    "category": "infra",
+    "role_tracks": [
+      "backend"
+    ],
+    "aliases": [
+      "rabbitmq",
+      "rabbit mq"
+    ]
+  },
+  {
+    "id": "docker",
+    "name": "Docker",
+    "category": "infra",
+    "role_tracks": [
+      "backend",
+      "devops",
+      "fullstack"
+    ],
+    "aliases": [
+      "docker",
+      "dockerfile",
+      "containerization"
+    ]
+  },
+  {
+    "id": "kubernetes",
+    "name": "Kubernetes",
+    "category": "infra",
+    "role_tracks": [
+      "devops",
+      "backend"
+    ],
+    "aliases": [
+      "kubernetes",
+      "k8s"
+    ]
+  },
+  {
+    "id": "aws",
+    "name": "AWS",
+    "category": "infra",
+    "role_tracks": [
+      "devops",
+      "backend"
+    ],
+    "aliases": [
+      "aws",
+      "amazon web services",
+      "amazon aws"
+    ]
+  },
+  {
+    "id": "azure",
+    "name": "Azure",
+    "category": "infra",
+    "role_tracks": [
+      "devops",
+      "backend"
+    ],
+    "aliases": [
+      "azure",
+      "microsoft azure"
+    ]
+  },
+  {
+    "id": "gcp",
+    "name": "GCP",
+    "category": "infra",
+    "role_tracks": [
+      "devops",
+      "backend"
+    ],
+    "aliases": [
+      "gcp",
+      "google cloud",
+      "google cloud platform"
+    ]
+  },
+  {
+    "id": "ci-cd",
+    "name": "CI/CD",
+    "category": "infra",
+    "role_tracks": [
+      "devops",
+      "backend"
+    ],
+    "aliases": [
+      "ci/cd",
+      "cicd",
+      "ci cd",
+      "github actions",
+      "gitlab ci",
+      "jenkins"
+    ]
+  },
+  {
+    "id": "linux",
+    "name": "Linux",
+    "category": "infra",
+    "role_tracks": [
+      "devops",
+      "backend"
+    ],
+    "aliases": [
+      "linux",
+      "ubuntu",
+      "bash",
+      "shell"
+    ]
+  },
+  {
+    "id": "git",
+    "name": "Git",
+    "category": "tool",
+    "role_tracks": [
+      "backend",
+      "frontend",
+      "fullstack",
+      "devops",
+      "mobile",
+      "data",
+      "qa"
+    ],
+    "aliases": [
+      "git",
+      "github",
+      "gitlab"
+    ]
+  },
+  {
+    "id": "microservices",
+    "name": "Microservices",
+    "category": "concept",
+    "role_tracks": [
+      "backend",
+      "devops"
+    ],
+    "aliases": [
+      "microservices",
+      "microservice",
+      "micro-service",
+      "micro service architecture"
+    ]
+  },
+  {
+    "id": "system-design",
+    "name": "System Design",
+    "category": "concept",
+    "role_tracks": [
+      "backend"
+    ],
+    "aliases": [
+      "system design",
+      "thiết kế hệ thống",
+      "distributed systems",
+      "high availability",
+      "scalability"
+    ]
+  },
+  {
+    "id": "rest-api",
+    "name": "REST API",
+    "category": "concept",
+    "role_tracks": [
+      "backend",
+      "frontend",
+      "fullstack"
+    ],
+    "aliases": [
+      "rest api",
+      "restful",
+      "restful api",
+      "rest apis",
+      "rest"
+    ]
+  },
+  {
+    "id": "graphql",
+    "name": "GraphQL",
+    "category": "concept",
+    "role_tracks": [
+      "backend",
+      "frontend"
+    ],
+    "aliases": [
+      "graphql"
+    ]
+  },
+  {
+    "id": "oop",
+    "name": "OOP / Hướng đối tượng",
+    "category": "concept",
+    "role_tracks": [
+      "backend"
+    ],
+    "aliases": [
+      "oop",
+      "object-oriented",
+      "huong doi tuong",
+      "hướng đối tượng",
+      "solid",
+      "design patterns"
+    ]
+  },
+  {
+    "id": "algorithms",
+    "name": "Data Structures & Algorithms",
+    "category": "concept",
+    "role_tracks": [
+      "backend",
+      "frontend",
+      "data"
+    ],
+    "aliases": [
+      "algorithms",
+      "data structures",
+      "dsa",
+      "cấu trúc dữ liệu",
+      "thuật toán"
+    ]
+  },
+  {
+    "id": "unit-testing",
+    "name": "Unit Testing & QA",
+    "category": "concept",
+    "role_tracks": [
+      "backend",
+      "frontend",
+      "qa"
+    ],
+    "aliases": [
+      "unit test",
+      "unit testing",
+      "junit",
+      "pytest",
+      "jest",
+      "mocking",
+      "tdd"
+    ]
+  },
+  {
+    "id": "security",
+    "name": "Web Security & Auth",
+    "category": "concept",
+    "role_tracks": [
+      "backend"
+    ],
+    "aliases": [
+      "oauth2",
+      "jwt",
+      "spring security",
+      "authentication",
+      "authorization",
+      "web security",
+      "owasp"
+    ]
+  }
+]
