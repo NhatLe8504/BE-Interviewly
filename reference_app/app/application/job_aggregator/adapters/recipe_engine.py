@@ -551,6 +551,14 @@ class RecipeBasedCrawlerAdapter(BaseJobSourceAdapter):
         boards = ["canonical"]
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             for b in boards:
+                board_meta = {}
+                try:
+                    b_url = f"https://job-boards.greenhouse.io/{b}"
+                    b_resp = await client.get(b_url, headers=BROWSER_HEADERS, follow_redirects=True)
+                    if b_resp.status_code == 200:
+                        board_meta = page_job_metadata(BeautifulSoup(b_resp.text, "html.parser"), b_url, b.title(), recipe)
+                except Exception:
+                    pass
                 url = f"https://boards-api.greenhouse.io/v1/boards/{b}/jobs?content=true"
                 try:
                     resp = await client.get(url)
@@ -589,6 +597,7 @@ class RecipeBasedCrawlerAdapter(BaseJobSourceAdapter):
                             "original_apply_url": apply_url,
                             "content_fingerprint": fingerprint,
                             "via_source": "via Greenhouse",
+                            **board_meta,
                         })
                         if len(results) >= limit:
                             break
@@ -601,6 +610,14 @@ class RecipeBasedCrawlerAdapter(BaseJobSourceAdapter):
         companies = ["palantir"]
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             for c in companies:
+                lever_meta = {}
+                try:
+                    l_url = f"https://jobs.lever.co/{c}"
+                    l_resp = await client.get(l_url, headers=BROWSER_HEADERS, follow_redirects=True)
+                    if l_resp.status_code == 200:
+                        lever_meta = page_job_metadata(BeautifulSoup(l_resp.text, "html.parser"), l_url, c.title(), recipe)
+                except Exception:
+                    pass
                 url = f"https://api.lever.co/v0/postings/{c}?mode=json"
                 try:
                     resp = await client.get(url)
@@ -644,6 +661,7 @@ class RecipeBasedCrawlerAdapter(BaseJobSourceAdapter):
                             "content_fingerprint": fingerprint,
                             "via_source": "via Lever",
                             "posted_at": j.get("createdAt"),
+                            **lever_meta,
                         })
                 except Exception as exc:
                     logger.debug("Lever error %s: %s", c, exc)

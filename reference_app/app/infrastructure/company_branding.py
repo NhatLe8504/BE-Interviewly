@@ -135,59 +135,6 @@ class SerperCompanyBrandingLookup:
         cleaned = re.sub(r"\s*[-–]\s*(Chi Nhánh|Chi nhánh|CN).*$", "", cleaned, flags=re.IGNORECASE)
         return cleaned.strip() or name.strip()
 
-    async def _search_images(self, client: httpx.AsyncClient, company_name: str, recipe: dict[str, Any]) -> dict[str, Any]:
-        policy = recipe.get("company_branding", {})
-        if not self.api_key:
-            return {}
-        allowed_hosts = policy.get("allowed_image_hosts", [])
-        if not allowed_hosts:
-            return {}
-        reject_patterns = list(policy.get("reject_asset_patterns", [])) + [
-            "topcv-logo", "default", "placeholder", "avatar_default", "no-logo", "vnw_empower"
-        ]
-        clean_name = self._clean_company_name(company_name)
-        template = policy.get("serper_image_query_template")
-        dom = recipe.get("domain", "")
-        query = template.format(company_name=clean_name) if template else f"site:{dom} {clean_name}"
-        try:
-            resp = await client.post(
-                "https://google.serper.dev/images",
-                headers={"X-API-KEY": self.api_key},
-                json={"q": query, "gl": "vn", "hl": "vi", "num": 10},
-            )
-            if resp.status_code != 200:
-                return {}
-            items = resp.json().get("images", [])
-        except (httpx.HTTPError, ValueError):
-            return {}
-        logo = None
-        banner = None
-        for item in items:
-            url = item.get("imageUrl", "")
-            m = re.search(r"https://(static\.topcv\.vn/[^\s\"?]+)", url)
-            if m:
-                url = f"https://{m.group(1)}"
-            approved = approved_asset_url(url, url, allowed_hosts)
-            if not approved:
-                continue
-            if any(re.search(p, approved, re.I) for p in reject_patterns):
-                continue
-            lower_url = approved.lower()
-            if not logo and any(p in lower_url for p in policy.get("logo_patterns", ["company_logos", "pictureofcompany", "logo", "avatar", "kms-logo"])):
-                logo = approved
-            elif not banner and any(p in lower_url for p in policy.get("banner_patterns", ["company_covers", "company_profile", "companyprofile", "cover", "our-story", "cms", "banner", "photo-grid", "001.jpg"])):
-                banner = approved
-            if logo and banner:
-                break
-        res: dict[str, Any] = {}
-        if logo:
-            res["company_logo_url"] = logo
-        if banner:
-            res["company_banner_url"] = banner
-        if res:
-            res["branding_source_url"] = f"https://{dom}" if dom else "https://google.com"
-        return res
-
     async def _discover(self, client: httpx.AsyncClient, job: dict[str, Any], recipe: dict[str, Any]) -> dict[str, Any]:
         policy = recipe["company_branding"]
         company_name = job["company_name"]
@@ -229,13 +176,7 @@ class SerperCompanyBrandingLookup:
                 if found:
                     assets.update(found)
                     break
-        if not assets.get("company_banner_url") or not assets.get("company_logo_url"):
-            fallback_images = await self._search_images(client, company_name, recipe)
-            for field in ("company_logo_url", "company_banner_url"):
-                if not assets.get(field) and fallback_images.get(field):
-                    assets[field] = fallback_images[field]
-            if not assets.get("branding_source_url") and fallback_images.get("branding_source_url"):
-                assets["branding_source_url"] = fallback_images["branding_source_url"]
+
         for field in ("company_logo_url", "company_banner_url"):
             if assets.get(field):
                 val = assets[field]
