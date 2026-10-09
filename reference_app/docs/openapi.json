@@ -8111,6 +8111,11 @@
             },
             "type": "array",
             "title": "Recommended Skills"
+          },
+          "analysis_engine": {
+            "type": "string",
+            "title": "Analysis Engine",
+            "default": "heuristic"
           }
         },
         "type": "object",

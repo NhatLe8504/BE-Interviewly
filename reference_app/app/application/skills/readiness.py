@@ -58,6 +58,7 @@ class JobReadinessAssessment:
     requirements: list[JobRequirementItem]
     explanation: str
     recommended_skills: list[str]
+    analysis_engine: str = "heuristic"  # "jev" khi TypeSafe Jev thực sự chạy
 
 
 class JobReadinessEvaluator:

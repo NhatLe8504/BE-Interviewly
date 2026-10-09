@@ -109,6 +109,9 @@ class JobReadinessRecord(Base):
     match_percent: Mapped[int] = mapped_column(Integer, nullable=False)
     verdict: Mapped[str] = mapped_column(String(32), nullable=False)
     data_coverage: Mapped[Decimal] = mapped_column(Numeric(4, 2), nullable=False)
+    analysis_engine: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="heuristic", server_default="heuristic",
+    )
     requirements_breakdown: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
     explanation: Mapped[str | None] = mapped_column(Text, nullable=True)
     recommended_skills: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)

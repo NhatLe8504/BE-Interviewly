@@ -236,6 +236,7 @@ class UserSkillService:
                         requirements=req_items,
                         explanation=existing.explanation or "",
                         recommended_skills=existing.recommended_skills or [],
+                        analysis_engine=existing.analysis_engine or "heuristic",
                     )
 
         user_skills = self.get_user_skills_dict(user_id)
@@ -249,9 +250,21 @@ class UserSkillService:
             user_skills=user_skills,
         )
 
+        # Jev chỉ chạy khi người dùng chủ động bấm kiểm tra một job cụ thể.
         if self.jev_adapter and self.jev_adapter.is_available():
-            req_dicts = [{"skill_id": r.skill_id, "importance": r.importance, "required_level": r.required_level} for r in assessment.requirements]
-            skills_summary = {sid: {"level": s.level, "ability_score": s.ability_score, "confidence": s.confidence} for sid, s in user_skills.items()}
+            req_dicts = [
+                {
+                    "skill_id": r.skill_id,
+                    "name": r.name,
+                    "importance": r.importance,
+                    "required_level": r.required_level,
+                }
+                for r in assessment.requirements
+            ]
+            skills_summary = {
+                sid: {"level": s.level, "ability_score": s.ability_score, "confidence": s.confidence}
+                for sid, s in user_skills.items()
+            }
             jev_res = self.jev_adapter.evaluate_readiness(
                 job_title=job.title,
                 job_seniority=job.seniority,
@@ -259,16 +272,8 @@ class UserSkillService:
                 candidate_skills=skills_summary,
                 cleaned_jd_text=job.cleaned_jd_text or "",
             )
-            if jev_res and "match_percent" in jev_res:
-                assessment = JobReadinessAssessment(
-                    job_id=assessment.job_id,
-                    match_percent=int(jev_res.get("match_percent", assessment.match_percent)),
-                    verdict=str(jev_res.get("verdict", assessment.verdict)),
-                    data_coverage=assessment.data_coverage,
-                    requirements=assessment.requirements,
-                    explanation=str(jev_res.get("explanation", assessment.explanation)),
-                    recommended_skills=list(jev_res.get("recommended_skills", assessment.recommended_skills)),
-                )
+            if jev_res is not None:
+                assessment = self._merge_jev_result(assessment, jev_res)
 
         # Cache in DB
         check_rec = self.session.scalars(
@@ -304,6 +309,7 @@ class UserSkillService:
                 requirements_breakdown=req_dicts,
                 explanation=assessment.explanation,
                 recommended_skills=assessment.recommended_skills,
+                analysis_engine=assessment.analysis_engine,
                 computed_at=datetime.now(timezone.utc),
             )
             self.session.add(check_rec)
@@ -314,11 +320,63 @@ class UserSkillService:
             check_rec.requirements_breakdown = req_dicts
             check_rec.explanation = assessment.explanation
             check_rec.recommended_skills = assessment.recommended_skills
+            check_rec.analysis_engine = assessment.analysis_engine
             check_rec.computed_at = datetime.now(timezone.utc)
 
         self.session.flush()
         self.session.commit()
         return assessment
+
+    _STATUS_RANK = {"unknown": 0, "gap": 1, "partial": 2, "met": 3}
+
+    def _merge_jev_result(self, assessment: JobReadinessAssessment, jev_res: Any) -> JobReadinessAssessment:
+        """Gộp kết quả Jev vào đánh giá nội bộ.
+
+        - match_percent / verdict / explanation / recommended_skills lấy theo Jev.
+        - Trạng thái từng kỹ năng chỉ được HẠ xuống (không nâng lên) và chỉ áp
+          dụng cho kỹ năng đã có bằng chứng kiểm chứng, để LLM không thể khẳng
+          định một kỹ năng mà dữ liệu nền chưa xác nhận.
+        """
+        requirements: list[JobRequirementItem] = []
+        for item in assessment.requirements:
+            rating = jev_res.skill_ratings.get(item.skill_id)
+            if (
+                rating is not None
+                and item.status != "unknown"
+                and self._STATUS_RANK.get(rating.status, 0) < self._STATUS_RANK.get(item.status, 0)
+            ):
+                requirements.append(
+                    JobRequirementItem(
+                        skill_id=item.skill_id,
+                        name=item.name,
+                        importance=item.importance,
+                        required_level=item.required_level,
+                        required_level_num=item.required_level_num,
+                        user_level=item.user_level,
+                        user_level_num=item.user_level_num,
+                        status=rating.status,
+                        confidence=item.confidence,
+                        level_assumed=item.level_assumed,
+                    )
+                )
+            else:
+                requirements.append(item)
+
+        recommended = list(jev_res.recommended_skills)
+        for skill_id in assessment.recommended_skills:
+            if skill_id not in recommended:
+                recommended.append(skill_id)
+
+        return JobReadinessAssessment(
+            job_id=assessment.job_id,
+            match_percent=jev_res.match_percent,
+            verdict=jev_res.verdict,
+            data_coverage=assessment.data_coverage,
+            requirements=requirements,
+            explanation=jev_res.explanation,
+            recommended_skills=recommended,
+            analysis_engine="jev",
+        )
 
     def sync_from_interview_session(self, session_id: int) -> int:
         """Ghi bằng chứng từ các lượt phỏng vấn đã được server chấm điểm.
