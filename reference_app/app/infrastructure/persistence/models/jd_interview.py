@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     DateTime,
     Float,
     ForeignKey,
@@ -30,6 +31,7 @@ class JDGenerationJob(Base):
         Index("idx_jd_jobs_user_id", "user_id"),
         Index("idx_jd_jobs_checksum", "checksum"),
         Index("idx_jd_jobs_status", "status"),
+        Index("idx_jd_jobs_is_public", "is_public"),
     )
 
     job_id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -52,6 +54,9 @@ class JDGenerationJob(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now(),
+    )
+    is_public: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false",
     )
 
     # Relationships
