@@ -291,6 +291,9 @@ class QuestionEvaluationResultOut(BaseModel):
     strengths: list[str]
     improvements: list[str]
     modal_breakdown: MultiModalBreakdownOut | None = None
+    # ID bản đánh giá do server lưu (practice_evaluations). Client gửi lại ID
+    # này khi lưu practice-history để backend ghi bằng chứng kỹ năng đã xác minh.
+    evaluation_id: int | None = None
 
 
 

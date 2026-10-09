@@ -7,6 +7,12 @@ import time
 import uuid
 from typing import Any
 
+from ..persistence.practice_evaluation_repository import (
+    PART_CONTENT,
+    PART_VOICE,
+    persist_llm_evaluation,
+)
+
 
 class EvaluationPullQueueManager:
     """
@@ -163,6 +169,33 @@ class EvaluationPullQueueManager:
             "delivery_metrics": delivery,
         }
 
+        evaluation_ids: list[int] = []
+        if llm_res:
+            content_id = persist_llm_evaluation(
+                container,
+                user_id=payload.get("user_id"),
+                question_id=qid,
+                part=PART_CONTENT,
+                part_score=text_score,
+                part_max=35.0,
+                answer_text=text_answer or None,
+            )
+            if content_id:
+                evaluation_ids.append(content_id)
+            voice_id = persist_llm_evaluation(
+                container,
+                user_id=payload.get("user_id"),
+                question_id=qid,
+                part=PART_VOICE,
+                part_score=voice_score,
+                part_max=50.0,
+                answer_text=transcript or None,
+            )
+            if voice_id:
+                evaluation_ids.append(voice_id)
+        if evaluation_ids:
+            result["evaluation_ids"] = evaluation_ids
+
         self.update_task_status(task_id, "completed", result=result)
 
     async def process_text_task_async(self, task_id: str, container: Any) -> None:
@@ -257,6 +290,18 @@ class EvaluationPullQueueManager:
                     level="junior",
                     language=language,
                 )
+                if isinstance(res, dict):
+                    evaluation_id = persist_llm_evaluation(
+                        container,
+                        user_id=payload.get("user_id"),
+                        question_id=qid,
+                        part=PART_CONTENT,
+                        part_score=float(res.get("text_score") or 0.0),
+                        part_max=35.0,
+                        answer_text=text,
+                    )
+                    if evaluation_id:
+                        res = {**res, "evaluation_id": evaluation_id}
                 self.update_task_status(task_id, "completed", result=res)
                 return
             except Exception as err:
@@ -367,6 +412,18 @@ class EvaluationPullQueueManager:
                     role_name=role,
                     language=language,
                 )
+                if isinstance(res, dict):
+                    evaluation_id = persist_llm_evaluation(
+                        container,
+                        user_id=payload.get("user_id"),
+                        question_id=qid,
+                        part=PART_VOICE,
+                        part_score=float(res.get("voice_score") or 0.0),
+                        part_max=50.0,
+                        answer_text=transcript,
+                    )
+                    if evaluation_id:
+                        res = {**res, "evaluation_id": evaluation_id}
                 self.update_task_status(task_id, "completed", result=res)
                 return
             except Exception as err:

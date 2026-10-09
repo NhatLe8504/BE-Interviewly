@@ -41,6 +41,7 @@ from .user_skills import (
     UserSkillLevelRecord,
     UserCareerProfileRecord,
     JobReadinessRecord,
+    PracticeEvaluationRecord,
 )
 
 __all__ = [
@@ -76,6 +77,7 @@ __all__ = [
     "UserSkillLevelRecord",
     "UserCareerProfileRecord",
     "JobReadinessRecord",
+    "PracticeEvaluationRecord",
     "job_aggregator",
     "jd_interview",
     "billing",
