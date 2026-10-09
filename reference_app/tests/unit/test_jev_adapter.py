@@ -103,7 +103,8 @@ def test_jev_payload_follows_systemone_protocol():
     assert isinstance(payload["state"], dict)
     questions = payload["questions"]
     assert questions["overall_match"]["type"] == "score"
-    assert len(questions["overall_match"]["criteria"]) == 11
+    # API thật giới hạn tối đa 10 mức điểm cho câu hỏi score.
+    assert len(questions["overall_match"]["criteria"]) == 10
     assert questions["verdict"]["type"] == "choice"
     assert set(questions["verdict"]["criteria"]) == {"ready", "almost", "not_ready", "insufficient_data"}
     skill_questions = [name for name in questions if name.startswith("skill__")]
@@ -156,7 +157,8 @@ def test_jev_parses_score_and_choice_answers():
         )
 
     assert result is not None
-    assert result.match_percent == 72
+    # Thang điểm tổng 0..9 -> 7.2/9 = 80%.
+    assert result.match_percent == 80
     assert result.verdict == "almost"
     assert result.confidence == 0.8
     assert result.model == "jev-latest"
@@ -165,7 +167,7 @@ def test_jev_parses_score_and_choice_answers():
     assert result.skill_ratings["docker"].status == "unknown"
     # Dưới mức yêu cầu, xếp theo điểm tăng dần (docker thấp nhất).
     assert result.recommended_skills == ["docker", "sql"]
-    assert "72%" in result.explanation
+    assert "80%" in result.explanation
     assert "SQL" in result.explanation
 
 
@@ -182,7 +184,7 @@ def test_jev_invalid_verdict_is_derived_from_score():
         )
     assert result is not None
     assert result.verdict == "ready"
-    assert result.match_percent == 84
+    assert result.match_percent == 93
 
 
 def test_jev_missing_overall_answer_falls_back():
