@@ -24,8 +24,9 @@ Qua rà soát trực tiếp bảng dữ liệu PostgreSQL và mã nguồn kiến
 - Nếu người dùng thoát giữa chừng hoặc test mock mà chưa bấm gửi câu trả lời (`POST /api/v1/interviews/sessions/{id}/turns`), turn của ứng viên chưa được tạo và `answer_evaluations` chưa được kích hoạt.
 - Khi người dùng gửi câu trả lời qua `submit_turn(...)`, hệ thống sẽ gọi `EvaluateTurnCommand`, chấm điểm qua `EvaluationService` và lưu bản ghi vào `answer_evaluations`.
 - **Kết luận**: Tracking chỉ được ghi nhận khi:
-  1. Turn có `transcribed_text` (hoặc `answer_text`) không rỗng và độ dài tối thiểu (> 10 ký tự).
+  1. Turn có `transcribed_text` (hoặc `answer_text`) không rỗng.
   2. Đã có bản ghi chấm điểm tương ứng trong `answer_evaluations` (hoặc kết quả chấm bài từ module tương ứng).
+  3. Turn có `question_id` trỏ tới câu hỏi ngân hàng có `skill_ids` (xem mục 5).
 
 ---
 
@@ -62,3 +63,16 @@ Qua rà soát trực tiếp bảng dữ liệu PostgreSQL và mã nguồn kiến
 3. **Liên kết câu hỏi với kỹ năng**:
    - Bảng `question_bank` có cột `skill_ids` (JSON mảng các chuỗi chuẩn hóa, ví dụ `["postgresql", "sql"]`).
    - Tuyệt đối không dùng regex parse text để đoán kỹ năng khi tra cứu. Chỉ trích xuất từ `question_bank.skill_ids` của câu hỏi đã được gán nhãn hoặc tiêu chí cấu trúc sẵn có.
+
+---
+
+## 5. LIÊN KẾT LƯỢT PHỎNG VẤN VỚI NGÂN HÀNG CÂU HỎI (PHASE 2 — LOI #5)
+
+- Mỗi lượt hỏi xuất phát từ ngân hàng câu hỏi phải được gắn `interview_turns.question_id` ngay khi câu hỏi được hỏi:
+  - Luồng text: `InterviewService.start_session` (lượt 1) và `submit_turn` (các lượt sau, dùng `stage_configs` để xác định stage).
+  - Luồng voice: `VoiceInterviewOrchestrator._persist_ai_turn` (đồng thời đánh dấu `session_question_selections.used_at_turn`).
+- Không đoán câu hỏi theo `selection_order`/`turn_number`; khi không xác định được câu hỏi ngân hàng thì để `question_id = NULL` và KHÔNG ghi evidence.
+- Câu hỏi sinh từ kịch bản JD (`interview_scripts.items`) không thuộc ngân hàng câu hỏi → `question_id = NULL`.
+- Chuỗi voice realtime: câu trả lời được chấm điểm nền (`answer_evaluations`) rồi đồng bộ ngay bằng `UserSkillService.sync_interview_turn`; khi dừng phiên có thêm lượt quét đầy đủ `sync_from_interview_session` (idempotent theo `source_id`).
+- Điểm evidence lượt phỏng vấn = `overall_score / 10.0` (thang DB 0–10 → 0–1), `grader_confidence = 0.90`, `input_mode = voice` nếu turn có `audio_url`.
+- Test hồi quy: `tests/integration/test_interview_turn_linking.py`.
