@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import asyncio
 import logging
 from typing import Any
@@ -45,7 +47,9 @@ class VoiceInterviewOrchestrator:
         questions_per_stage: dict[str, int] | None = None,
         session_factory: Any = None,
         evaluation_service: Any = None,
+        user_id: int | None = None,
     ) -> None:
+        self.user_id = user_id
         self.session_factory = session_factory
         self.evaluation_service = evaluation_service
         self.current_intent_ctx: QuestionIntentContext | None = None
@@ -82,6 +86,23 @@ class VoiceInterviewOrchestrator:
         self._background_tasks: set[asyncio.Task] = set()
 
         self._load_existing_turns_from_db()
+
+    
+    def _save_audio_file(self, turn_id: int, speaker: str, audio_bytes: bytes) -> str | None:
+        try:
+            base_dir = Path("/srv/storage/audio")
+            if not base_dir.exists():
+                base_dir = Path(__file__).resolve().parents[4] / "storage" / "audio"
+            session_dir = base_dir / str(self.session_id)
+            session_dir.mkdir(parents=True, exist_ok=True)
+            ext = "mp3" if speaker == "ai" else "webm"
+            filename = f"turn_{turn_id}_{speaker}.{ext}"
+            filepath = session_dir / filename
+            filepath.write_bytes(audio_bytes)
+            return f"/api/v1/voice/audio/{self.session_id}/{filename}"
+        except Exception as exc:
+            logging.getLogger("VoiceOrchestrator").warning("Failed to save audio file: %s", exc)
+            return None
 
     def _load_existing_turns_from_db(self) -> None:
         if not self.session_factory:
@@ -135,18 +156,22 @@ class VoiceInterviewOrchestrator:
             turns_payload: list[dict[str, Any]] = []
             for r in rows:
                 if r.message_text:
+                    ai_audio = r.audio_url if r.audio_url and r.audio_url != "voice_streamed" else None
                     turns_payload.append({
                         "id": f"turn-ai-{r.turn_number}",
                         "turnNumber": r.turn_number,
                         "speaker": "ai",
                         "text": r.message_text,
+                        "audioUrl": ai_audio,
                     })
                 if r.transcribed_text:
+                    user_audio = getattr(r, "user_audio_url", None)
                     turns_payload.append({
                         "id": f"turn-u-{r.turn_number}",
                         "turnNumber": r.turn_number,
                         "speaker": "user",
                         "text": r.transcribed_text,
+                        "audioUrl": user_audio,
                     })
             if turns_payload:
                 await self.connection.send_event({
@@ -173,6 +198,7 @@ class VoiceInterviewOrchestrator:
         turn_id: int,
         message_text: str,
         intent_ctx: QuestionIntentContext | None = None,
+        audio_url: str | None = None,
     ) -> None:
         if not self.session_factory or not message_text.strip():
             return
@@ -190,7 +216,7 @@ class VoiceInterviewOrchestrator:
             if existing:
                 existing.message_text = message_text.strip()
                 existing.speaker = TurnSpeaker.ai
-                existing.audio_url = "voice_streamed"
+                existing.audio_url = audio_url or existing.audio_url or "voice_streamed"
                 if question_id is not None:
                     existing.question_id = int(question_id)
             else:
@@ -199,7 +225,7 @@ class VoiceInterviewOrchestrator:
                     turn_number=turn_id,
                     speaker=TurnSpeaker.ai,
                     message_text=message_text.strip(),
-                    audio_url="voice_streamed",
+                    audio_url=audio_url or "voice_streamed",
                     question_id=int(question_id) if question_id is not None else None,
                 )
                 db.add(turn_rec)
@@ -726,7 +752,49 @@ class VoiceInterviewOrchestrator:
             if question_text is not None:
                 messages.append({"role": "user", "content": question_text})
 
-            sentence_queue: asyncio.Queue[tuple[int, str] | None] = asyncio.Queue(maxsize=4)
+            turn_audio_collector: dict[int, bytes] = {}
+            synth_sem = asyncio.Semaphore(2)
+
+            async def synthesize_one(idx: int, s_text: str):
+                if self.is_generation_cancelled(gen_id):
+                    return
+                if self.state != VoiceSessionState.SPEAK:
+                    await self.set_state(VoiceSessionState.SPEAK)
+
+                if self.connection.is_open():
+                    await self.connection.send_event({
+                        "type": VoiceEventType.SUBTITLE.value,
+                        "sentence": s_text,
+                        "sentence_index": idx,
+                        "generation_id": gen_id,
+                        "turn_id": turn_id,
+                    })
+
+                chunks: list[bytes] = []
+                async for audio_chunk in self.tts.synthesize_stream(s_text, voice=self.voice):
+                    if self.is_generation_cancelled(gen_id):
+                        break
+                    if audio_chunk:
+                        chunks.append(audio_chunk)
+
+                if chunks and not self.is_generation_cancelled(gen_id):
+                    full_audio = b"".join(chunks)
+                    turn_audio_collector[idx] = full_audio
+                    if self.connection.is_open():
+                        await self.connection.send_event({
+                            "type": VoiceEventType.AUDIO.value,
+                            "audio_chunk": full_audio,
+                            "mime_type": "audio/mpeg",
+                            "sentence_index": idx,
+                            "generation_id": gen_id,
+                            "turn_id": turn_id,
+                        })
+
+            async def worker_synth(idx: int, s_text: str):
+                async with synth_sem:
+                    await synthesize_one(idx, s_text)
+
+            synth_tasks: list[asyncio.Task] = []
 
             async def produce_sentences() -> None:
                 async for token in self.llm.stream_ai_tokens(messages):
@@ -741,34 +809,31 @@ class VoiceInterviewOrchestrator:
                             "generation_id": gen_id,
                         })
                     for sentence in splitter.feed(token):
-                        await sentence_queue.put(sentence)
+                        idx, s_text = sentence
+                        synth_tasks.append(asyncio.create_task(worker_synth(idx, s_text)))
+
                 if not self.is_generation_cancelled(gen_id):
                     for sentence in splitter.flush():
-                        await sentence_queue.put(sentence)
-                await sentence_queue.put(None)
+                        idx, s_text = sentence
+                        synth_tasks.append(asyncio.create_task(worker_synth(idx, s_text)))
 
-            async def consume_sentences() -> None:
-                while True:
-                    sentence = await sentence_queue.get()
-                    if sentence is None:
-                        return
-                    await self._stream_sentence_tts(
-                        sentence_idx=sentence[0],
-                        sentence_text=sentence[1],
-                        generation_id=gen_id,
-                        turn_id=turn_id,
-                    )
-
-            async with asyncio.TaskGroup() as tasks:
-                tasks.create_task(produce_sentences())
-                tasks.create_task(consume_sentences())
+            await produce_sentences()
+            if synth_tasks and not self.is_generation_cancelled(gen_id):
+                await asyncio.gather(*synth_tasks, return_exceptions=True)
 
             # If not cancelled, record AI message in history and finalize turn
             if not self.is_generation_cancelled(gen_id):
                 final_text = "".join(full_ai_response).strip()
+                ai_audio_url = None
+                if turn_audio_collector:
+                    full_turn_audio = b"".join(
+                        turn_audio_collector[k] for k in sorted(turn_audio_collector.keys())
+                    )
+                    ai_audio_url = self._save_audio_file(turn_id, "ai", full_turn_audio)
+
                 if final_text:
                     self.conversation_history.append({"role": "assistant", "content": final_text})
-                    self._persist_ai_turn(turn_id, final_text, turn_intent)
+                    self._persist_ai_turn(turn_id, final_text, turn_intent, audio_url=ai_audio_url)
 
                 if is_session_finishing:
                     await self.set_state(VoiceSessionState.COMPLETED)
@@ -871,19 +936,53 @@ class VoiceInterviewOrchestrator:
             if not sentences:
                 sentences = [(0, text)]
 
+            turn_audio_collector: dict[int, bytes] = {}
             for sentence_idx, sentence_text in sentences:
                 if self.is_generation_cancelled(gen_id):
                     return
-                await self._stream_sentence_tts(
-                    sentence_idx=sentence_idx,
-                    sentence_text=sentence_text,
-                    generation_id=gen_id,
-                    turn_id=turn_id,
-                )
+                # Stream sentence TTS and collect audio chunks
+                if self.state != VoiceSessionState.SPEAK:
+                    await self.set_state(VoiceSessionState.SPEAK)
+
+                if self.connection.is_open():
+                    await self.connection.send_event({
+                        "type": VoiceEventType.SUBTITLE.value,
+                        "sentence": sentence_text,
+                        "sentence_index": sentence_idx,
+                        "generation_id": gen_id,
+                        "turn_id": turn_id,
+                    })
+
+                chunks: list[bytes] = []
+                async for audio_chunk in self.tts.synthesize_stream(sentence_text, voice=self.voice):
+                    if self.is_generation_cancelled(gen_id):
+                        break
+                    if audio_chunk:
+                        chunks.append(audio_chunk)
+
+                if chunks and not self.is_generation_cancelled(gen_id):
+                    full_audio = b"".join(chunks)
+                    turn_audio_collector[sentence_idx] = full_audio
+                    if self.connection.is_open():
+                        await self.connection.send_event({
+                            "type": VoiceEventType.AUDIO.value,
+                            "audio_chunk": full_audio,
+                            "mime_type": "audio/mpeg",
+                            "sentence_index": sentence_idx,
+                            "generation_id": gen_id,
+                            "turn_id": turn_id,
+                        })
 
             if not self.is_generation_cancelled(gen_id):
+                ai_audio_url = None
+                if turn_audio_collector:
+                    full_turn_audio = b"".join(
+                        turn_audio_collector[k] for k in sorted(turn_audio_collector.keys())
+                    )
+                    ai_audio_url = self._save_audio_file(turn_id, "ai", full_turn_audio)
+
                 self.conversation_history.append({"role": "assistant", "content": text})
-                self._persist_ai_turn(turn_id, text, turn_intent)
+                self._persist_ai_turn(turn_id, text, turn_intent, audio_url=ai_audio_url)
                 if self.connection.is_open():
                     await self.connection.send_event({
                         "type": VoiceEventType.DONE.value,

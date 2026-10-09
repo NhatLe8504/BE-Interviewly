@@ -5,7 +5,14 @@ import logging
 import base64
 import json
 from typing import Any
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
+from pathlib import Path
+from sqlalchemy.orm import Session
+from ..dependencies import get_container, get_optional_user_id, get_session
+from ..schemas.voice import VoiceOptionsOut
+from ....application.voice.voice_catalog import get_voice_catalog_options
+from ....application.voice.entitlement import check_user_voice_entitlement
 
 from ....application.container import ServiceContainer
 from ....application.voice.orchestrator import VoiceInterviewOrchestrator
@@ -169,6 +176,7 @@ async def handle_voice_websocket_session(
         system_prompt=None,
         session_factory=session_factory,
         evaluation_service=getattr(container, "evaluation_service", None),
+        user_id=user_id,
     )
 
     try:
@@ -304,3 +312,60 @@ async def presence_websocket_endpoint(websocket: WebSocket):
         presence_manager.disconnect(websocket, user_id)
         await presence_manager.broadcast_state()
 
+
+
+@router.get("/api/v1/voice/options", response_model=VoiceOptionsOut)
+def get_voice_options(
+    user_id: int | None = Depends(get_optional_user_id),
+    session: Session = Depends(get_session),
+) -> VoiceOptionsOut:
+    effective_user_id = user_id if user_id and user_id > 0 else None
+    is_premium = check_user_voice_entitlement(session, effective_user_id) if effective_user_id else False
+    data = get_voice_catalog_options(is_premium)
+    return VoiceOptionsOut(**data)
+
+
+@router.get("/api/v1/voice/audio/{session_id}/{filename}")
+async def get_turn_audio(session_id: str, filename: str):
+    base_dir = Path("/srv/storage/audio")
+    if not base_dir.exists():
+        base_dir = Path(__file__).resolve().parents[4] / "storage" / "audio"
+    file_path = base_dir / session_id / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Audio file not found")
+    media_type = "audio/mpeg" if filename.endswith(".mp3") else "audio/webm"
+    return FileResponse(file_path, media_type=media_type)
+
+
+@router.post("/api/v1/interviews/sessions/{session_id}/turns/{turn_id}/user-audio")
+async def upload_user_turn_audio(
+    session_id: int,
+    turn_id: int,
+    file: UploadFile = File(...),
+    session: Session = Depends(get_session),
+    user_id: int | None = Depends(get_optional_user_id),
+):
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty audio payload")
+
+    base_dir = Path("/srv/storage/audio")
+    if not base_dir.exists():
+        base_dir = Path(__file__).resolve().parents[4] / "storage" / "audio"
+    session_dir = base_dir / str(session_id)
+    session_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"turn_{turn_id}_user.webm"
+    (session_dir / filename).write_bytes(content)
+    audio_url = f"/api/v1/voice/audio/{session_id}/{filename}"
+
+    from ....infrastructure.persistence.models.session import InterviewTurn as OrmInterviewTurn
+    turn_rec = (
+        session.query(OrmInterviewTurn)
+        .filter_by(session_id=session_id, turn_number=turn_id)
+        .first()
+    )
+    if turn_rec:
+        turn_rec.user_audio_url = audio_url
+        session.commit()
+
+    return {"status": "ok", "audio_url": audio_url}
