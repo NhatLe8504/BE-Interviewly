@@ -45,6 +45,9 @@ services:
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
       CLOUDINARY_URL: ${CLOUDINARY_URL:-}
       SERPER_API_KEY: ${SERPER_API_KEY:-4bbd6abc0f4965b6171fef9a6d69f252ffdb7488}
+      JEV_API_KEY: ${JEV_API_KEY:-}
+      JEV_API_URL: ${JEV_API_URL:-https://api.typesafe.ai/v1/systemone}
+      JEV_MODEL: ${JEV_MODEL:-jev-latest}
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:
