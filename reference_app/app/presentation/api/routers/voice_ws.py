@@ -216,6 +216,12 @@ async def handle_voice_websocket_session(
                         })
                     if "barge_in_enabled" in data:
                         orchestrator.set_barge_in_enabled(bool(data["barge_in_enabled"]))
+                    if "voice" in data and data["voice"]:
+                        orchestrator.voice = str(data["voice"])
+                        await connection.send_event({
+                            "type": "voice_configured",
+                            "voice": orchestrator.voice,
+                        })
 
                 elif msg_type == "abort":
                     await orchestrator.handle_user_speech_start(force=True)
