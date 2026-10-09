@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session
 
 from ....application.container import ServiceContainer
 from ....application.job_aggregator.service import JobAggregatorService
+from ....application.skills.service import UserSkillService
+from ....application.skills.readiness import JobReadinessEvaluator
 from ....domain.jd_interview import JDSourceType, NormalizedJD
 from ..dependencies import get_container, get_optional_user_id, get_session
 from ..schemas.jobs import (
@@ -22,6 +24,7 @@ from ..schemas.jobs import (
     JobSkillMatchOut,
     StartJobPracticeOut,
 )
+from ..schemas.user_skills import JobReadinessAssessmentOut, JobReadinessRequirementOut
 
 logger = logging.getLogger(__name__)
 
@@ -97,12 +100,23 @@ async def list_jobs(
     location: str = Query("", description="Filter by location, city, or country"),
     source_id: str = Query("", description="Filter by source ID (topcv, itviec, vietnamworks, etc.)"),
     country_code: str = Query("VN", pattern="^(?:|[A-Z]{2}|GLOBAL)$", description="VN includes Vietnam and explicitly worldwide remote jobs; empty searches all countries"),
-    sort_by: str = Query("recent", description="Sort order: recent, posted, salary_desc, title_asc"),
+    sort_by: str = Query("recent", description="Sort order: recent, posted, match, salary_desc, title_asc"),
     page: int = Query(1, ge=1),
     limit: int = Query(12, ge=1, le=50),
+    user_id: int | None = Depends(get_optional_user_id),
     session: Session = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
 ) -> JobListResponse:
+    effective_tech = technology
+    if sort_by == "match" and not effective_tech and user_id and user_id > 0:
+        skill_svc = UserSkillService(session=session)
+        prof = skill_svc.get_user_career_profile(user_id)
+        if prof and prof.top_skills:
+            # Boost primary top skill as default filter hint if none selected
+            top_sids = [s.get("skill_id") for s in prof.top_skills if s.get("skill_id")]
+            if top_sids:
+                effective_tech = top_sids[0]
+
     service = JobAggregatorService(
         session=session,
         serper_api_key=container.settings.serper_api_key if hasattr(container.settings, "serper_api_key") else "",
@@ -114,7 +128,7 @@ async def list_jobs(
         domain_id=domain_id,
         seniority=seniority,
         workplace_type=workplace_type,
-        technology=technology,
+        technology=effective_tech,
         location=location,
         source_id=source_id,
         country_code=country_code,
@@ -139,30 +153,21 @@ def get_filter_metadata(
     session: Session = Depends(get_session),
 ) -> JobFilterMetadataOut:
     service = JobAggregatorService(session=session)
-    data = service.get_filter_metadata(country_code=country_code)
-    return JobFilterMetadataOut(
-        seniorities=data.get("seniorities", []),
-        workplace_types=data.get("workplace_types", []),
-        top_technologies=data.get("top_technologies", []),
-        locations=data.get("locations", []),
-        countries=data.get("countries", []),
-        sources=data.get("sources", []),
-        sort_options=data.get("sort_options", []),
-    )
-
-
-@router.get("/sync/status")
-def get_sync_status(
-    container: ServiceContainer = Depends(get_container),
-) -> dict[str, Any]:
-    if getattr(container, "job_worker", None):
-        return container.job_worker.last_run_stats
-    return {"status": "unsupported", "message": "Worker not attached"}
+    filters = service.get_filter_metadata(country_code=country_code)
+    # Ensure sort_options includes 'match'
+    filters["sort_options"] = [
+        {"value": "recent", "label": "Mới cập nhật"},
+        {"value": "posted", "label": "Ngày đăng tuyển"},
+        {"value": "match", "label": "Phù hợp với tôi"},
+        {"value": "salary_desc", "label": "Lương cao nhất"},
+        {"value": "title_asc", "label": "Tiêu đề A-Z"},
+    ]
+    return JobFilterMetadataOut(**filters)
 
 
 @router.post("/sync", status_code=status.HTTP_200_OK)
-async def sync_jobs(
-    query: str = Query("", description="Optional custom query"),
+async def sync_jobs_now(
+    query: str = Query("java developer", description="Search query for live ingestion"),
     session: Session = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
 ) -> dict[str, Any]:
@@ -221,6 +226,76 @@ def get_job_detail(
     return JobDetailOut(**item_dict)
 
 
+@router.post("/{job_id}/readiness", response_model=JobReadinessAssessmentOut)
+@router.get("/{job_id}/readiness", response_model=JobReadinessAssessmentOut)
+def check_job_readiness(
+    job_id: str,
+    force: bool = Query(False, description="Force recompute"),
+    user_id: int | None = Depends(get_optional_user_id),
+    session: Session = Depends(get_session),
+) -> JobReadinessAssessmentOut:
+    service = JobAggregatorService(session=session)
+    job = service.get_job_by_id(job_id)
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+
+    if not user_id or user_id <= 0:
+        assessment = JobReadinessEvaluator.evaluate(
+            job_id=job.job_id,
+            job_title=job.title,
+            job_seniority=job.seniority,
+            skills_required=job.skills_required or [],
+            technologies=job.technologies or [],
+            cleaned_jd_text=job.cleaned_jd_text or "",
+            user_skills={},
+        )
+        return JobReadinessAssessmentOut(
+            job_id=job.job_id,
+            match_percent=0,
+            verdict="insufficient_data",
+            data_coverage=0.0,
+            requirements=[
+                JobReadinessRequirementOut(
+                    skill_id=r.skill_id,
+                    name=r.name,
+                    importance=r.importance,
+                    required_level=r.required_level,
+                    user_level=r.user_level,
+                    status=r.status,
+                    confidence=r.confidence,
+                    level_assumed=r.level_assumed,
+                )
+                for r in assessment.requirements
+            ],
+            explanation="Đăng nhập và hoàn thành các buổi luyện tập để AI phân tích mức độ phù hợp của bạn với vị trí này.",
+            recommended_skills=assessment.recommended_skills,
+        )
+
+    skill_svc = UserSkillService(session=session)
+    assessment = skill_svc.evaluate_job_readiness(user_id=user_id, job_id=job_id, force_refresh=force)
+    return JobReadinessAssessmentOut(
+        job_id=assessment.job_id,
+        match_percent=assessment.match_percent,
+        verdict=assessment.verdict,
+        data_coverage=assessment.data_coverage,
+        requirements=[
+            JobReadinessRequirementOut(
+                skill_id=r.skill_id,
+                name=r.name,
+                importance=r.importance,
+                required_level=r.required_level,
+                user_level=r.user_level,
+                status=r.status,
+                confidence=r.confidence,
+                level_assumed=r.level_assumed,
+            )
+            for r in assessment.requirements
+        ],
+        explanation=assessment.explanation,
+        recommended_skills=assessment.recommended_skills,
+    )
+
+
 @router.get("/{job_id}/skill-match", response_model=JobSkillMatchOut)
 def get_job_skill_match(
     job_id: str,
@@ -230,11 +305,18 @@ def get_job_skill_match(
     service = JobAggregatorService(session=session)
     candidate_skills: list[str] = []
 
-    if user_id:
-        from ....infrastructure.persistence.models.user import CandidateProfile
-        profile = session.get(CandidateProfile, user_id)
-        if profile and profile.bio:
-            candidate_skills = [w.strip() for w in profile.bio.replace("\n", ",").split(",") if w.strip()]
+    if user_id and user_id > 0:
+        skill_svc = UserSkillService(session=session)
+        user_skills_dict = skill_svc.get_user_skills_dict(user_id)
+        candidate_skills = [
+            sid for sid, est in user_skills_dict.items()
+            if est.level != "none" and est.confidence >= 0.20
+        ]
+        if not candidate_skills:
+            from ....infrastructure.persistence.models.user import CandidateProfile
+            profile = session.get(CandidateProfile, user_id)
+            if profile and profile.bio:
+                candidate_skills = [w.strip() for w in profile.bio.replace("\n", ",").split(",") if w.strip()]
 
     result = service.calculate_skill_match(job_id=job_id, candidate_skills=candidate_skills)
     return JobSkillMatchOut(

@@ -31,6 +31,8 @@ def _auto_migrate_columns(engine: Any) -> None:
                 ("practice_id", "BIGINT"),
                 ("intent", "TEXT"),
                 ("difficulty", "INTEGER DEFAULT 3"),
+                ("skill_ids", "JSON DEFAULT '[]'"),
+                ("skill_ids", "JSON DEFAULT '[]'::json"),
             ]
             for col_name, col_def in cols:
                 conn.exec_driver_sql(f"ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS {col_name} {col_def};")
