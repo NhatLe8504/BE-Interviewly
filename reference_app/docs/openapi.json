@@ -447,6 +447,32 @@
         ]
       }
     },
+    "/api/v1/profile/skills": {
+      "get": {
+        "tags": [
+          "profile"
+        ],
+        "summary": "Get My Skill Profile",
+        "operationId": "get_my_skill_profile_api_v1_profile_skills_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserCareerProfileOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/profile/change-password": {
       "post": {
         "tags": [
@@ -491,6 +517,57 @@
             "HTTPBearer": []
           }
         ]
+      }
+    },
+    "/api/v1/profile/skills/{skill_id}/evidence": {
+      "get": {
+        "tags": [
+          "profile"
+        ],
+        "summary": "Get My Skill Evidence",
+        "operationId": "get_my_skill_evidence_api_v1_profile_skills__skill_id__evidence_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "skill_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Skill Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SkillEvidenceItemOut"
+                  },
+                  "title": "Response Get My Skill Evidence Api V1 Profile Skills  Skill Id  Evidence Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/catalog/domains": {
@@ -999,6 +1076,11 @@
         ],
         "summary": "Evaluate Question Answer",
         "operationId": "evaluate_question_answer_api_v1_catalog_questions__question_id__evaluate_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "question_id",
@@ -1338,7 +1420,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/v1/catalog/evaluations/pull/{task_id}": {
@@ -1569,7 +1656,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/v1/catalog/evaluations/voice-queue": {
@@ -1611,7 +1703,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/v1/catalog/evaluations/overall-synthesis": {
@@ -5450,6 +5547,11 @@
         ],
         "summary": "List Jobs",
         "operationId": "list_jobs_api_v1_jobs_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "keyword",
@@ -5560,11 +5662,11 @@
             "required": false,
             "schema": {
               "type": "string",
-              "description": "Sort order: recent, posted, salary_desc, title_asc",
+              "description": "Sort order: recent, posted, match, salary_desc, title_asc",
               "default": "recent",
               "title": "Sort By"
             },
-            "description": "Sort order: recent, posted, salary_desc, title_asc"
+            "description": "Sort order: recent, posted, match, salary_desc, title_asc"
           },
           {
             "name": "page",
@@ -5686,8 +5788,8 @@
         "tags": [
           "jobs"
         ],
-        "summary": "Sync Jobs",
-        "operationId": "sync_jobs_api_v1_jobs_sync_post",
+        "summary": "Sync Jobs Now",
+        "operationId": "sync_jobs_now_api_v1_jobs_sync_post",
         "parameters": [
           {
             "name": "query",
@@ -5695,11 +5797,11 @@
             "required": false,
             "schema": {
               "type": "string",
-              "description": "Optional custom query",
-              "default": "",
+              "description": "Search query for live ingestion",
+              "default": "java developer",
               "title": "Query"
             },
-            "description": "Optional custom query"
+            "description": "Search query for live ingestion"
           }
         ],
         "responses": {
@@ -5710,7 +5812,7 @@
                 "schema": {
                   "type": "object",
                   "additionalProperties": true,
-                  "title": "Response Sync Jobs Api V1 Jobs Sync Post"
+                  "title": "Response Sync Jobs Now Api V1 Jobs Sync Post"
                 }
               }
             }
@@ -5776,6 +5878,122 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/JobDetailOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/jobs/{job_id}/readiness": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Check Job Readiness",
+        "operationId": "check_job_readiness_api_v1_jobs__job_id__readiness_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "force",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Force recompute",
+              "default": false,
+              "title": "Force"
+            },
+            "description": "Force recompute"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobReadinessAssessmentOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Check Job Readiness",
+        "operationId": "check_job_readiness_api_v1_jobs__job_id__readiness_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "force",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Force recompute",
+              "default": false,
+              "title": "Force"
+            },
+            "description": "Force recompute"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobReadinessAssessmentOut"
                 }
               }
             }
@@ -7858,6 +8076,102 @@
         ],
         "title": "JobListResponse"
       },
+      "JobReadinessAssessmentOut": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "match_percent": {
+            "type": "integer",
+            "title": "Match Percent"
+          },
+          "verdict": {
+            "type": "string",
+            "title": "Verdict"
+          },
+          "data_coverage": {
+            "type": "number",
+            "title": "Data Coverage"
+          },
+          "requirements": {
+            "items": {
+              "$ref": "#/components/schemas/JobReadinessRequirementOut"
+            },
+            "type": "array",
+            "title": "Requirements"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation"
+          },
+          "recommended_skills": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Recommended Skills"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "match_percent",
+          "verdict",
+          "data_coverage",
+          "requirements",
+          "explanation"
+        ],
+        "title": "JobReadinessAssessmentOut"
+      },
+      "JobReadinessRequirementOut": {
+        "properties": {
+          "skill_id": {
+            "type": "string",
+            "title": "Skill Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "importance": {
+            "type": "string",
+            "title": "Importance"
+          },
+          "required_level": {
+            "type": "string",
+            "title": "Required Level"
+          },
+          "user_level": {
+            "type": "string",
+            "title": "User Level"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence",
+            "default": 0.0
+          },
+          "level_assumed": {
+            "type": "boolean",
+            "title": "Level Assumed",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "skill_id",
+          "name",
+          "importance",
+          "required_level",
+          "user_level",
+          "status"
+        ],
+        "title": "JobReadinessRequirementOut"
+      },
       "JobSkillMatchOut": {
         "properties": {
           "has_candidate_skills": {
@@ -9724,6 +10038,17 @@
                 "type": "null"
               }
             ]
+          },
+          "evaluation_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluation Id"
           }
         },
         "type": "object",
@@ -11420,6 +11745,114 @@
         ],
         "title": "SetInitialPasswordIn"
       },
+      "SkillEvidenceItemOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "skill_id": {
+            "type": "string",
+            "title": "Skill Id"
+          },
+          "source_type": {
+            "type": "string",
+            "title": "Source Type"
+          },
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "question_difficulty": {
+            "type": "integer",
+            "title": "Question Difficulty"
+          },
+          "grader_confidence": {
+            "type": "number",
+            "title": "Grader Confidence"
+          },
+          "evidence_quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Quote"
+          },
+          "input_mode": {
+            "type": "string",
+            "title": "Input Mode",
+            "default": "text"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "skill_id",
+          "source_type",
+          "source_id",
+          "score",
+          "question_difficulty",
+          "grader_confidence",
+          "created_at"
+        ],
+        "title": "SkillEvidenceItemOut"
+      },
+      "SkillLevelItemOut": {
+        "properties": {
+          "skill_id": {
+            "type": "string",
+            "title": "Skill Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "ability_score": {
+            "type": "number",
+            "title": "Ability Score"
+          },
+          "level": {
+            "type": "string",
+            "title": "Level"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence"
+          },
+          "evidence_count": {
+            "type": "integer",
+            "title": "Evidence Count"
+          },
+          "max_difficulty_passed": {
+            "type": "integer",
+            "title": "Max Difficulty Passed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "skill_id",
+          "name",
+          "ability_score",
+          "level",
+          "confidence",
+          "evidence_count",
+          "max_difficulty_passed"
+        ],
+        "title": "SkillLevelItemOut"
+      },
       "SkillRadarOut": {
         "properties": {
           "clarity": {
@@ -12593,6 +13026,74 @@
           "preferred_language"
         ],
         "title": "UserAdminOut"
+      },
+      "UserCareerProfileOut": {
+        "properties": {
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "primary_role_track": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Role Track"
+          },
+          "secondary_role_track": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secondary Role Track"
+          },
+          "role_confidence": {
+            "type": "number",
+            "title": "Role Confidence",
+            "default": 0.0
+          },
+          "overall_level": {
+            "type": "string",
+            "title": "Overall Level",
+            "default": "none"
+          },
+          "top_skills": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Top Skills"
+          },
+          "weak_skills": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Weak Skills"
+          },
+          "skills": {
+            "items": {
+              "$ref": "#/components/schemas/SkillLevelItemOut"
+            },
+            "type": "array",
+            "title": "Skills"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id"
+        ],
+        "title": "UserCareerProfileOut"
       },
       "UserListPageOut": {
         "properties": {
