@@ -235,3 +235,85 @@ def test_admin_payments_endpoints(client) -> None:
     sync_data = sync_res.json()
     assert "success" in sync_data
     assert sync_data["success"] is True
+
+def test_admin_question_skill_tagging_endpoints(client) -> None:
+    _, admin_headers = create_admin_and_token(client)
+
+    # 1. Danh mục nhãn kỹ năng cho UI admin
+    skills_res = client.get("/api/v1/admin/skills", headers=admin_headers)
+    assert skills_res.status_code == 200
+    skills = skills_res.json()
+    assert len(skills) >= 50
+    skill_ids = {s["id"] for s in skills}
+    assert "nextjs" in skill_ids and "sql" in skill_ids
+
+    domain_res = client.post(
+        "/api/v1/admin/domains",
+        json={"domain_name": f"Skill Domain {uuid.uuid4().hex[:6]}"},
+        headers=admin_headers,
+    )
+    assert domain_res.status_code == 201
+    domain_id = domain_res.json()["domain_id"]
+
+    # 2. Admin gửi nhãn tay -> chuẩn hóa theo taxonomy
+    created = client.post(
+        "/api/v1/admin/questions",
+        json={
+            "domain_id": domain_id,
+            "question_text": "How do you optimize a slow SQL query in PostgreSQL?",
+            "question_type": "technical",
+            "skill_ids": ["PostgreSQL", "SQL"],
+        },
+        headers=admin_headers,
+    )
+    assert created.status_code == 201
+    assert created.json()["skill_ids"] == ["postgresql", "sql"]
+    question_id = created.json()["question_id"]
+
+    # 3. Không gửi nhãn -> tự trích xuất từ bằng chứng văn bản
+    auto = client.post(
+        "/api/v1/admin/questions",
+        json={
+            "domain_id": domain_id,
+            "question_text": "What is the difference between Next.js server and client components?",
+            "question_type": "technical",
+        },
+        headers=admin_headers,
+    )
+    assert auto.status_code == 201
+    assert "nextjs" in auto.json()["skill_ids"]
+
+    # 4. Nhãn không có trong taxonomy bị chặn 422
+    bad = client.post(
+        "/api/v1/admin/questions",
+        json={
+            "domain_id": domain_id,
+            "question_text": "Explain database indexes.",
+            "question_type": "technical",
+            "skill_ids": ["totally-made-up"],
+        },
+        headers=admin_headers,
+    )
+    assert bad.status_code == 422
+
+    # 5. Sửa nhãn qua endpoint update
+    upd = client.put(
+        f"/api/v1/admin/questions/{question_id}",
+        json={"skill_ids": ["sql"]},
+        headers=admin_headers,
+    )
+    assert upd.status_code == 200
+    assert upd.json()["skill_ids"] == ["sql"]
+
+    # 6. Gợi ý LLM: chưa cấu hình key -> trả rỗng kèm lý do, không 500
+    sug = client.post(
+        "/api/v1/admin/questions/skill-suggestions",
+        json={"question_text": "How do you tune SQL queries?"},
+        headers=admin_headers,
+    )
+    assert sug.status_code == 200
+    body = sug.json()
+    assert isinstance(body["suggested_skill_ids"], list)
+    # Mọi gợi ý phải là id hợp lệ trong taxonomy (kể cả khi không có key -> rỗng).
+    assert all(sid in skill_ids for sid in body["suggested_skill_ids"])
+
