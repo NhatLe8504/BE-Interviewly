@@ -58,3 +58,4 @@ class JobReadinessAssessmentOut(BaseModel):
     requirements: list[JobReadinessRequirementOut]
     explanation: str
     recommended_skills: list[str] = Field(default_factory=list)
+    analysis_engine: str = "heuristic"

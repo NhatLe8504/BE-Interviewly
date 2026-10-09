@@ -270,6 +270,7 @@ def check_job_readiness(
             ],
             explanation="Đăng nhập và hoàn thành các buổi luyện tập để AI phân tích mức độ phù hợp của bạn với vị trí này.",
             recommended_skills=assessment.recommended_skills,
+            analysis_engine="heuristic",
         )
 
     skill_svc = UserSkillService(session=session)
@@ -294,6 +295,7 @@ def check_job_readiness(
         ],
         explanation=assessment.explanation,
         recommended_skills=assessment.recommended_skills,
+        analysis_engine=assessment.analysis_engine,
     )
 
 
