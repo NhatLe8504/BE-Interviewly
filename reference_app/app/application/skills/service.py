@@ -25,9 +25,21 @@ logger = logging.getLogger(__name__)
 
 
 class UserSkillService:
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, jev_adapter: Any = None) -> None:
         self.session = session
         self.taxonomy = get_default_taxonomy()
+        if jev_adapter is None:
+            try:
+                from ...infrastructure.llm.jev_adapter import JevSystemOneAdapter
+                import os
+                api_key = os.environ.get("JEV_API_KEY", "")
+                api_url = os.environ.get("JEV_API_URL", "https://api.typesafe.ai/v1/systemone")
+                model = os.environ.get("JEV_MODEL", "jev-latest")
+                self.jev_adapter = JevSystemOneAdapter(api_key=api_key, api_url=api_url, model=model)
+            except Exception:
+                self.jev_adapter = None
+        else:
+            self.jev_adapter = jev_adapter
 
     def record_evidence(
         self,
@@ -228,6 +240,27 @@ class UserSkillService:
             user_skills=user_skills,
         )
 
+        if self.jev_adapter and self.jev_adapter.is_available():
+            req_dicts = [{"skill_id": r.skill_id, "importance": r.importance, "required_level": r.required_level} for r in assessment.requirements]
+            skills_summary = {sid: {"level": s.level, "ability_score": s.ability_score, "confidence": s.confidence} for sid, s in user_skills.items()}
+            jev_res = self.jev_adapter.evaluate_readiness(
+                job_title=job.title,
+                job_seniority=job.seniority,
+                requirements=req_dicts,
+                candidate_skills=skills_summary,
+                cleaned_jd_text=job.cleaned_jd_text or "",
+            )
+            if jev_res and "match_percent" in jev_res:
+                assessment = JobReadinessAssessment(
+                    job_id=assessment.job_id,
+                    match_percent=int(jev_res.get("match_percent", assessment.match_percent)),
+                    verdict=str(jev_res.get("verdict", assessment.verdict)),
+                    data_coverage=assessment.data_coverage,
+                    requirements=assessment.requirements,
+                    explanation=str(jev_res.get("explanation", assessment.explanation)),
+                    recommended_skills=list(jev_res.get("recommended_skills", assessment.recommended_skills)),
+                )
+
         # Cache in DB
         check_rec = self.session.scalars(
             select(JobReadinessRecord).where(
@@ -278,12 +311,18 @@ class UserSkillService:
         return assessment
 
     def sync_from_interview_session(self, session_id: int) -> int:
+        from ...infrastructure.persistence.models.session_plan import SessionQuestionSelection
         session_rec = self.session.get(InterviewSession, session_id)
         if not session_rec or not session_rec.candidate_id:
             return 0
 
         user_id = session_rec.candidate_id
         recorded = 0
+
+        # Query session question selections as fallback lookup
+        stmt_qs = select(SessionQuestionSelection).where(SessionQuestionSelection.session_id == session_id).order_by(SessionQuestionSelection.selection_order.asc())
+        selections = list(self.session.scalars(stmt_qs).all())
+        selection_by_order = {s.selection_order: s.question_id for s in selections}
 
         # Iterate candidate turns
         for turn in session_rec.turns:
@@ -298,27 +337,32 @@ class UserSkillService:
             raw_score = float(eval_rec.overall_score) if eval_rec.overall_score is not None else 5.0
             norm_score = max(0.0, min(1.0, raw_score / 10.0))
 
-            # Determine skills for this turn from pre-tagged question bank
+            # Determine question record
+            target_qid = turn.question_id or selection_by_order.get(turn.turn_number)
             extracted_skills: list[str] = []
-            if turn.question_id:
-                qb = self.session.get(QuestionBank, turn.question_id)
-                if qb and getattr(qb, "skill_ids", None):
-                    for sid in qb.skill_ids:
-                        norm_sid = self.taxonomy.normalize_skill_id(sid)
-                        if norm_sid:
-                            extracted_skills.append(norm_sid)
+            diff = 3
+            if target_qid:
+                qb = self.session.get(QuestionBank, target_qid)
+                if qb:
+                    diff = qb.difficulty or 3
+                    if getattr(qb, "skill_ids", None):
+                        for sid in qb.skill_ids:
+                            norm_sid = self.taxonomy.normalize_skill_id(sid)
+                            if norm_sid:
+                                extracted_skills.append(norm_sid)
 
+            candidate_text = turn.transcribed_text or turn.message_text or ""
             for sid in set(extracted_skills):
                 self.record_evidence(
                     user_id=user_id,
                     skill_id=sid,
-                    source_type="interview_turn",
-                    source_id=f"turn_{turn.turn_id}",
+                    source_type="interview_session",
+                    source_id=f"session_{session_id}_turn_{turn.turn_id}",
                     score=norm_score,
-                    question_difficulty=3,
-                    grader_confidence=0.85,
-                    evidence_quote=(turn.transcribed_text or turn.message_text or "")[:300],
-                    input_mode="voice" if turn.transcribed_text else "text",
+                    question_difficulty=diff,
+                    grader_confidence=0.90,
+                    evidence_quote=candidate_text[:300],
+                    input_mode="voice" if turn.audio_url or turn.transcribed_text else "text",
                 )
                 recorded += 1
 
@@ -370,4 +414,59 @@ class UserSkillService:
                     recorded += 1
         if recorded > 0:
             self.recalculate_user_skills(user_id)
+        return recorded
+
+    def get_skill_evidence(self, user_id: int, skill_id: str) -> list[UserSkillEvidenceRecord]:
+        norm_sid = self.taxonomy.normalize_skill_id(skill_id) or skill_id
+        stmt = (
+            select(UserSkillEvidenceRecord)
+            .where(
+                UserSkillEvidenceRecord.user_id == user_id,
+                UserSkillEvidenceRecord.skill_id == norm_sid,
+            )
+            .order_by(UserSkillEvidenceRecord.created_at.desc())
+        )
+        return list(self.session.scalars(stmt).all())
+
+    def sync_from_practice_history_record(self, record: PracticeHistoryRecord) -> int:
+        if not record.user_id or not record.questions_summary:
+            return 0
+        import json
+        try:
+            items = json.loads(record.questions_summary)
+        except Exception:
+            return 0
+        recorded = 0
+        for q in items:
+            qid = q.get("question_id")
+            if not qid:
+                continue
+            try:
+                qid_int = int(qid)
+            except (ValueError, TypeError):
+                continue
+            q_rec = self.session.get(QuestionBank, qid_int)
+            if not q_rec or not q_rec.skill_ids:
+                continue
+            raw_score = float(q.get("score", 0))
+            norm_score = max(0.0, min(1.0, raw_score / 100.0 if raw_score > 1.0 else raw_score))
+            diff = q_rec.difficulty or 2
+            q_text = q_rec.question_text or q.get("question_text", "")
+            for sid in q_rec.skill_ids:
+                norm_sid = self.taxonomy.normalize_skill_id(sid)
+                if not norm_sid:
+                    continue
+                self.record_evidence(
+                    user_id=record.user_id,
+                    skill_id=norm_sid,
+                    source_type="practice_history",
+                    source_id=f"hist_{record.history_id}_q_{qid_int}",
+                    score=norm_score,
+                    question_difficulty=diff,
+                    grader_confidence=0.85,
+                    evidence_quote=q_text[:250],
+                )
+                recorded += 1
+        if recorded > 0:
+            self.recalculate_user_skills(record.user_id)
         return recorded

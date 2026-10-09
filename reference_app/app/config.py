@@ -93,6 +93,9 @@ class Settings:
     xgate_receiver_name: str = DEFAULT_XGATE_RECEIVER_NAME
     pdf_reports_dir: str = "reports"
     serper_api_key: str = ""
+    jev_api_key: str = ""
+    jev_api_url: str = "https://api.typesafe.ai/v1/systemone"
+    jev_model: str = "jev-latest"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -150,4 +153,7 @@ class Settings:
             xgate_receiver_name=os.environ.get("PAYMENT_QR_ACCOUNT_NAME", os.environ.get("XGATE_RECEIVER_NAME", DEFAULT_XGATE_RECEIVER_NAME)),
             pdf_reports_dir=os.environ.get("PDF_REPORTS_DIR", "reports"),
             serper_api_key=os.environ.get("SERPER_API_KEY", ""),
+            jev_api_key=os.environ.get("JEV_API_KEY", ""),
+            jev_api_url=os.environ.get("JEV_API_URL", "https://api.typesafe.ai/v1/systemone"),
+            jev_model=os.environ.get("JEV_MODEL", "jev-latest"),
         )
