@@ -76,3 +76,19 @@ Qua rà soát trực tiếp bảng dữ liệu PostgreSQL và mã nguồn kiến
 - Chuỗi voice realtime: câu trả lời được chấm điểm nền (`answer_evaluations`) rồi đồng bộ ngay bằng `UserSkillService.sync_interview_turn`; khi dừng phiên có thêm lượt quét đầy đủ `sync_from_interview_session` (idempotent theo `source_id`).
 - Điểm evidence lượt phỏng vấn = `overall_score / 10.0` (thang DB 0–10 → 0–1), `grader_confidence = 0.90`, `input_mode = voice` nếu turn có `audio_url`.
 - Test hồi quy: `tests/integration/test_interview_turn_linking.py`.
+
+---
+
+## 6. JEV SYSTEM ONE CHO JOB READINESS (PHASE 3 — LOI #2)
+
+- Endpoint thật: `POST https://api.typesafe.ai/v1/systemone` với body `{model, state, questions}`; response `{model, answers, usage}`. Jev không có kiểu trả lời văn bản tự do — chỉ `score` / `choice` / `noul`.
+- `JevSystemOneAdapter` dựng `state` giới hạn (tối đa 12 requirement, JD excerpt 700 ký tự, chỉ kỹ năng thuộc JD) và các câu hỏi:
+  - `overall_match`: score 0–10 → `match_percent = score × 10`.
+  - `verdict`: choice `ready | almost | not_ready | insufficient_data`.
+  - `skill__<skill_id>`: score 0–5 (0 = không có bằng chứng, 3 = đạt yêu cầu) cho tối đa 6 kỹ năng must-have.
+- Diễn giải tiếng Việt được soạn cục bộ từ dữ liệu cấu trúc (không thêm một LLM call thứ hai).
+- Chỉ gọi khi người dùng bấm kiểm tra một job cụ thể (`POST/GET /api/v1/jobs/{job_id}/readiness`); kết quả cache 2 giờ trong `job_readiness_checks`, `force=true` mới gọi lại. KHÔNG quét toàn bộ user × JD.
+- Kết quả Jev ghi đè `match_percent`, `verdict`, `explanation`, `recommended_skills`; trạng thái từng kỹ năng chỉ được HẠ xuống (không nâng) và chỉ với kỹ năng đã có bằng chứng kiểm chứng, để LLM không thể khẳng định một kỹ năng mà dữ liệu nền chưa xác nhận.
+- `job_readiness_checks.analysis_engine` lưu `jev` hoặc `heuristic`; UI chỉ ghi "TypeSafe Jev System One" khi Jev thực sự chạy, còn lại hiển thị nhãn thuật toán nội bộ.
+- Env: `JEV_API_KEY`, `JEV_API_URL`, `JEV_MODEL` (compose.yaml + .env.example). Key placeholder (`your_jev_api_key`) được coi như chưa cấu hình → fallback heuristic.
+- Test: `tests/unit/test_jev_adapter.py`, `tests/unit/test_job_readiness_jev_service.py`, `tests/integration/test_jev_adapter_http.py`, `tests/integration/test_readiness_engine_persistence.py`.
