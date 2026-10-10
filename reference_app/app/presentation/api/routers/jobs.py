@@ -43,7 +43,48 @@ def _format_salary(salary_min: float | None, salary_max: float | None, currency:
     return f"Đến {salary_max / divisor:,.0f} {unit}"
 
 
-def _to_job_item_out(job: Any) -> JobItemOut:
+def _build_jd_text_and_checksums(job: Any) -> tuple[str, list[str]]:
+    comp_name = job.company.company_name if job.company else "Doanh nghiệp"
+    body = (getattr(job, "cleaned_jd_text", None) or getattr(job, "raw_description", None) or "").strip()
+    jd_text = f"Vị trí: {job.title} tại {comp_name}\n\n{body}"
+    c1 = NormalizedJD.calculate_checksum(jd_text)
+    checksums = [c1]
+    if body:
+        c2 = NormalizedJD.calculate_checksum(body)
+        if c2 not in checksums:
+            checksums.append(c2)
+    return jd_text, checksums
+
+
+def _find_existing_practice_session(session: Session, job: Any) -> str | None:
+    from ....infrastructure.persistence.models.jd_interview import JDGenerationJob, NormalizedJDRecord
+    from ....domain.jd_interview import JDJobStatus
+
+    _, checksums = _build_jd_text_and_checksums(job)
+    existing = (
+        session.query(JDGenerationJob)
+        .filter(
+            JDGenerationJob.checksum.in_(checksums),
+            JDGenerationJob.status == JDJobStatus.COMPLETED.value,
+        )
+        .order_by(JDGenerationJob.created_at.desc())
+        .first()
+    )
+    if not existing:
+        existing = (
+            session.query(JDGenerationJob)
+            .join(NormalizedJDRecord, NormalizedJDRecord.job_id == JDGenerationJob.job_id)
+            .filter(
+                NormalizedJDRecord.original_url == f"job:{job.job_id}",
+                JDGenerationJob.status == JDJobStatus.COMPLETED.value,
+            )
+            .order_by(JDGenerationJob.created_at.desc())
+            .first()
+        )
+    return existing.job_id if existing else None
+
+
+def _to_job_item_out(job: Any, existing_interview_id: str | None = None) -> JobItemOut:
     comp_out = None
     if job.company:
         branding_allowed = job.company.branding_reuse_allowed
@@ -87,6 +128,8 @@ def _to_job_item_out(job: Any) -> JobItemOut:
         country_codes=job.country_codes or [],
         is_global_remote=job.is_global_remote,
         company=comp_out,
+        has_practice_session=bool(existing_interview_id),
+        practice_interview_id=existing_interview_id,
     )
 
 
@@ -130,12 +173,29 @@ async def list_jobs(
     )
 
     total_pages = math.ceil(total / limit) if total > 0 else 1
+
+    from ....infrastructure.persistence.models.jd_interview import JDGenerationJob
+    from ....domain.jd_interview import JDJobStatus
+
+    completed_checksum_rows = (
+        session.query(JDGenerationJob.checksum, JDGenerationJob.job_id)
+        .filter(JDGenerationJob.status == JDJobStatus.COMPLETED.value)
+        .all()
+    )
+    checksum_map = {row[0]: row[1] for row in completed_checksum_rows}
+
+    job_items: list[JobItemOut] = []
+    for j in items:
+        _, checksums = _build_jd_text_and_checksums(j)
+        found_job_id = next((checksum_map[c] for c in checksums if c in checksum_map), None)
+        job_items.append(_to_job_item_out(j, existing_interview_id=found_job_id))
+
     return JobListResponse(
         total=total,
         page=page,
         limit=limit,
         total_pages=total_pages,
-        items=[_to_job_item_out(j) for j in items],
+        items=job_items,
     )
 
 
@@ -221,7 +281,8 @@ def get_job_detail(
             detail="Tin tuyển dụng này đã hết hạn hoặc không còn nhận ứng tuyển.",
         )
 
-    base_item = _to_job_item_out(job)
+    existing_interview_id = _find_existing_practice_session(session, job)
+    base_item = _to_job_item_out(job, existing_interview_id=existing_interview_id)
     item_dict = base_item.model_dump()
     item_dict["raw_description"] = job.raw_description or ""
     item_dict["cleaned_jd_text"] = job.cleaned_jd_text or ""
@@ -346,17 +407,59 @@ async def start_practice_from_job(
     if not job:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
 
+    # 1. If an interview script already exists for this JD -> Start practicing right away!
+    existing_job_id = _find_existing_practice_session(session, job)
+    if existing_job_id:
+        return StartJobPracticeOut(
+            interview_id=existing_job_id,
+            job_id=job.job_id,
+            redirect_url=f"/practice/setup/{existing_job_id}",
+            has_existing_session=True,
+        )
+
+    # 2. No session exists yet -> Must be Pro to generate a new AI interview from JD
+    effective_user_id = user_id if user_id and user_id > 0 else None
+    if not effective_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Vui lòng đăng nhập để tạo kịch bản phỏng vấn AI cho tin tuyển dụng này.",
+        )
+
+    from ....infrastructure.persistence.models.user import User
+    from ....infrastructure.persistence.models.enums import UserRole
+    from ....application.voice.entitlement import check_user_voice_entitlement
+
+    is_pro = False
+    user = session.get(User, effective_user_id)
+    if user:
+        role_val = getattr(user.role, "value", str(user.role)) if user.role else ""
+        if role_val.lower() in ("admin", "pro"):
+            is_pro = True
+    if not is_pro and check_user_voice_entitlement(session, effective_user_id):
+        is_pro = True
+
+    if not is_pro:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tài khoản Pro mới có quyền tạo kịch bản phỏng vấn AI từ tin tuyển dụng mới. Vui lòng nâng cấp tài khoản để sử dụng.",
+        )
+
+    # 3. User is Pro -> Initialize and start generation
     from .jd_interview import _init_job, _get_or_create_orchestrator
 
-    effective_user_id = user_id if user_id and user_id > 0 else 1
-    jd_text = f"Vị trí: {job.title} tại {job.company.company_name if job.company else 'Doanh nghiệp'}\n\n{job.cleaned_jd_text}"
-    checksum = NormalizedJD.calculate_checksum(jd_text)
-    generation_job_id = _init_job(session, effective_user_id, JDSourceType.text.value, checksum)
+    jd_text, checksums = _build_jd_text_and_checksums(job)
+    primary_checksum = checksums[0]
+    generation_job_id = _init_job(session, effective_user_id, JDSourceType.text.value, primary_checksum, is_public=True)
 
     orchestrator = _get_or_create_orchestrator(container)
     orchestrator.queue_manager.enqueue(
         job_id=generation_job_id,
-        payload={"source_type": "text", "text_length": len(jd_text), "job_title": job.title},
+        payload={
+            "source_type": "text",
+            "text_length": len(jd_text),
+            "job_title": job.title,
+            "url": f"job:{job.job_id}",
+        },
     )
 
     asyncio.create_task(
@@ -364,10 +467,10 @@ async def start_practice_from_job(
             job_id=generation_job_id,
             user_id=effective_user_id,
             source_type=JDSourceType.text.value,
-            input_data={"text": jd_text},
+            input_data={"text": jd_text, "url": f"job:{job.job_id}"},
             options={
                 "duration_minutes": 30,
-                "difficulty": "medium",
+                "difficulty": 3,
                 "language": "vi",
             },
         )
@@ -376,5 +479,6 @@ async def start_practice_from_job(
     return StartJobPracticeOut(
         interview_id=generation_job_id,
         job_id=job.job_id,
-        redirect_url=f"/practice/new?jobId={generation_job_id}",
+        redirect_url=f"/practice/new?job_id={generation_job_id}",
+        has_existing_session=False,
     )
