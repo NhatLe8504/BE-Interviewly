@@ -49,7 +49,7 @@ DEFAULT_EDGE_VOICES = [
     # 中文 (ZH)
     {
         "id": "zh-CN-XiaoxiaoNeural",
-        "name": "Xiaoxiao (Female - 中文)",
+        "name": "Xiaoxiao (Nữ - 中文)",
         "provider": "edge",
         "language": "zh",
         "gender": "female",
@@ -57,10 +57,20 @@ DEFAULT_EDGE_VOICES = [
         "is_default": True,
         "is_premium": False,
     },
+    {
+        "id": "zh-CN-YunxiNeural",
+        "name": "Yunxi (Nam - 中文)",
+        "provider": "edge",
+        "language": "zh",
+        "gender": "male",
+        "description": "Giọng nam tiếng Trung đĩnh đạc, rõ ràng",
+        "is_default": False,
+        "is_premium": False,
+    },
     # 日本語 (JA)
     {
         "id": "ja-JP-NanamiNeural",
-        "name": "Nanami (Female - 日本語)",
+        "name": "Nanami (Nữ - 日本語)",
         "provider": "edge",
         "language": "ja",
         "gender": "female",
@@ -68,10 +78,20 @@ DEFAULT_EDGE_VOICES = [
         "is_default": True,
         "is_premium": False,
     },
+    {
+        "id": "ja-JP-KeitaNeural",
+        "name": "Keita (Nam - 日本語)",
+        "provider": "edge",
+        "language": "ja",
+        "gender": "male",
+        "description": "Giọng nam tiếng Nhật chuẩn mực, điềm đạm",
+        "is_default": False,
+        "is_premium": False,
+    },
     # 한국어 (KO)
     {
         "id": "ko-KR-SunHiNeural",
-        "name": "Sun-Hi (Female - 한국어)",
+        "name": "Sun-Hi (Nữ - 한국어)",
         "provider": "edge",
         "language": "ko",
         "gender": "female",
@@ -79,10 +99,20 @@ DEFAULT_EDGE_VOICES = [
         "is_default": True,
         "is_premium": False,
     },
+    {
+        "id": "ko-KR-InJoonNeural",
+        "name": "InJoon (Nam - 한국어)",
+        "provider": "edge",
+        "language": "ko",
+        "gender": "male",
+        "description": "Giọng nam tiếng Hàn lịch sự, phong thái công sở",
+        "is_default": False,
+        "is_premium": False,
+    },
     # Français (FR)
     {
         "id": "fr-FR-DeniseNeural",
-        "name": "Denise (Female - Français)",
+        "name": "Denise (Nữ - Français)",
         "provider": "edge",
         "language": "fr",
         "gender": "female",
@@ -90,10 +120,20 @@ DEFAULT_EDGE_VOICES = [
         "is_default": True,
         "is_premium": False,
     },
+    {
+        "id": "fr-FR-HenriNeural",
+        "name": "Henri (Nam - Français)",
+        "provider": "edge",
+        "language": "fr",
+        "gender": "male",
+        "description": "Giọng nam tiếng Pháp trang nhã, đĩnh đạc",
+        "is_default": False,
+        "is_premium": False,
+    },
     # Deutsch (DE)
     {
         "id": "de-DE-KatjaNeural",
-        "name": "Katja (Female - Deutsch)",
+        "name": "Katja (Nữ - Deutsch)",
         "provider": "edge",
         "language": "de",
         "gender": "female",
@@ -101,10 +141,20 @@ DEFAULT_EDGE_VOICES = [
         "is_default": True,
         "is_premium": False,
     },
+    {
+        "id": "de-DE-ConradNeural",
+        "name": "Conrad (Nam - Deutsch)",
+        "provider": "edge",
+        "language": "de",
+        "gender": "male",
+        "description": "Giọng nam tiếng Đức chuyên nghiệp",
+        "is_default": False,
+        "is_premium": False,
+    },
     # Español (ES)
     {
         "id": "es-ES-ElviraNeural",
-        "name": "Elvira (Female - Español)",
+        "name": "Elvira (Nữ - Español)",
         "provider": "edge",
         "language": "es",
         "gender": "female",
@@ -112,27 +162,37 @@ DEFAULT_EDGE_VOICES = [
         "is_default": True,
         "is_premium": False,
     },
+    {
+        "id": "es-ES-AlvaroNeural",
+        "name": "Alvaro (Nam - Español)",
+        "provider": "edge",
+        "language": "es",
+        "gender": "male",
+        "description": "Giọng nam tiếng Tây Ban Nha trầm ấm, tự nhiên",
+        "is_default": False,
+        "is_premium": False,
+    },
 ]
 
-# Premium ElevenLabs Voices (Active Multilingual Foundation Model - Supports Mixed Languages)
+# Premium ElevenLabs Voices (Active Multilingual Foundation Model - Speaks ALL languages & mixed speech)
 PREMIUM_ELEVEN_VOICES = [
     {
         "id": "JBFqnCBsd6RMkjVDRZzb",
-        "name": "George (Tech Leader • Song ngữ Anh - Việt)",
+        "name": "George (Tech Leader • Đa ngôn ngữ)",
         "provider": "elevenlabs",
         "language": "multi",
         "gender": "male",
-        "description": "Giọng nam trầm ấm, phát âm tự nhiên câu hỏi có chêm thuật ngữ tiếng Anh",
+        "description": "Giọng nam trầm ấm, phát âm tự nhiên mọi ngôn ngữ và thuật ngữ quốc tế",
         "is_default": False,
         "is_premium": True,
     },
     {
         "id": "EXAVITQu4vr4xnSDxMaL",
-        "name": "Sarah (Chuyên gia • Song ngữ Anh - Việt)",
+        "name": "Sarah (Chuyên gia • Đa ngôn ngữ)",
         "provider": "elevenlabs",
         "language": "multi",
         "gender": "female",
-        "description": "Giọng nữ trưởng thành, xử lý mượt mà câu trả lời đa ngôn ngữ",
+        "description": "Giọng nữ trưởng thành, xử lý mượt mà mọi ngôn ngữ và tình huống song ngữ",
         "is_default": False,
         "is_premium": True,
     },
@@ -202,7 +262,7 @@ STT_ENGINES = [
 def get_voice_catalog_options(is_premium_user: bool, language: str | None = None) -> dict[str, Any]:
     """
     Returns full voice and STT catalog decorated with lock status.
-    Optionally filters or prioritizes voices compatible with the requested language.
+    Optionally filters or prioritizes voices strictly compatible with the requested language.
     """
     voices: list[dict[str, Any]] = []
 
@@ -220,9 +280,10 @@ def get_voice_catalog_options(is_premium_user: bool, language: str | None = None
         )
         voices.append(item)
 
+    # Lọc nghiêm ngặt: chỉ giữ giọng của ngôn ngữ được chọn HOẶC giọng đa ngôn ngữ (multi)
     if language:
         lang_clean = language.lower().strip()
-        voices = [v for v in voices if v.get("language") in (lang_clean, "multi")]
+        voices = [v for v in voices if v.get("language") == lang_clean or v.get("language") == "multi"]
 
     stt: list[dict[str, Any]] = []
     for s in STT_ENGINES:
