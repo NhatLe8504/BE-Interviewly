@@ -393,15 +393,6 @@ def start_interview_from_jd_job(
     session.add(orm_session)
     session.flush()
 
-    first_turn = OrmInterviewTurn(
-        session_id=orm_session.session_id,
-        turn_number=1,
-        speaker=TurnSpeaker.ai,
-        message_text=first_q_text,
-    )
-    session.add(first_turn)
-    session.flush()
-
     job_record.session_id = orm_session.session_id
     session.commit()
 

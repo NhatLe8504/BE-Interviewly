@@ -112,14 +112,24 @@ def build_dynamic_warmup_opening_text(
     variant_seed: int = 0,
 ) -> str:
     persona_display = persona_name.strip() if persona_name and persona_name.strip() else "Alex Vance"
-    company_phrase = f" tại {company_name.strip()}" if company_name and company_name.strip() else ""
+    
+    clean_company = company_name.strip() if company_name else ""
+    is_generic = any(bad in clean_company.lower() for bad in ("job description", "mô tả", "jd custom", "theo"))
+    company_phrase = f" tại {clean_company}" if clean_company and not is_generic else ""
+    company_phrase_en = f" at {clean_company}" if clean_company and not is_generic else ""
 
     if language == "vi":
         icebreakers = [
-            "Trước khi đi vào phần chuyên môn, hôm nay thời tiết và tâm trạng của bạn thế nào? Bạn đã cảm thấy thoải mái và sẵn sàng cho buổi trò chuyện hôm nay chưa?",
-            "Đến với buổi phỏng vấn hôm nay mọi thứ có thuận lợi với bạn không? Bạn đã kịp nạp một chút cà phê để chuẩn bị năng lượng tốt nhất chưa?",
+            "Sáng nay bạn di chuyển đến buổi phỏng vấn có thuận lợi không, đường xá có bị đông đúc hay kẹt xe không?",
+            "Trước khi đi vào phần chuyên môn, hôm nay thời tiết chỗ bạn thế nào? Bạn đã cảm thấy thoải mái và sẵn sàng cho buổi trò chuyện hôm nay chưa?",
+            "Hôm nay mọi thứ có thuận lợi với bạn không? Bạn đã kịp nạp một chút cà phê hay trà để chuẩn bị năng lượng tốt nhất chưa?",
+            "Rất vui được gặp bạn hôm nay! Bạn cứ thả lỏng và xem đây như một buổi trò chuyện cởi mở giữa hai đồng nghiệp nhé. Tâm trạng bạn lúc này thế nào?",
             "Tuần này công việc và nhịp sống của bạn thế nào? Hãy chia sẻ đôi chút cảm nhận và giới thiệu ngắn gọn về bản thân nhé!",
-            "Rất vui được gặp bạn hôm nay. Không khí ở chỗ bạn thế nào, bạn có cảm thấy tự tin và thoải mái cho buổi phỏng vấn này không?",
+            "Không khí ở chỗ bạn thế nào, bạn đã chuẩn bị cho mình một không gian thật yên tĩnh và thoải mái cho buổi phỏng vấn này chưa?",
+            "Chào bạn! Hôm nay tâm trạng của bạn thế nào rồi, có điều gì đặc biệt khiến bạn hào hứng khi ứng tuyển vào vị trí này không?",
+            "Rất vui được đón tiếp bạn. Một ngày mới của bạn bắt đầu thế nào, mọi thứ đều suôn sẻ và tràn đầy năng lượng chứ?",
+            "Trước khi chúng ta trao đổi về công việc, bạn có thể chia sẻ nhanh một điều thú vị gần đây mà bạn yêu thích hoặc quan tâm không?",
+            "Đường truyền âm thanh của bạn rất rõ ràng. Bạn đã cảm thấy hoàn toàn tự tin và thoải mái để chúng ta bắt đầu chưa?",
         ]
         chosen_icebreaker = icebreakers[variant_seed % len(icebreakers)]
         return (
@@ -127,11 +137,13 @@ def build_dynamic_warmup_opening_text(
             f"{chosen_icebreaker}"
         )
 
-    company_phrase_en = f" at {company_name.strip()}" if company_name and company_name.strip() else ""
     icebreakers_en = [
         "Before diving into technical topics, how is your day going so far? Are you feeling relaxed and ready for our conversation today?",
-        "How has your week been treating you? Please share a quick icebreaker and briefly introduce yourself!",
-        "Did you have any trouble getting connected today? Got your coffee ready to dive in?",
+        "How was your morning getting set up today? Did you manage to grab a cup of coffee to kick things off?",
+        "How has your week been treating you? Feel free to share a quick icebreaker and briefly introduce yourself!",
+        "Glad to meet you today! How is the weather where you are, and how are you feeling ahead of our chat?",
+        "Hope you're having a smooth day so far! Got everything set up comfortably to dive in?",
+        "Everything connecting well on your end? Just take a breath and treat this as a collaborative conversation between two engineers.",
     ]
     chosen_icebreaker_en = icebreakers_en[variant_seed % len(icebreakers_en)]
     return (

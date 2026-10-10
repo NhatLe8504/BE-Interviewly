@@ -184,6 +184,18 @@ class VoiceInterviewOrchestrator:
                 self._has_unvoiced_opening = not bool(last_row.audio_url)
                 if last_row.message_text:
                     self._initial_opening_text = last_row.message_text
+
+            # If starting at warmup stage and no candidate response has occurred yet,
+            # ensure a stale pre-seeded technical question is discarded so small talk is used instead.
+            cur_stg = self.get_current_stage()
+            if cur_stg.id == StageId.WARMUP.value and not any(m.get("role") == "user" for m in self.conversation_history):
+                msg = (last_row.message_text or "").lower()
+                is_small_talk = any(k in msg for k in ("thời tiết", "đường đi", "cà phê", "năng lượng", "tâm trạng", "weather", "traffic", "coffee", "đồng hành"))
+                if not is_small_talk:
+                    self.conversation_history = []
+                    self._initial_opening_text = None
+                    self._has_unvoiced_opening = False
+                    self.current_turn_id = 1
         except Exception as exc:
             logging.getLogger("VoiceOrchestrator").warning("Failed to load existing turns: %s", exc)
         finally:
@@ -422,26 +434,16 @@ class VoiceInterviewOrchestrator:
         is_vi = self.language == "vi"
 
         if cur_stage.id == StageId.WARMUP.value:
-            if self._initial_opening_text and self._initial_opening_text.strip():
-                txt = self._initial_opening_text.strip()
-                if txt.lower().startswith("chào") or txt.lower().startswith("hello") or txt.lower().startswith("welcome"):
-                    return txt
-                company_phrase = f" tại {self.company_name}" if self.company_name else ""
-                if is_vi:
-                    return f"Chào bạn, tôi là {self.persona_name}. Rất vui được đón tiếp bạn trong buổi phỏng vấn vị trí {self.role_name} ({self.level}){company_phrase}. {txt}"
-                return f"Welcome! I am {self.persona_name}. Excited to interview you for {self.role_name} ({self.level}){company_phrase}. {txt}"
-            if self.current_intent_ctx and self.current_intent_ctx.intent:
-                company_phrase = f" tại {self.company_name}" if self.company_name else ""
-                if is_vi:
-                    return f"Chào bạn, tôi là {self.persona_name}. Rất vui được đón tiếp bạn trong buổi phỏng vấn vị trí {self.role_name} ({self.level}){company_phrase}. {self.current_intent_ctx.intent}"
-                return f"Welcome! I am {self.persona_name} for the {self.role_name} ({self.level}) role{company_phrase}. {self.current_intent_ctx.intent}"
+            # Chặng Khởi Động (Warm-up) LUÔN LUÔN là small talk, trò chuyện phá băng.
+            # Tuyệt đối không gắn câu hỏi chuyên môn vào câu mở đầu này.
+            seed = int(time.time() * 1000) ^ (self.session_id * 31)
             return build_dynamic_warmup_opening_text(
                 role=self.role_name,
                 level=self.level,
                 persona_name=self.persona_name,
                 company_name=self.company_name,
                 language=self.language,
-                variant_seed=self.session_id,
+                variant_seed=seed,
             )
 
         if cur_stage.id == StageId.TECHNICAL.value:
@@ -845,13 +847,15 @@ class VoiceInterviewOrchestrator:
                 mock_mode=self.mock_mode,
             )
 
-        situational_guard = QuestionIntentComposer.build_situational_system_prompt(
-            role=self.role_name,
-            level=self.level,
-            stage_key=cur_stage.id,
-            intent_ctx=self.current_intent_ctx,
-            language=self.language,
-        )
+        situational_guard = None
+        if cur_stage.id != StageId.WARMUP.value and self.current_intent_ctx:
+            situational_guard = QuestionIntentComposer.build_situational_system_prompt(
+                role=self.role_name,
+                level=self.level,
+                stage_key=cur_stage.id,
+                intent_ctx=self.current_intent_ctx,
+                language=self.language,
+            )
 
         stage_desc = ""
         if is_session_finishing:
@@ -865,12 +869,15 @@ class VoiceInterviewOrchestrator:
             )
         elif cur_stage.id == StageId.WARMUP.value:
             stage_desc = (
-                "Bạn đang ở chặng 1: Khởi động & Chào hỏi (Warm-up). "
-                "Mục tiêu: tạo không khí thoải mái, chào hỏi, lắng nghe câu trả lời về bối cảnh/thời tiết và giới thiệu bản thân. "
-                "Hãy phản hồi tự nhiên (1-2 câu ngắn) và hỏi tiếp một câu mở đầu nhẹ nhàng."
+                f"Bạn là {self.persona_name}, người phỏng vấn vị trí {self.role_name} ({self.level}). "
+                "Bạn đang ở Chặng 1: Khởi động & Phá băng (Warm-up). "
+                "Mục tiêu: Trò chuyện xã giao, nhỏ to thân mật (small talk) về thời tiết, lộ trình đi lại, năng lượng, một tách cà phê hoặc giới thiệu bản thân nhẹ nhàng. "
+                "Hãy phản hồi câu trả lời của ứng viên một cách tự nhiên, ấm áp (1-2 câu ngắn), duy trì cuộc trò chuyện cởi mở như hai người bạn đồng nghiệp. "
+                "TUYỆT ĐỐI CẤM hỏi các câu hỏi kỹ thuật, kiến trúc hay chuyên môn ở chặng này."
                 if is_vi
                 else "You are in Stage 1: Warm-up & Greeting. "
-                "Goal: establish a welcoming atmosphere, acknowledge small talk/icebreaker, and transition naturally."
+                "Goal: establish a welcoming atmosphere, engage in light conversational small talk (weather, commute, energy, coffee, brief self-intro). "
+                "DO NOT ask technical or engineering interview questions during this warm-up stage."
             )
         elif cur_stage.id == StageId.TECHNICAL.value:
             strict_note = (
@@ -1238,6 +1245,11 @@ class VoiceInterviewOrchestrator:
         if not self.session_factory:
             return
         cur_stage = self.get_current_stage()
+        # Ở chặng Khởi động (Warm-up), KHÔNG gán câu hỏi chuyên môn từ JD hay ngân hàng câu hỏi!
+        if cur_stage.id == StageId.WARMUP.value:
+            self.current_intent_ctx = None
+            return
+
         db = self.session_factory()
         try:
             # Check if this session was generated from a JD interview job
@@ -1255,7 +1267,7 @@ class VoiceInterviewOrchestrator:
                         idx = min(self.turns_in_current_stage, len(stage_matched) - 1)
                         chosen = stage_matched[idx]
                     elif items:
-                        idx = (self.current_turn_id - 1) % len(items)
+                        idx = self.turns_in_current_stage % len(items)
                         chosen = items[idx]
 
                     if chosen:
