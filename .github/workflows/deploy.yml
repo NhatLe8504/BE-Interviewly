@@ -36,6 +36,33 @@ jobs:
   test:
     runs-on: ubuntu-24.04
     needs: lint
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: interviewly
+          POSTGRES_PASSWORD: interviewly
+          POSTGRES_DB: interviewly
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+psycopg://interviewly:interviewly@localhost:5432/interviewly
+      REDIS_URL: redis://localhost:6379/0
+      JWT_SECRET: dev-only-secret-change-me-please-set-JWT_SECRET-32-chars-min
     steps:
       - uses: actions/checkout@v4
 
@@ -54,7 +81,7 @@ jobs:
       - name: Run Tests
         run: |
           cd reference_app
-          pytest -v --cov=app --cov-report=xml:coverage.xml --junitxml=test-results.xml tests/unit/ || pytest -v tests/unit/
+          pytest -v --cov=app --cov-report=xml:coverage.xml --junitxml=test-results.xml tests/unit/
 
       - name: Upload Test Artifacts
         uses: actions/upload-artifact@v4
@@ -64,6 +91,8 @@ jobs:
           path: |
             reference_app/coverage.xml
             reference_app/test-results.xml
+          if-no-files-found: ignore
+
 
   build:
     runs-on: ubuntu-24.04
@@ -186,9 +215,8 @@ jobs:
 
             # Restart containers with Docker Compose
             echo '🐳 Building and restarting Docker Compose services...'
-            docker compose down --remove-orphans || true
-            docker compose build --pull api
-            docker compose up -d
+            docker compose build api
+            docker compose up -d --remove-orphans
 
             echo '⏳ Checking container status...'
             sleep 5
