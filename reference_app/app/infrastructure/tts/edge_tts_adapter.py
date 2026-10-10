@@ -1,6 +1,7 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
+import re
 from typing import AsyncIterator
 try:
     import edge_tts
@@ -47,12 +48,31 @@ SILENT_MP3_FRAME = (
 class EdgeTTSAdapter(TTSPort):
     """
     Streams audio chunks using Microsoft Edge TTS for minimal latency.
-    Caches synthesized audio to ensure instant replay and smooth playback.
+    Supports voice pitch adjustment (+/-Hz) and in-memory caching.
     """
 
     def __init__(self, default_voice: str = "vi-VN-HoaiMyNeural") -> None:
         self.default_voice = default_voice
-        self._cache: dict[tuple[str, str], bytes] = {}
+        self._cache: dict[tuple[str, str, str], bytes] = {}
+
+    @staticmethod
+    def _sanitize_pitch(pitch: str | int | float | None) -> str:
+        """
+        Sanitizes and bounds pitch to between -15Hz and +15Hz formatted as +XHz / -XHz.
+        """
+        if pitch is None:
+            return "+0Hz"
+        if isinstance(pitch, (int, float)):
+            val = int(pitch)
+            val = max(-15, min(15, val))
+            return f"+{val}Hz" if val >= 0 else f"{val}Hz"
+        clean = str(pitch).strip()
+        m = re.match(r"^([+-]?\d+)(?:Hz)?$", clean, re.IGNORECASE)
+        if m:
+            val = int(m.group(1))
+            val = max(-15, min(15, val))
+            return f"+{val}Hz" if val >= 0 else f"{val}Hz"
+        return "+0Hz"
 
     def resolve_voice(self, voice: str | None) -> str:
         if not voice:
@@ -60,14 +80,15 @@ class EdgeTTSAdapter(TTSPort):
         return VOICE_MAP.get(voice, voice)
 
     async def synthesize_stream(
-        self, text: str, voice: str = "vi-VN-HoaiMyNeural",
+        self, text: str, voice: str = "vi-VN-HoaiMyNeural", pitch: str = "+0Hz",
     ) -> AsyncIterator[bytes]:
         cleaned = text.strip()
         if not cleaned:
             return
 
         target_voice = self.resolve_voice(voice)
-        cache_key = (cleaned, target_voice)
+        target_pitch = self._sanitize_pitch(pitch)
+        cache_key = (cleaned, target_voice, target_pitch)
 
         # Check in-memory audio cache for instant response
         if cache_key in self._cache:
@@ -79,7 +100,7 @@ class EdgeTTSAdapter(TTSPort):
                 yield SILENT_MP3_FRAME
                 return
 
-            communicate = edge_tts.Communicate(cleaned, target_voice)
+            communicate = edge_tts.Communicate(cleaned, target_voice, pitch=target_pitch)
             chunks_collected: list[bytes] = []
 
             async for chunk in communicate.stream():
@@ -89,15 +110,34 @@ class EdgeTTSAdapter(TTSPort):
                         chunks_collected.append(data)
                         yield data
 
-            # If no audio chunk was yielded, fallback to silent frame
+            # If no audio was received and pitch was non-zero, retry with default +0Hz
+            if not chunks_collected and target_pitch != "+0Hz":
+                comm_fallback = edge_tts.Communicate(cleaned, target_voice, pitch="+0Hz")
+                async for chunk in comm_fallback.stream():
+                    if chunk["type"] == "audio":
+                        data = chunk.get("data")
+                        if data:
+                            chunks_collected.append(data)
+                            yield data
+
             if not chunks_collected:
                 yield SILENT_MP3_FRAME
             else:
-                # Save full sentence MP3 in cache (bounded to 200 items)
                 if len(self._cache) > 200:
                     self._cache.clear()
                 self._cache[cache_key] = b"".join(chunks_collected)
 
         except Exception:
-            # Fallback for network timeouts, firewalls, or offline testing environments
+            # Fallback for network timeouts or parameter mismatch
+            if target_pitch != "+0Hz":
+                try:
+                    comm_retry = edge_tts.Communicate(cleaned, target_voice, pitch="+0Hz")
+                    async for chunk in comm_retry.stream():
+                        if chunk["type"] == "audio":
+                            data = chunk.get("data")
+                            if data:
+                                yield data
+                    return
+                except Exception:
+                    pass
             yield SILENT_MP3_FRAME

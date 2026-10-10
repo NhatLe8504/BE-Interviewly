@@ -1,11 +1,11 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from typing import Any, AsyncIterator, Protocol
 
 
 class TTSPort(Protocol):
     async def synthesize_stream(
-        self, text: str, voice: str = "vi-VN-HoaiMyNeural",
+        self, text: str, voice: str = "vi-VN-HoaiMyNeural", pitch: str = "+0Hz",
     ) -> AsyncIterator[bytes]:
         ...
 

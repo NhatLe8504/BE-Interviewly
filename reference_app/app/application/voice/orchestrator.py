@@ -70,6 +70,7 @@ class VoiceInterviewOrchestrator:
             language=self.language,
         )
         self.barge_in_enabled = barge_in_enabled
+        self.pitch: str = "+0Hz" 
 
         # Configure dynamic stages
         self.questions_per_stage: dict[str, int] = questions_per_stage or {
@@ -368,6 +369,10 @@ class VoiceInterviewOrchestrator:
                 language=self.language,
             )
 
+    def set_pitch(self, pitch: str | int | float | None) -> None:
+        from ...infrastructure.tts.edge_tts_adapter import EdgeTTSAdapter
+        self.pitch = EdgeTTSAdapter._sanitize_pitch(pitch)
+
     def _build_opening_question(self) -> str:
         cur_stage = self.get_current_stage()
         is_vi = self.language == "vi"
@@ -433,6 +438,7 @@ class VoiceInterviewOrchestrator:
         level: str | None = None,
         language: str | None = None,
         voice: str | None = None,
+        pitch: str | int | None = None,
         barge_in_enabled: bool | None = None,
         selected_stages: list[str] | None = None,
         questions_per_stage: dict[str, int] | None = None,
@@ -445,6 +451,8 @@ class VoiceInterviewOrchestrator:
             self.set_interview_language(language)
         if voice:
             self.voice = voice
+        if pitch is not None:
+            self.set_pitch(pitch)
         if barge_in_enabled is not None:
             self.barge_in_enabled = barge_in_enabled
         if questions_per_stage:
@@ -781,7 +789,7 @@ class VoiceInterviewOrchestrator:
                     })
 
                 chunks: list[bytes] = []
-                async for audio_chunk in self.tts.synthesize_stream(clean_s, voice=self.voice):
+                async for audio_chunk in self.tts.synthesize_stream(clean_s, voice=self.voice, pitch=self.pitch):
                     if self.is_generation_cancelled(gen_id):
                         break
                     if audio_chunk:
@@ -910,7 +918,7 @@ class VoiceInterviewOrchestrator:
 
         # Synthesize complete, natural sentence audio to prevent micro-chunk audio stuttering
         audio_chunks: list[bytes] = []
-        async for audio_chunk in self.tts.synthesize_stream(clean_text, voice=self.voice):
+        async for audio_chunk in self.tts.synthesize_stream(clean_text, voice=self.voice, pitch=self.pitch):
             if self.is_generation_cancelled(generation_id):
                 break
             if audio_chunk:
@@ -975,7 +983,7 @@ class VoiceInterviewOrchestrator:
                     })
 
                 chunks: list[bytes] = []
-                async for audio_chunk in self.tts.synthesize_stream(clean_sentence, voice=self.voice):
+                async for audio_chunk in self.tts.synthesize_stream(clean_sentence, voice=self.voice, pitch=self.pitch):
                     if self.is_generation_cancelled(gen_id):
                         break
                     if audio_chunk:

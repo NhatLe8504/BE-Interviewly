@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 import logging
@@ -12,29 +12,13 @@ logger = logging.getLogger("ElevenLabsTTSAdapter")
 
 # Curated ElevenLabs Voice aliases mapping (matching account premade voices)
 ELEVEN_VOICE_MAP = {
-    # Vietnamese Community / Native Voices (Added on ElevenLabs)
-    "tuan": "9EE00wK5qV6tPtpQIxvy",
-    "duchuy": "w2KTJ6MO4SIK6nWK4YH8",
-    "tonyhoang": "K7ewtjKRNtwwt3lKQ6M0",
-    "phananh": "mgBpvrNosWzExdPuRbXP",
-    # Japanese Voices (Added on ElevenLabs)
-    "hinata": "j210dv0vWm7fCknyQpbA",
-    "shizuka": "WQz3clzUdMqvBf0jswZQ",
-    "otani": "3JDquces8E8bkmvbh6Bc",
-    # Multilingual Premade Voices
     "george": "JBFqnCBsd6RMkjVDRZzb",
     "sarah": "EXAVITQu4vr4xnSDxMaL",
     "adam": "pNInz6obpgDQGcFmaJgB",
     "liam": "TX3LPaxmHKxFdv7VOQHJ",
     "lily": "pFZP5JQG7iQjIQuC4Bku",
     "alice": "Xb7hH8MSUJpSbSDYk0k2",
-    "river": "SAz9YHcvj6GT2YYXdXww",
-    "will": "bIHbv24MWmeRgasZH58o",
-    "jessica": "cgSgspJ2msm6clMCkdW9",
-    "eric": "cjVigY5qzO86Huf0OWal",
-    "bella": "hpp4J3VqNfWAUOO0d1Us",
-    "brian": "nPczCjzI2devNBz1zQrb",
-    "rachel": "EXAVITQu4vr4xnSDxMaL",
+    "rachel": "EXAVITQu4vr4xnSDxMaL",  # Alias to Sarah if requested
     "charlie": "IKne3meq5aSn9XLyUdCD",
     "roger": "CwhRBWXzGAHq8TQ4Fs17",
     "laura": "FGY2WhTYpPnrIDTdsKH5",
@@ -79,7 +63,7 @@ class ElevenLabsTTSAdapter(TTSPort):
         return ELEVEN_VOICE_MAP.get(clean, voice)
 
     async def synthesize_stream(
-        self, text: str, voice: str = "vi-VN-HoaiMyNeural",
+        self, text: str, voice: str = "vi-VN-HoaiMyNeural", pitch: str = "+0Hz",
     ) -> AsyncIterator[bytes]:
         cleaned = text.strip()
         if not cleaned:
@@ -90,7 +74,7 @@ class ElevenLabsTTSAdapter(TTSPort):
         # If it's an Edge voice or ElevenLabs API key is missing, delegate to fallback safely
         if not is_eleven or not self.api_key:
             safe_edge_voice = voice if not is_eleven else "vi-VN-HoaiMyNeural"
-            async for chunk in self.fallback.synthesize_stream(cleaned, safe_edge_voice):
+            async for chunk in self.fallback.synthesize_stream(cleaned, safe_edge_voice, pitch=pitch):
                 yield chunk
             return
 
@@ -113,8 +97,8 @@ class ElevenLabsTTSAdapter(TTSPort):
             "text": cleaned,
             "model_id": self.default_model,
             "voice_settings": {
-                "stability": 0.5,
-                "similarity_boost": 0.75,
+                "stability": 0.52,
+                "similarity_boost": 0.82,
                 "style": 0.0,
                 "use_speaker_boost": True,
             },
@@ -131,10 +115,8 @@ class ElevenLabsTTSAdapter(TTSPort):
                             response.status_code,
                             err_body[:200],
                         )
-                        safe_edge = "vi-VN-HoaiMyNeural"
-                        if voice_id in ("j210dv0vWm7fCknyQpbA", "WQz3clzUdMqvBf0jswZQ", "3JDquces8E8bkmvbh6Bc"):
-                            safe_edge = "ja-JP-NanamiNeural"
-                        async for chunk in self.fallback.synthesize_stream(cleaned, safe_edge):
+                        # Fallback to EdgeTTS with safe voice and pitch
+                        async for chunk in self.fallback.synthesize_stream(cleaned, "vi-VN-HoaiMyNeural", pitch=pitch):
                             yield chunk
                         return
 
@@ -149,10 +131,10 @@ class ElevenLabsTTSAdapter(TTSPort):
                     self._cache.clear()
                 self._cache[cache_key] = full_mp3
             else:
-                async for chunk in self.fallback.synthesize_stream(cleaned, "vi-VN-HoaiMyNeural"):
+                async for chunk in self.fallback.synthesize_stream(cleaned, "vi-VN-HoaiMyNeural", pitch=pitch):
                     yield chunk
 
         except Exception as exc:
             logger.warning("ElevenLabs request error: %s. Falling back to EdgeTTS.", exc)
-            async for chunk in self.fallback.synthesize_stream(cleaned, "vi-VN-HoaiMyNeural"):
+            async for chunk in self.fallback.synthesize_stream(cleaned, "vi-VN-HoaiMyNeural", pitch=pitch):
                 yield chunk
