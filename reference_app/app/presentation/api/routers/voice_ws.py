@@ -322,16 +322,18 @@ async def presence_websocket_endpoint(websocket: WebSocket):
 
 @router.get("/api/v1/voice/options", response_model=VoiceOptionsOut)
 def get_voice_options(
+    language: str | None = None,
     user_id: int | None = Depends(get_optional_user_id),
     session: Session = Depends(get_session),
 ) -> VoiceOptionsOut:
     effective_user_id = user_id if user_id and user_id > 0 else None
     is_premium = check_user_voice_entitlement(session, effective_user_id) if effective_user_id else False
-    data = get_voice_catalog_options(is_premium)
+    data = get_voice_catalog_options(is_premium, language=language)
     return VoiceOptionsOut(**data)
 
 
 @router.get("/api/v1/voice/audio/{session_id}/{filename}")
+@router.head("/api/v1/voice/audio/{session_id}/{filename}")
 async def get_turn_audio(session_id: str, filename: str):
     base_dir = Path("/srv/storage/audio")
     if not base_dir.exists():
@@ -340,7 +342,7 @@ async def get_turn_audio(session_id: str, filename: str):
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Audio file not found")
     media_type = "audio/mpeg" if filename.endswith(".mp3") else "audio/webm"
-    return FileResponse(file_path, media_type=media_type)
+    return FileResponse(file_path, media_type=media_type, headers={"Accept-Ranges": "bytes"})
 
 
 @router.post("/api/v1/interviews/sessions/{session_id}/turns/{turn_id}/user-audio")

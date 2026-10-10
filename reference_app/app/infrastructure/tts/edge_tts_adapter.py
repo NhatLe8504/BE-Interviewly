@@ -18,6 +18,18 @@ VOICE_MAP = {
     "en-US": "en-US-JennyNeural",
     "en-female": "en-US-JennyNeural",
     "en-male": "en-US-GuyNeural",
+    "zh": "zh-CN-XiaoxiaoNeural",
+    "zh-CN": "zh-CN-XiaoxiaoNeural",
+    "ja": "ja-JP-NanamiNeural",
+    "ja-JP": "ja-JP-NanamiNeural",
+    "ko": "ko-KR-SunHiNeural",
+    "ko-KR": "ko-KR-SunHiNeural",
+    "fr": "fr-FR-DeniseNeural",
+    "fr-FR": "fr-FR-DeniseNeural",
+    "de": "de-DE-KatjaNeural",
+    "de-DE": "de-DE-KatjaNeural",
+    "es": "es-ES-ElviraNeural",
+    "es-ES": "es-ES-ElviraNeural",
 }
 
 # 1 frame of valid MP3 silence (104 bytes) for offline/test fallback
