@@ -206,6 +206,10 @@ async def handle_voice_websocket_session(
                         barge_in_enabled=data.get("barge_in_enabled"),
                         selected_stages=data.get("selected_stages"),
                         questions_per_stage=data.get("questions_per_stage"),
+                        persona_name=data.get("persona_name"),
+                        company_name=data.get("company_name"),
+                        mock_mode=data.get("mock_mode"),
+                        total_duration_minutes=data.get("total_duration_minutes"),
                     )
 
                 elif msg_type in ("config", "set_barge_in"):
@@ -229,6 +233,8 @@ async def handle_voice_websocket_session(
                             "type": "pitch_configured",
                             "pitch": orchestrator.pitch,
                         })
+                    if "mock_mode" in data and data["mock_mode"]:
+                        orchestrator.mock_mode = str(data["mock_mode"])
 
                 elif msg_type == "abort":
                     await orchestrator.handle_user_speech_start(force=True)
@@ -244,6 +250,15 @@ async def handle_voice_websocket_session(
                         text=data.get("text", ""),
                         duration_seconds=float(data.get("duration_seconds", 0.0)),
                     )
+
+                elif msg_type == "stage_transition_confirm":
+                    await orchestrator.handle_stage_transition_confirm()
+
+                elif msg_type == "stage_transition_defer":
+                    await orchestrator.handle_stage_transition_defer(data.get("continue_message"))
+
+                elif msg_type == "request_hint":
+                    await orchestrator.handle_request_hint(data.get("question_id"))
 
                 elif msg_type == "next_stage":
                     await orchestrator.handle_next_stage()

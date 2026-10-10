@@ -82,6 +82,8 @@ class VoiceEventType(str, enum.Enum):
     STAGE_INFO = "stage_info"
     QUESTION_CONTEXT = "question_context"
     QUESTION_REROLLED = "question_rerolled"
+    STAGE_TRANSITION_PROPOSED = "stage_transition_proposed"
+    HINT_RESPONSE = "hint_response"
 
     # Client -> Server
     CLIENT_READY = "client_ready"
@@ -92,6 +94,9 @@ class VoiceEventType(str, enum.Enum):
     PING = "ping"
     NEXT_STAGE = "next_stage"
     REROLL_QUESTION = "reroll_question"
+    STAGE_TRANSITION_CONFIRM = "stage_transition_confirm"
+    STAGE_TRANSITION_DEFER = "stage_transition_defer"
+    REQUEST_HINT = "request_hint"
 
 
 VALID_STATES = {s.value for s in VoiceSessionState}

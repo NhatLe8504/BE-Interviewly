@@ -4,6 +4,7 @@ from pathlib import Path
 
 import asyncio
 import logging
+import time
 from typing import Any
 import uuid
 
@@ -19,7 +20,13 @@ from ...domain.errors import DomainValidationError
 from .languages import INTERVIEW_LANGUAGE_SETTINGS
 from .ports import LLMVoiceStreamPort, TTSPort, VoiceConnectionPort
 from .sentence_splitter import StreamingSentenceSplitter
-from ...infrastructure.llm.prompt_templates import build_interviewer_system_prompt
+from ...infrastructure.llm.prompt_templates import (
+    build_interviewer_system_prompt,
+    build_dynamic_warmup_opening_text,
+    build_stage_transition_instruction,
+    build_hint_prompt,
+    build_follow_up_user_prompt,
+)
 from .text_sanitizer import sanitize_spoken_text
 from ..interview.intent_composer import QuestionIntentComposer, QuestionIntentContext
 from ..interview.question_selection import QuestionSelectionService
@@ -43,6 +50,10 @@ class VoiceInterviewOrchestrator:
         level: str = "fresher",
         language: str = "vi",
         voice: str = "vi-VN-HoaiMyNeural",
+        persona_name: str = "Alex Vance",
+        company_name: str | None = None,
+        mock_mode: str = "guided",
+        total_duration_minutes: int = 45,
         system_prompt: str | None = None,
         barge_in_enabled: bool = True,
         selected_stages: list[str] | None = None,
@@ -63,11 +74,23 @@ class VoiceInterviewOrchestrator:
         self.level = level
         self.language = language
         self.voice = voice
+        self.persona_name = persona_name or "Alex Vance"
+        self.company_name = company_name
+        self.mock_mode = mock_mode or "guided"
+        self.total_duration_minutes = total_duration_minutes or 45
+        self.stage_time_limits = self._calculate_stage_time_limits(self.total_duration_minutes)
+        self.stage_start_times: dict[str, float] = {}
+        self.is_waiting_stage_confirmation = False
+        self.pending_transition_next_stage: InterviewStageDefinition | None = None
+
         self._custom_system_prompt = system_prompt
         self.system_prompt = system_prompt or build_interviewer_system_prompt(
             role=self.role_name,
             level=self.level,
             language=self.language,
+            persona_name=self.persona_name,
+            company_name=self.company_name,
+            mock_mode=self.mock_mode,
         )
         self.barge_in_enabled = barge_in_enabled
         self.pitch: str = "+0Hz" 
@@ -94,6 +117,24 @@ class VoiceInterviewOrchestrator:
         self._background_tasks: set[asyncio.Task] = set()
 
         self._load_existing_turns_from_db()
+
+    def _calculate_stage_time_limits(self, total_minutes: int) -> dict[str, int]:
+        total_sec = max(300, int(total_minutes * 60))
+        return {
+            StageId.WARMUP.value: max(60, int(total_sec * (1 / 6))),
+            StageId.TECHNICAL.value: max(180, int(total_sec * (4 / 6))),
+            StageId.CLOSING.value: max(60, int(total_sec * (1 / 6))),
+        }
+
+    def get_stage_elapsed_seconds(self, stage_id: str) -> float:
+        start = self.stage_start_times.get(stage_id)
+        if start is None:
+            return 0.0
+        return max(0.0, time.time() - start)
+
+    def _ensure_stage_timer_started(self, stage_id: str) -> None:
+        if stage_id not in self.stage_start_times:
+            self.stage_start_times[stage_id] = time.time()
 
     
     def _save_audio_file(self, turn_id: int, speaker: str, audio_bytes: bytes) -> str | None:
@@ -367,6 +408,9 @@ class VoiceInterviewOrchestrator:
                 role=self.role_name,
                 level=self.level,
                 language=self.language,
+                persona_name=self.persona_name,
+                company_name=self.company_name,
+                mock_mode=self.mock_mode,
             )
 
     def set_pitch(self, pitch: str | int | float | None) -> None:
@@ -382,23 +426,22 @@ class VoiceInterviewOrchestrator:
                 txt = self._initial_opening_text.strip()
                 if txt.lower().startswith("chào") or txt.lower().startswith("hello") or txt.lower().startswith("welcome"):
                     return txt
+                company_phrase = f" tại {self.company_name}" if self.company_name else ""
                 if is_vi:
-                    return f"Chào bạn, rất vui được đón tiếp bạn trong buổi phỏng vấn vị trí {self.role_name} ({self.level}). {txt}"
-                return f"Welcome to your interview for {self.role_name} ({self.level}). {txt}"
+                    return f"Chào bạn, tôi là {self.persona_name}. Rất vui được đón tiếp bạn trong buổi phỏng vấn vị trí {self.role_name} ({self.level}){company_phrase}. {txt}"
+                return f"Welcome! I am {self.persona_name}. Excited to interview you for {self.role_name} ({self.level}){company_phrase}. {txt}"
             if self.current_intent_ctx and self.current_intent_ctx.intent:
+                company_phrase = f" tại {self.company_name}" if self.company_name else ""
                 if is_vi:
-                    return f"Chào bạn, rất vui được đón tiếp bạn trong buổi phỏng vấn vị trí {self.role_name} ({self.level}). {self.current_intent_ctx.intent}"
-                return f"Welcome to your interview for {self.role_name} ({self.level}). {self.current_intent_ctx.intent}"
-            if is_vi:
-                return (
-                    f"Chào bạn, rất vui được đón tiếp bạn trong buổi phỏng vấn vị trí {self.role_name} ({self.level}). "
-                    "Trước khi bắt đầu phần chuyên môn, hôm nay thời tiết và tâm trạng của bạn thế nào? "
-                    "Hãy chia sẻ đôi chút và giới thiệu ngắn gọn về bản thân nhé!"
-                )
-            return (
-                f"Welcome to your interview for the {self.role_name} ({self.level}) position. "
-                "Before diving into technical details, how is your day going? "
-                "Please share a quick icebreaker and briefly introduce yourself!"
+                    return f"Chào bạn, tôi là {self.persona_name}. Rất vui được đón tiếp bạn trong buổi phỏng vấn vị trí {self.role_name} ({self.level}){company_phrase}. {self.current_intent_ctx.intent}"
+                return f"Welcome! I am {self.persona_name} for the {self.role_name} ({self.level}) role{company_phrase}. {self.current_intent_ctx.intent}"
+            return build_dynamic_warmup_opening_text(
+                role=self.role_name,
+                level=self.level,
+                persona_name=self.persona_name,
+                company_name=self.company_name,
+                language=self.language,
+                variant_seed=self.session_id,
             )
 
         if cur_stage.id == StageId.TECHNICAL.value:
@@ -442,11 +485,35 @@ class VoiceInterviewOrchestrator:
         barge_in_enabled: bool | None = None,
         selected_stages: list[str] | None = None,
         questions_per_stage: dict[str, int] | None = None,
+        persona_name: str | None = None,
+        company_name: str | None = None,
+        mock_mode: str | None = None,
+        total_duration_minutes: int | None = None,
     ) -> None:
         if role_name:
             self.role_name = role_name
         if level:
             self.level = level
+        if persona_name:
+            self.persona_name = persona_name
+        if company_name:
+            self.company_name = company_name
+        if mock_mode:
+            self.mock_mode = mock_mode
+        if total_duration_minutes:
+            self.total_duration_minutes = max(5, int(total_duration_minutes))
+            self.stage_time_limits = self._calculate_stage_time_limits(self.total_duration_minutes)
+
+        if not self._custom_system_prompt:
+            self.system_prompt = build_interviewer_system_prompt(
+                role=self.role_name,
+                level=self.level,
+                language=self.language,
+                persona_name=self.persona_name,
+                company_name=self.company_name,
+                mock_mode=self.mock_mode,
+            )
+
         if language:
             self.set_interview_language(language)
         if voice:
@@ -462,6 +529,9 @@ class VoiceInterviewOrchestrator:
             self.current_stage_index = 0
             self.turns_in_current_stage = 0
 
+        cur_stg = self.get_current_stage()
+        self._ensure_stage_timer_started(cur_stg.id)
+
         # Broadcast initial stage info
         if self.connection.is_open():
             await self.connection.send_event({
@@ -470,6 +540,12 @@ class VoiceInterviewOrchestrator:
                 "stages": self.get_all_stages_data(),
                 "turn_in_stage": self.turns_in_current_stage + 1,
                 "target_turns_in_stage": self.get_target_turns_for_current_stage(),
+                "stage_elapsed_seconds": int(self.get_stage_elapsed_seconds(cur_stg.id)),
+                "stage_max_seconds": self.stage_time_limits.get(cur_stg.id, 600),
+                "total_duration_minutes": self.total_duration_minutes,
+                "mock_mode": self.mock_mode,
+                "persona_name": self.persona_name,
+                "company_name": self.company_name,
             })
 
         # Resolve intent for current stage if DB session is available
@@ -555,35 +631,35 @@ class VoiceInterviewOrchestrator:
         # Transition state to THINK first
         await self.set_state(VoiceSessionState.THINK)
 
-        # Check stage completion conditions
-        target_turns = self.get_target_turns_for_current_stage()
-        is_stage_completed = self.turns_in_current_stage >= target_turns
+        cur_stage = self.get_current_stage()
+        self._ensure_stage_timer_started(cur_stage.id)
+        elapsed_sec = self.get_stage_elapsed_seconds(cur_stage.id)
+        stage_limit_sec = self.stage_time_limits.get(cur_stage.id, 600)
+        is_time_limit_reached = elapsed_sec >= stage_limit_sec
         is_last_stage = self.current_stage_index >= len(self.active_stages) - 1
 
-        is_transitioning = False
+        should_propose_transition = False
         is_session_finishing = False
+        is_transitioning = False
 
-        if is_stage_completed:
-            if not is_last_stage:
-                # Advance to next stage!
-                self.current_stage_index += 1
-                self.turns_in_current_stage = 0
-                is_transitioning = True
-                next_stage = self.get_current_stage()
-
-                if self.connection.is_open():
-                    await self.connection.send_event({
-                        "type": VoiceEventType.STAGE_CHANGE.value,
-                        "stage_id": next_stage.id,
-                        "stage_index": self.current_stage_index + 1,
-                        "total_stages": len(self.active_stages),
-                        "stage_name": next_stage.name_vi if self.language == "vi" else next_stage.name_en,
-                        "turn_id": self.current_turn_id,
-                        "current_stage": self.get_current_stage_data(),
-                        "stages": self.get_all_stages_data(),
-                    })
-            else:
+        if is_last_stage:
+            if is_time_limit_reached or self.turns_in_current_stage >= 2:
                 is_session_finishing = True
+        else:
+            if is_time_limit_reached:
+                should_propose_transition = True
+            elif cur_stage.id == StageId.WARMUP.value:
+                if self.turns_in_current_stage >= 3:
+                    should_propose_transition = True
+            else:
+                target_turns = self.get_target_turns_for_current_stage()
+                if self.turns_in_current_stage >= target_turns:
+                    should_propose_transition = True
+
+        if should_propose_transition and not is_last_stage:
+            is_transitioning = True
+            self.is_waiting_stage_confirmation = True
+            self.pending_transition_next_stage = self.active_stages[self.current_stage_index + 1]
 
         # Resolve câu hỏi ngân hàng kế tiếp TRƯỚC khi sinh câu hỏi mới để lượt
         # được liên kết thật với question_bank (hoặc None nếu không có).
@@ -602,6 +678,94 @@ class VoiceInterviewOrchestrator:
             ),
         )
 
+    async def handle_stage_transition_confirm(self) -> None:
+        if not self.is_waiting_stage_confirmation or not self.pending_transition_next_stage:
+            await self.handle_next_stage()
+            return
+
+        await self.cancel_current_generation()
+        self.current_stage_index += 1
+        self.turns_in_current_stage = 0
+        self.current_turn_id += 1
+        next_stage = self.get_current_stage()
+        self.stage_start_times[next_stage.id] = time.time()
+        self.is_waiting_stage_confirmation = False
+        self.pending_transition_next_stage = None
+
+        if self.connection.is_open():
+            await self.connection.send_event({
+                "type": VoiceEventType.STAGE_CHANGE.value,
+                "stage_id": next_stage.id,
+                "stage_index": self.current_stage_index + 1,
+                "total_stages": len(self.active_stages),
+                "stage_name": next_stage.name_vi if self.language == "vi" else next_stage.name_en,
+                "turn_id": self.current_turn_id,
+                "current_stage": self.get_current_stage_data(),
+                "stages": self.get_all_stages_data(),
+                "stage_max_seconds": self.stage_time_limits.get(next_stage.id, 600),
+            })
+
+        await self.set_state(VoiceSessionState.THINK)
+        self._resolve_next_intent(exclude_used=True)
+        await self._emit_question_context()
+        prompt = self._build_opening_question()
+        self._active_task = asyncio.create_task(
+            self._stream_predefined_text(prompt),
+        )
+
+    async def handle_stage_transition_defer(self, continue_message: str | None = None) -> None:
+        self.is_waiting_stage_confirmation = False
+        self.pending_transition_next_stage = None
+        await self.set_state(VoiceSessionState.LISTEN)
+
+    async def handle_request_hint(self, question_id: int | None = None) -> None:
+        if self.mock_mode == "strict":
+            if self.connection.is_open():
+                await self.connection.send_event({
+                    "type": VoiceEventType.HINT_RESPONSE.value,
+                    "hint_text": "Chế độ phỏng vấn thực chiến (Strict Mock) yêu cầu ứng viên tự lực giải quyết, không hỗ trợ gợi ý.",
+                    "is_supported": False,
+                })
+            return
+
+        question = ""
+        if self.current_intent_ctx and self.current_intent_ctx.intent:
+            question = self.current_intent_ctx.intent
+        elif self.conversation_history:
+            for m in reversed(self.conversation_history):
+                if m.get("role") == "assistant":
+                    question = m.get("content", "")
+                    break
+
+        hint_prompt = build_hint_prompt(
+            question=question or "Câu hỏi phỏng vấn kỹ thuật",
+            role=self.role_name,
+            level=self.level,
+            language=self.language,
+        )
+        hint_text = "Hãy áp dụng mô hình STAR: Nêu bối cảnh (S), nhiệm vụ cần giải quyết (T), giải pháp kỹ thuật bạn chọn (A) và kết quả đo lường được (R)."
+        try:
+            messages = [
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user", "content": hint_prompt},
+            ]
+            chunks = []
+            async for token in self.llm.stream_ai_tokens(messages):
+                chunks.append(token)
+            generated = "".join(chunks).strip()
+            if generated:
+                hint_text = generated
+        except Exception:
+            pass
+
+        if self.connection.is_open():
+            await self.connection.send_event({
+                "type": VoiceEventType.HINT_RESPONSE.value,
+                "hint_text": hint_text,
+                "is_supported": True,
+                "turn_id": self.current_turn_id,
+            })
+
     async def handle_next_stage(self) -> None:
         if self.current_stage_index < len(self.active_stages) - 1:
             await self.cancel_current_generation()
@@ -609,6 +773,9 @@ class VoiceInterviewOrchestrator:
             self.turns_in_current_stage = 0
             self.current_turn_id += 1
             next_stage = self.get_current_stage()
+            self.stage_start_times[next_stage.id] = time.time()
+            self.is_waiting_stage_confirmation = False
+            self.pending_transition_next_stage = None
 
             if self.connection.is_open():
                 await self.connection.send_event({
@@ -620,6 +787,7 @@ class VoiceInterviewOrchestrator:
                     "turn_id": self.current_turn_id,
                     "current_stage": self.get_current_stage_data(),
                     "stages": self.get_all_stages_data(),
+                    "stage_max_seconds": self.stage_time_limits.get(next_stage.id, 600),
                 })
 
             await self.set_state(VoiceSessionState.THINK)
@@ -659,6 +827,24 @@ class VoiceInterviewOrchestrator:
         cur_stage = self.get_current_stage()
         is_vi = self.language == "vi"
 
+        if is_transitioning:
+            from_stage_id = cur_stage.id
+            to_stage_id = (
+                self.pending_transition_next_stage.id
+                if self.pending_transition_next_stage
+                else (
+                    StageId.TECHNICAL.value
+                    if cur_stage.id == StageId.WARMUP.value
+                    else StageId.CLOSING.value
+                )
+            )
+            return build_stage_transition_instruction(
+                from_stage=from_stage_id,
+                to_stage=to_stage_id,
+                language=self.language,
+                mock_mode=self.mock_mode,
+            )
+
         situational_guard = QuestionIntentComposer.build_situational_system_prompt(
             role=self.role_name,
             level=self.level,
@@ -672,7 +858,7 @@ class VoiceInterviewOrchestrator:
             stage_desc = (
                 "Buổi phỏng vấn đã hoàn tất tất cả các chặng. "
                 "Hãy đưa ra nhận xét tổng quát tích cực, gửi lời cảm ơn chân thành tới ứng viên và "
-                "thông báo kết thúc buổi phỏng vấn."
+                "thông báo kết thúc buổi phỏng vấn. TUYỆT ĐỐI KHÔNG NÓI 'hết giờ'."
                 if is_vi
                 else "All interview stages are now complete. "
                 "Provide a brief warm closing remark, thank the candidate sincerely, and conclude the interview session."
@@ -687,31 +873,26 @@ class VoiceInterviewOrchestrator:
                 "Goal: establish a welcoming atmosphere, acknowledge small talk/icebreaker, and transition naturally."
             )
         elif cur_stage.id == StageId.TECHNICAL.value:
-            transition_text = (
-                " Chúng ta vừa bước sang phần Phỏng vấn chuyên môn kỹ thuật. Hãy chúc mừng ứng viên và bắt đầu câu hỏi kỹ thuật sâu."
-                if is_transitioning
-                else ""
+            strict_note = (
+                " Ở chế độ Thực chiến, hãy đào sâu bắt bẻ các lỗ hổng kỹ thuật và hỏi xoáy trade-offs."
+                if self.mock_mode == "strict"
+                else " Ở chế độ Hướng dẫn, hãy gợi mở cấu trúc STAR khi ứng viên bối rối."
             )
             stage_desc = (
-                f"Bạn đang ở chặng: Phỏng vấn chuyên môn (Technical Interview).{transition_text} "
+                f"Bạn đang ở chặng: Phỏng vấn chuyên môn (Technical Interview).{strict_note} "
                 f"Vị trí: {self.role_name} ({self.level}). "
                 "Mục tiêu: Đào sâu vào kinh nghiệm thực tế, kiến trúc hệ thống, trade-offs kỹ thuật hoặc phương pháp STAR. "
                 "Phản hồi súc tích, chuyên nghiệp (2-3 câu)."
                 if is_vi
-                else f"You are in the Technical Interview stage for {self.role_name} ({self.level}).{transition_text} "
+                else f"You are in the Technical Interview stage for {self.role_name} ({self.level}). "
                 "Focus on engineering challenges, architecture decisions, trade-offs, and STAR methodology."
             )
         else:
-            transition_text = (
-                " Chúng ta vừa bước sang chặng Thỏa thuận & Chào kết."
-                if is_transitioning
-                else ""
-            )
             stage_desc = (
-                f"Bạn đang ở chặng: Thỏa thuận & Chào kết (Closing & Negotiation).{transition_text} "
-                "Mục tiêu: Trả lời câu hỏi ứng viên đặt ra về doanh nghiệp, trao đổi về nguyện vọng nghề nghiệp, mức lương hoặc phúc lợi kỳ vọng."
+                f"Bạn đang ở chặng: Thỏa thuận & Chào kết (Closing & Q&A). "
+                "Mục tiêu: Trả lời tự nhiên các câu hỏi của ứng viên đặt ra về doanh nghiệp, môi trường văn hóa, dự án kỹ thuật hoặc lộ trình phát triển."
                 if is_vi
-                else f"You are in the Closing & Negotiation stage.{transition_text} "
+                else f"You are in the Closing & Negotiation stage. "
                 "Address candidate questions regarding the team, career growth, or compensation expectations."
             )
 
@@ -875,6 +1056,22 @@ class VoiceInterviewOrchestrator:
                             "total_sentences": splitter.sentence_index,
                             "is_completed": False,
                         })
+
+                        if is_transitioning and self.pending_transition_next_stage:
+                            next_stg = self.pending_transition_next_stage
+                            cur_stg = self.get_current_stage()
+                            await self.connection.send_event({
+                                "type": VoiceEventType.STAGE_TRANSITION_PROPOSED.value,
+                                "current_stage": cur_stg.id,
+                                "next_stage": next_stg.id,
+                                "stage_index": self.current_stage_index + 2,
+                                "total_stages": len(self.active_stages),
+                                "stage_name": next_stg.name_vi if self.language == "vi" else next_stg.name_en,
+                                "turn_id": turn_id,
+                                "elapsed_seconds": int(self.get_stage_elapsed_seconds(cur_stg.id)),
+                                "stage_max_seconds": self.stage_time_limits.get(cur_stg.id, 600),
+                                "summary_message": final_text,
+                            })
 
                     await self.set_state(VoiceSessionState.LISTEN)
 
