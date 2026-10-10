@@ -19,6 +19,8 @@ from ...domain.errors import DomainValidationError
 from .languages import INTERVIEW_LANGUAGE_SETTINGS
 from .ports import LLMVoiceStreamPort, TTSPort, VoiceConnectionPort
 from .sentence_splitter import StreamingSentenceSplitter
+from ...infrastructure.llm.prompt_templates import build_interviewer_system_prompt
+from .text_sanitizer import sanitize_spoken_text
 from ..interview.intent_composer import QuestionIntentComposer, QuestionIntentContext
 from ..interview.question_selection import QuestionSelectionService
 
@@ -61,7 +63,12 @@ class VoiceInterviewOrchestrator:
         self.level = level
         self.language = language
         self.voice = voice
-        self.system_prompt = system_prompt
+        self._custom_system_prompt = system_prompt
+        self.system_prompt = system_prompt or build_interviewer_system_prompt(
+            role=self.role_name,
+            level=self.level,
+            language=self.language,
+        )
         self.barge_in_enabled = barge_in_enabled
 
         # Configure dynamic stages
@@ -354,6 +361,12 @@ class VoiceInterviewOrchestrator:
             raise DomainValidationError("Change language while the interviewer is waiting for your answer")
         self.language = language
         self.voice = INTERVIEW_LANGUAGE_SETTINGS[language][1]
+        if not self._custom_system_prompt:
+            self.system_prompt = build_interviewer_system_prompt(
+                role=self.role_name,
+                level=self.level,
+                language=self.language,
+            )
 
     def _build_opening_question(self) -> str:
         cur_stage = self.get_current_stage()
@@ -646,63 +659,57 @@ class VoiceInterviewOrchestrator:
             language=self.language,
         )
 
+        stage_desc = ""
         if is_session_finishing:
-            if is_vi:
-                return (
-                    "Buổi phỏng vấn đã hoàn tất tất cả các chặng. "
-                    "Hãy đưa ra nhận xét tổng quát tích cực, gửi lời cảm ơn chân thành tới ứng viên và "
-                    "thông báo kết thúc buổi phỏng vấn."
-                )
-            return (
-                "All interview stages are now complete. "
+            stage_desc = (
+                "Buổi phỏng vấn đã hoàn tất tất cả các chặng. "
+                "Hãy đưa ra nhận xét tổng quát tích cực, gửi lời cảm ơn chân thành tới ứng viên và "
+                "thông báo kết thúc buổi phỏng vấn."
+                if is_vi
+                else "All interview stages are now complete. "
                 "Provide a brief warm closing remark, thank the candidate sincerely, and conclude the interview session."
             )
-
-        if cur_stage.id == StageId.WARMUP.value:
-            if is_vi:
-                return (
-                    "Bạn đang ở chặng 1: Khởi động & Chào hỏi (Warm-up). "
-                    "Mục tiêu: tạo không khí thoải mái, chào hỏi, lắng nghe câu trả lời về bối cảnh/thời tiết và giới thiệu bản thân. "
-                    "Hãy phản hồi tự nhiên (1-2 câu ngắn) và hỏi tiếp một câu mở đầu nhẹ nhàng."
-                )
-            return (
-                "You are in Stage 1: Warm-up & Greeting. "
+        elif cur_stage.id == StageId.WARMUP.value:
+            stage_desc = (
+                "Bạn đang ở chặng 1: Khởi động & Chào hỏi (Warm-up). "
+                "Mục tiêu: tạo không khí thoải mái, chào hỏi, lắng nghe câu trả lời về bối cảnh/thời tiết và giới thiệu bản thân. "
+                "Hãy phản hồi tự nhiên (1-2 câu ngắn) và hỏi tiếp một câu mở đầu nhẹ nhàng."
+                if is_vi
+                else "You are in Stage 1: Warm-up & Greeting. "
                 "Goal: establish a welcoming atmosphere, acknowledge small talk/icebreaker, and transition naturally."
             )
-
-        if cur_stage.id == StageId.TECHNICAL.value:
+        elif cur_stage.id == StageId.TECHNICAL.value:
             transition_text = (
                 " Chúng ta vừa bước sang phần Phỏng vấn chuyên môn kỹ thuật. Hãy chúc mừng ứng viên và bắt đầu câu hỏi kỹ thuật sâu."
                 if is_transitioning
                 else ""
             )
-            if is_vi:
-                return (
-                    f"Bạn đang ở chặng: Phỏng vấn chuyên môn (Technical Interview).{transition_text} "
-                    f"Vị trí: {self.role_name} ({self.level}). "
-                    "Mục tiêu: Đào sâu vào kinh nghiệm thực tế, kiến trúc hệ thống, trade-offs kỹ thuật hoặc phương pháp STAR. "
-                    "Phản hồi súc tích, chuyên nghiệp (2-3 câu)."
-                )
-            return (
-                f"You are in the Technical Interview stage for {self.role_name} ({self.level}).{transition_text} "
+            stage_desc = (
+                f"Bạn đang ở chặng: Phỏng vấn chuyên môn (Technical Interview).{transition_text} "
+                f"Vị trí: {self.role_name} ({self.level}). "
+                "Mục tiêu: Đào sâu vào kinh nghiệm thực tế, kiến trúc hệ thống, trade-offs kỹ thuật hoặc phương pháp STAR. "
+                "Phản hồi súc tích, chuyên nghiệp (2-3 câu)."
+                if is_vi
+                else f"You are in the Technical Interview stage for {self.role_name} ({self.level}).{transition_text} "
                 "Focus on engineering challenges, architecture decisions, trade-offs, and STAR methodology."
             )
-
-        # StageId.CLOSING
-        transition_text = (
-            " Chúng ta vừa bước sang chặng Thỏa thuận & Chào kết."
-            if is_transitioning
-            else ""
-        )
-        if is_vi:
-            return (
+        else:
+            transition_text = (
+                " Chúng ta vừa bước sang chặng Thỏa thuận & Chào kết."
+                if is_transitioning
+                else ""
+            )
+            stage_desc = (
                 f"Bạn đang ở chặng: Thỏa thuận & Chào kết (Closing & Negotiation).{transition_text} "
                 "Mục tiêu: Trả lời câu hỏi ứng viên đặt ra về doanh nghiệp, trao đổi về nguyện vọng nghề nghiệp, mức lương hoặc phúc lợi kỳ vọng."
+                if is_vi
+                else f"You are in the Closing & Negotiation stage.{transition_text} "
+                "Address candidate questions regarding the team, career growth, or compensation expectations."
             )
-        return (
-            f"You are in the Closing & Negotiation stage.{transition_text} "
-            "Address candidate questions regarding the team, career growth, or compensation expectations."
-        )
+
+        if situational_guard:
+            return stage_desc + chr(10) + chr(10) + situational_guard
+        return stage_desc
 
     async def _run_llm_and_tts_pipeline(
         self,
@@ -758,20 +765,23 @@ class VoiceInterviewOrchestrator:
             async def synthesize_one(idx: int, s_text: str):
                 if self.is_generation_cancelled(gen_id):
                     return
+                clean_s = sanitize_spoken_text(s_text)
+                if not clean_s:
+                    return
                 if self.state != VoiceSessionState.SPEAK:
                     await self.set_state(VoiceSessionState.SPEAK)
 
                 if self.connection.is_open():
                     await self.connection.send_event({
                         "type": VoiceEventType.SUBTITLE.value,
-                        "sentence": s_text,
+                        "sentence": clean_s,
                         "sentence_index": idx,
                         "generation_id": gen_id,
                         "turn_id": turn_id,
                     })
 
                 chunks: list[bytes] = []
-                async for audio_chunk in self.tts.synthesize_stream(s_text, voice=self.voice):
+                async for audio_chunk in self.tts.synthesize_stream(clean_s, voice=self.voice):
                     if self.is_generation_cancelled(gen_id):
                         break
                     if audio_chunk:
@@ -823,7 +833,7 @@ class VoiceInterviewOrchestrator:
 
             # If not cancelled, record AI message in history and finalize turn
             if not self.is_generation_cancelled(gen_id):
-                final_text = "".join(full_ai_response).strip()
+                final_text = sanitize_spoken_text("".join(full_ai_response))
                 ai_audio_url = None
                 if turn_audio_collector:
                     full_turn_audio = b"".join(
@@ -881,6 +891,10 @@ class VoiceInterviewOrchestrator:
         if self.is_generation_cancelled(generation_id):
             return
 
+        clean_text = sanitize_spoken_text(sentence_text)
+        if not clean_text:
+            return
+
         # Transition state to SPEAK on the first sentence
         if self.state != VoiceSessionState.SPEAK:
             await self.set_state(VoiceSessionState.SPEAK)
@@ -888,7 +902,7 @@ class VoiceInterviewOrchestrator:
         if self.connection.is_open():
             await self.connection.send_event({
                 "type": VoiceEventType.SUBTITLE.value,
-                "sentence": sentence_text,
+                "sentence": clean_text,
                 "sentence_index": sentence_idx,
                 "generation_id": generation_id,
                 "turn_id": turn_id,
@@ -896,7 +910,7 @@ class VoiceInterviewOrchestrator:
 
         # Synthesize complete, natural sentence audio to prevent micro-chunk audio stuttering
         audio_chunks: list[bytes] = []
-        async for audio_chunk in self.tts.synthesize_stream(sentence_text, voice=self.voice):
+        async for audio_chunk in self.tts.synthesize_stream(clean_text, voice=self.voice):
             if self.is_generation_cancelled(generation_id):
                 break
             if audio_chunk:
@@ -915,8 +929,9 @@ class VoiceInterviewOrchestrator:
                 })
 
     async def _stream_predefined_text(self, text: str) -> None:
+        clean_text = sanitize_spoken_text(text)
         if self.language != "vi":
-            await self._run_llm_and_tts_pipeline(question_text=text)
+            await self._run_llm_and_tts_pipeline(question_text=clean_text)
             return
         self._generation_counter += 1
         gen_id = f"gen_{self.session_id}_{self.current_turn_id}_{self._generation_counter}"
@@ -929,14 +944,14 @@ class VoiceInterviewOrchestrator:
             if self.connection.is_open():
                 await self.connection.send_event({
                     "type": VoiceEventType.AI_TOKEN.value,
-                    "token": text,
+                    "token": clean_text,
                     "turn_id": turn_id,
                     "generation_id": gen_id,
                 })
 
-            sentences = list(splitter.feed(text)) + list(splitter.flush())
+            sentences = list(splitter.feed(clean_text)) + list(splitter.flush())
             if not sentences:
-                sentences = [(0, text)]
+                sentences = [(0, clean_text)]
 
             turn_audio_collector: dict[int, bytes] = {}
             for sentence_idx, sentence_text in sentences:
@@ -946,17 +961,21 @@ class VoiceInterviewOrchestrator:
                 if self.state != VoiceSessionState.SPEAK:
                     await self.set_state(VoiceSessionState.SPEAK)
 
+                clean_sentence = sanitize_spoken_text(sentence_text)
+                if not clean_sentence:
+                    continue
+
                 if self.connection.is_open():
                     await self.connection.send_event({
                         "type": VoiceEventType.SUBTITLE.value,
-                        "sentence": sentence_text,
+                        "sentence": clean_sentence,
                         "sentence_index": sentence_idx,
                         "generation_id": gen_id,
                         "turn_id": turn_id,
                     })
 
                 chunks: list[bytes] = []
-                async for audio_chunk in self.tts.synthesize_stream(sentence_text, voice=self.voice):
+                async for audio_chunk in self.tts.synthesize_stream(clean_sentence, voice=self.voice):
                     if self.is_generation_cancelled(gen_id):
                         break
                     if audio_chunk:
@@ -983,14 +1002,14 @@ class VoiceInterviewOrchestrator:
                     )
                     ai_audio_url = self._save_audio_file(turn_id, "ai", full_turn_audio)
 
-                self.conversation_history.append({"role": "assistant", "content": text})
-                self._persist_ai_turn(turn_id, text, turn_intent, audio_url=ai_audio_url)
+                self.conversation_history.append({"role": "assistant", "content": clean_text})
+                self._persist_ai_turn(turn_id, clean_text, turn_intent, audio_url=ai_audio_url)
                 if self.connection.is_open():
                     await self.connection.send_event({
                         "type": VoiceEventType.DONE.value,
                         "turn_id": turn_id,
                         "generation_id": gen_id,
-                        "full_text": text,
+                        "full_text": clean_text,
                         "audio_url": ai_audio_url,
                         "total_sentences": len(sentences),
                         "is_completed": False,

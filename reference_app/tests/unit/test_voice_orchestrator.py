@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 from typing import Any, AsyncIterator
@@ -291,3 +291,48 @@ async def test_orchestrator_reconnect_does_not_repeat_voiced_question() -> None:
     assert len(history_events) == 1
     assert len(history_events[0]["turns"]) == 1
     assert history_events[0]["turns"][0]["turnNumber"] == 1
+
+
+@pytest.mark.anyio
+async def test_orchestrator_markdown_sanitization_and_interviewer_prompt() -> None:
+    conn = FakeVoiceConnection()
+    tts = FakeTTS()
+    raw_markdown_output = "**Tôi hiểu rồi**, cách tiếp cận đó rất hợp lý. Bạn hãy nêu cách triển khai `Redis Cache` để tránh thắt cổ chai?"
+    llm = FakeLLM(raw_markdown_output)
+
+    orch = VoiceInterviewOrchestrator(
+        session_id=105,
+        connection=conn,
+        tts=tts,
+        llm=llm,
+        role_name="Backend Engineer",
+        level="Senior",
+        language="vi",
+    )
+
+    # 1. System prompt is initialized with Senior Tech Lead persona and zero markdown policy
+    assert orch.system_prompt is not None
+    assert "Trưởng nhóm Kỹ thuật cấp cao" in orch.system_prompt
+    assert "ZERO MARKDOWN POLICY" in orch.system_prompt
+    assert "QUY TẮC 1 CÂU HỎI DUY NHẤT" in orch.system_prompt
+
+    # 2. Simulate user response
+    orch.conversation_history.append({"role": "assistant", "content": "Xin chào bạn."})
+    await orch.handle_final_transcript("Tôi thường dùng Redis làm caching layer.", duration_seconds=5.0)
+    if orch._active_task:
+        await orch._active_task
+
+    # 3. Verify no markdown in synthesized sentences
+    assert len(tts.synthesized_sentences) > 0
+    for s in tts.synthesized_sentences:
+        assert "**" not in s
+        assert "`" not in s
+
+    # 4. Verify no markdown in DONE event full_text
+    done_events = [e for e in conn.events if e["type"] == VoiceEventType.DONE.value]
+    assert len(done_events) == 1
+    done_text = done_events[0]["full_text"]
+    assert "**" not in done_text
+    assert "`" not in done_text
+    assert "Tôi hiểu rồi" in done_text
+    assert "Redis Cache" in done_text

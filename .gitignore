@@ -1,5 +1,7 @@
-/RULE.md
+﻿/RULE.md
 .env
 reference_app/reports/
 *.docx
 /TASK.md
+storage/
+reference_app/storage/

@@ -35,12 +35,14 @@ class QuestionIntentComposer:
         base_guardrail = (
             "QUY TẮC BẮT BUỘC: Bạn TUYỆT ĐỐI KHÔNG ĐƯỢC đọc nguyên văn câu hỏi hạt giống (seed question). "
             "Hãy chuyển hóa ý định kiểm tra (intent) thành một tình huống thực tế, cụ thể, giàu ngữ cảnh "
-            "và phù hợp với kinh nghiệm ứng viên vừa chia sẻ trong cuộc trò chuyện."
+            "và phù hợp với kinh nghiệm ứng viên vừa chia sẻ trong cuộc trò chuyện. "
+            "TUYỆT ĐỐI KHÔNG dùng markdown (**bold**, bullet points, headers). Chỉ đặt đúng 1 câu hỏi duy nhất."
             if is_vi
             else
             "STRICT GUARDRAIL: You MUST NOT read or ask the seed question verbatim. "
             "Transform the underlying intent/competency into a realistic, situation-based scenario "
-            "tailored to the ongoing dialogue and the candidate's background."
+            "tailored to the ongoing dialogue and the candidate's background. "
+            "NEVER use markdown (**bold**, bullet points, headers). Ask exactly one focused question."
         )
 
         if not intent_ctx:
