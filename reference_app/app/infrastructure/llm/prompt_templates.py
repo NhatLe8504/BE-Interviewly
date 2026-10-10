@@ -163,44 +163,44 @@ def build_stage_transition_instruction(
         if is_vi:
             return (
                 "BẠN ĐANG DẪN DẮT KẾT THÚC CHẶNG KHỞI ĐỘNG VÀ ĐỀ XUẤT BƯỚC SANG CHẶNG CHUYÊN MÔN:\n"
-                "- Hãy đưa ra 1 lời khen ngợi hoặc phản hồi ngắn gọn ấm áp về phần khởi động vừa rồi.\n"
+                "- Hãy đưa ra 1 lời khen ngợi hoặc phản hồi ngắn gọn ấm áp về phần khởi động vừa rồi (1 câu).\n"
                 "- Sau đó thông báo tự nhiên rằng hai bên đã sẵn sàng bước sang phần phỏng vấn chuyên môn kỹ thuật, và hỏi ứng viên xem đã sẵn sàng chưa (ví dụ: 'Không khí khởi đầu như vậy là rất tuyệt vời rồi. Bây giờ chúng ta hãy cùng bước vào phần chuyên môn kỹ thuật nhé, bạn đã sẵn sàng chưa?').\n"
-                "- TUYỆT ĐỐI KHÔNG NÓI 'hết giờ', 'thời gian đã hết' hay bất kỳ từ ngữ nào liên quan đến giới hạn thời lượng.\n"
-                "- KHÔNG đặt câu hỏi kỹ thuật chuyên sâu ngay ở câu này mà hãy chờ ứng viên đồng ý chuyển chặng."
+                "- CẤM TUYỆT ĐỐI: KHÔNG NÓI 'hết giờ', 'thời gian đã hết' hay bất kỳ từ ngữ nào liên quan đến giới hạn thời lượng.\n"
+                "- CẤM TUYỆT ĐỐI: KHÔNG đặt câu hỏi kỹ thuật chuyên sâu ngay ở câu này mà hãy chờ ứng viên đồng ý chuyển chặng."
             )
         return (
             "YOU ARE TRANSITIONING FROM WARM-UP TO TECHNICAL INTERVIEW:\n"
-            "- Acknowledge the warm-up conversation positively.\n"
+            "- Acknowledge the warm-up conversation positively (1 sentence).\n"
             "- Bridge naturally by stating we are ready to dive into the technical questions, and ask if the candidate is ready.\n"
-            "- NEVER mention time limits or running out of time.\n"
-            "- Do not ask the technical question yet; wait for candidate confirmation."
+            "- STRICT PROHIBITION: NEVER mention time limits or running out of time.\n"
+            "- STRICT PROHIBITION: Do not ask any technical questions yet; wait for candidate confirmation."
         )
 
     if from_stage == "technical" and to_stage == "closing":
         if is_vi:
             return (
                 "BẠN ĐANG DẪN DẮT KẾT THÚC CHẶNG CHUYÊN MÔN VÀ BƯỚC SANG CHẶNG CHÀO KẾT (Q&A):\n"
-                "- Tóm tắt tích cực ngắn gọn: bạn đã nắm rõ năng lực và tư duy giải quyết vấn đề của ứng viên qua phần kỹ thuật vừa rồi.\n"
-                "- Thông báo kết thúc phần chuyên môn và đề xuất chuyển sang phần Chào kết để ứng viên đặt câu hỏi cho công ty.\n"
-                "- TUYỆT ĐỐI KHÔNG NÓI 'hết giờ', 'thời gian đã hết'.\n"
-                "- TUYỆT ĐỐI KHÔNG đặt thêm câu hỏi kỹ thuật mới nào ở lượt này."
+                "- Đưa ra 1 câu nhận xét/đánh giá tích cực về giải pháp hoặc tư duy kỹ thuật ứng viên vừa trình bày.\n"
+                "- Thông báo kết thúc phần chuyên môn và đề xuất chuyển sang phần Chào kết để ứng viên đặt câu hỏi cho công ty (ví dụ: 'Cảm ơn bạn, qua các giải pháp vừa rồi tôi đã nắm rất rõ năng lực kỹ thuật của bạn. Bây giờ chúng ta hãy bước sang phần chào kết, bạn có câu hỏi nào muốn tìm hiểu thêm về công ty, dự án hay văn hóa đội ngũ không?').\n"
+                "- CẤM TUYỆT ĐỐI: KHÔNG đặt thêm bất kỳ câu hỏi kỹ thuật mới nào, KHÔNG hỏi phản biện, KHÔNG hỏi trade-off.\n"
+                "- CẤM TUYỆT ĐỐI: KHÔNG NÓI 'hết giờ', 'thời gian đã hết'."
             )
         return (
             "YOU ARE TRANSITIONING FROM TECHNICAL TO CLOSING & Q&A:\n"
-            "- Briefly appreciate their technical explanations and wrap up the technical section.\n"
+            "- Briefly appreciate their technical explanations (1 sentence) and wrap up the technical section.\n"
             "- Announce we are moving to the closing Q&A section where the candidate can ask questions about the company and team.\n"
-            "- NEVER mention time limits or running out of time.\n"
-            "- Do not ask any new technical questions in this turn."
+            "- STRICT PROHIBITION: NEVER mention time limits or running out of time.\n"
+            "- STRICT PROHIBITION: Do not ask any new technical questions or challenge candidate in this turn."
         )
 
     if is_vi:
         return (
             "BUỔI PHỎNG VẤN ĐÃ HOÀN TẤT TẤT CẢ CÁC CHẶNG:\n"
-            "Hãy cảm ơn ứng viên chân thành, đánh giá cao sự cởi mở của họ và thông báo kết thúc buổi phỏng vấn với lời chúc tốt đẹp."
+            "Hãy cảm ơn ứng viên chân thành, đánh giá cao sự cởi mở của họ và thông báo kết thúc buổi phỏng vấn với lời chúc tốt đẹp. CẤM TUYỆT ĐỐI nói 'hết giờ'."
         )
     return (
         "ALL INTERVIEW STAGES ARE COMPLETE:\n"
-        "Thank the candidate sincerely for their time, give an encouraging wrap-up, and conclude gracefully."
+        "Thank the candidate sincerely for their time, give an encouraging wrap-up, and conclude gracefully. NEVER mention time limits."
     )
 
 
