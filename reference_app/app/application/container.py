@@ -31,3 +31,4 @@ class ServiceContainer:
     tts_adapter: Any = None
     llm_voice_adapter: Any = None
     job_worker: Any = None
+    cv_service: Any = None

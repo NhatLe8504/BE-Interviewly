@@ -96,6 +96,7 @@ from .application.cache.service import CacheService
 from .application.catalog.service import CatalogService
 from .application.common import ClockPort
 from .application.container import ServiceContainer
+from .application.cv.service import CvService
 from .application.evaluation.service import EvaluationService
 from .application.interview.service import InterviewService
 from .application.profile.service import ProfileService
@@ -325,6 +326,12 @@ def build_services(
         branding_lookup=branding_lookup,
     )
 
+    # CV Builder Service
+    cv_service = CvService(
+        llm=llm_adapter,
+        clock=effective_clock,
+    )
+
     return ServiceContainer(
         clock=effective_clock,
         settings=settings,
@@ -348,5 +355,6 @@ def build_services(
         tts_adapter=tts_adapter,
         llm_voice_adapter=llm_adapter,
         job_worker=job_worker,
+        cv_service=cv_service,
     )
 
