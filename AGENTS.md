@@ -1,157 +1,87 @@
-# BE-Interviewly - Huong dan cho agent
+# AGENTS INSTRUCTIONS - AI INTERVIEW COACH (INTERVIEWLY)
 
-> Day la BE cua prj Interview Coach, dung struct + design pattern cua WMS Lite
-> (Clean Architecture + N-layer). KHONG con code nghiep vu WMS nao trong repo.
-> Khung hien tai chay duoc (health + auth + OpenAPI + test xanh); them tinh nang
-> Interview Coach theo dung vi tri layer duoi day, khong tao lop rong.
+## 1. Multi-Account & Branch Assignment Rules (4 Members)
+This project strictly involves **4 developers** with distinct branches and Git commit identities:
+1. **Lê Văn Nhật**: Branch: `nhatle08052004n` | Name: `nhatle08052004n` | Email: `nhatle08052004n@gmail.com`
+2. **Lê Anh Vũ**: Branch: `vule556677` | Name: `vule556677` | Email: `vule556677@gmail.com`
+3. **Lê Minh Hiếu 1**: Branch: `xeniellq1` | Name: `xeniellq1` | Email: `xeniellq1@gmail.com`
+4. **Lê Minh Hiếu 2**: Branch: `lhieu20231` | Name: `lhieu20231` | Email: `lhieu20231@gmail.com`
 
-## 1. Cay thu muc (khung hien tai)
+> 🚫 **REMOVED MEMBER:**
+> Member Huỳnh Thanh Sơn (`thanhson240624`) has been **completely removed** from the team. Never create branches, commit code, or assign tasks under `thanhson240624`.
 
-```text
-reference_app/
-|-- requirements.txt
-|-- docs/openapi.json           tu sync voi app moi lan boot (lifespan)
-|-- app/
-|   |-- config.py               API_TITLE/VERSION/DESCRIPTION + Settings tu env
-|   |-- domain/
-|   |   |-- errors.py           DomainError, NotFoundError, DomainValidationError,
-|   |   |                       AuthError -> 401, ConflictError -> 409
-|   |   `-- identity.py         normalize_email, validate_password/full_name
-|   |-- application/
-|   |   |-- common.py           PageRequest, PageResult, ClockPort
-|   |   |-- container.py        ServiceContainer (clock, settings, engine,
-|   |   |                       session_factory, auth_service)
-|   |   `-- auth/               commands.py, ports.py, service.py (AuthService)
-|   |-- infrastructure/
-|   |   |-- clock.py            SystemClock
-|   |   |-- database.py         tao engine + check_database
-|   |   |-- orm.py              Base + create_session_factory
-|   |   |-- security.py         Pbkdf2PasswordHasher (stdlib), JwtTokenService
-|   |   `-- persistence/
-|   |       |-- models/         17 model SQLAlchemy map 1-1 tu schema.sql
-|   |       `-- user_repository.py  SqlAlchemyUserRepository
-|   |-- presentation/api/
-|   |   |-- dependencies.py     get_container, get_session (moi request 1 session)
-|   |   |-- error_handlers.py   404 / 422 / 401 / 409
-|   |   |-- routers/auth.py     POST /api/v1/auth/register|login, GET /api/v1/auth/me
-|   |   `-- schemas/auth.py     RegisterIn, LoginIn, TokenOut, UserOut (Pydantic v2)
-|   |-- bootstrap.py            build_services() - composition root duy nhat
-|   `-- main.py                 create_app() + GET /health + lifespan export OpenAPI
-`-- tests/
-    |-- unit/         invariant + service voi fake port (auth co vi du mau)
-    |-- integration/  ORM wiring, create_all tren Postgres
-    |-- acceptance/   test API qua TestClient (health, openapi sync, auth)
-    `-- architecture/ phan tich import, giu dependency rule
-```
+---
 
-## 2. Dependency rule (bat buoc)
+## 2. Single-Folder Directory Rule (Token & Context Optimization)
+- **Work only in the two primary directories:**
+  - Frontend: `Interview_Coach_SRC_CODE/FE`
+  - Backend: `Interview_Coach_SRC_CODE/BE`
+- **DO NOT create extra git worktrees or clone duplicate folders** (`FE-*`, `BE-*`).
+- All worktree folders have been removed to prevent duplicate codebase indexing, drastically saving AI token consumption and preventing context fragmentation.
+- To switch between team members, simply change the active branch and Git configuration directly inside `FE` and `BE`:
+  ```bash
+  git -C Interview_Coach_SRC_CODE/FE checkout <branch> && git -C Interview_Coach_SRC_CODE/FE config user.name "..." && git -C Interview_Coach_SRC_CODE/FE config user.email "..."
+  git -C Interview_Coach_SRC_CODE/BE checkout <branch> && git -C Interview_Coach_SRC_CODE/BE config user.name "..." && git -C Interview_Coach_SRC_CODE/BE config user.email "..."
+  ```
 
-```text
-HTTP -> presentation (router + Pydantic) -> application (use case + port) -> domain
-infrastructure (adapter) --implements--> application port
-bootstrap.py wires moi concrete object
-```
+---
 
-- `domain`: chi stdlib. Cam import fastapi, pydantic, application,
-  infrastructure, presentation. Entity la `@dataclass(frozen=True)`,
-  invariant trong `__post_init__`, tien te dung `Decimal`.
-- `application`: duoc import domain. Cam import fastapi, pydantic,
-  presentation, infrastructure. Port la `typing.Protocol` nho theo consumer.
-  Clock la `ClockPort` (trong `common.py`); infrastructure chi implement.
-- `presentation`: chuyen HTTP/Pydantic thanh command/query cua application;
-  router khong biet adapter cu the. Schema Pydantic v2 validate som de
-  OpenAPI tra `422`; domain van tu bao ve khi use case goi ngoai HTTP.
-- `infrastructure`: implement port cua application; cam import presentation,
-  fastapi, pydantic.
-- `bootstrap.py` la composition root duy nhat. Test tao service/container
-  moi cho tung case, khong dung chung state.
+## 3. Mandatory Git Flow & Synchronization Rules (CRITICAL)
+Whenever finishing a task or switching between team members:
+1. **Never switch branches blindly without syncing to `main` first.**
+2. When a member finishes their subtask:
+   - Commit code on their branch under their identity.
+   - Push the branch to remote: `git push origin <branch>`.
+   - Merge the branch into `main` and push `main`:
+     ```bash
+     git checkout main && git merge <branch> && git push origin main
+     ```
+3. When the next member takes over:
+   - Pull latest `main`: `git checkout main && git pull origin main`.
+   - Checkout their branch and merge `main` into it: `git checkout <next_branch> && git merge main`.
+   - Configure their Git identity locally: `git config user.name "..." && git config user.email "..."`.
+Refer to `TEAM_GIT_RULES.md` for exact PowerShell one-liners.
 
-## 3. Them 1 feature (vi du: phong phong van)
+---
 
-1. `app/domain/<ten>.py`: entity + enum + invariant thuan Python.
-2. `app/application/<ten>/`: `commands.py`, `ports.py` (Protocol),
-   `service.py` chi phu thuoc port + domain.
-3. `app/infrastructure/...`: adapter implement port (memory truoc, SQL sau).
-4. `app/presentation/api/routers/` + `schemas/`: router goi service qua
-   dependency, khong import adapter.
-5. Wire concrete object trong `bootstrap.py`; them service vao
-   `ServiceContainer`.
-6. Test: unit (invariant + service voi fake port), acceptance (status, JSON,
-   `404`/`422`), khong commit code khong chay.
+## 4. Atomic & Frequent Commits Rule (BẮT BUỘC COMMIT NHỎ)
+- **TUYỆT ĐỐI KHÔNG gom nhiều trang/tính năng lớn vào 1 commit duy nhất** (không dồn hàng chục files vào một commit khổng lồ).
+- Phải chia nhỏ công việc thành từng subtask nguyên tử (Atomic subtasks). Ví dụ:
+  - Xong một component UI -> Commit ngay: `feat(practice): add star technique drawer component`
+  - Xong một API endpoint -> Commit ngay: `feat(interviews): add session creation endpoint`
+  - Sửa một bug logic/style -> Commit ngay: `fix(auth): fix redirect loop after login`
+- **Ngay khi code xong và xác nhận chạy tốt một subtask, PHẢI COMMIT NGAY LẬP TỨC** rồi mới chuyển sang làm subtask tiếp theo.
+- Lịch sử commit phải thể hiện từng bước làm việc tuần tự, rõ ràng, minh bạch cho từng thành viên.
 
-## 4. Chay BE
+---
 
-### Docker (khuyen dung, co san Postgres)
+## 5. Token Saving & Agent Constraints
+- **Không tự ý build, test và mở headless UI**:
+  - Không tự ý chạy `npm run build`, `next build` nếu không được yêu cầu.
+  - Không tự ý mở headless browser, chụp ảnh màn hình preview liên tục gây tiêu tốn lượng token lớn.
+  - Sau khi code xong một phần, thông báo ngắn gọn để người dùng tự kiểm tra trên trình duyệt và phản hồi.
+- Luôn giữ phản hồi ngắn gọn, súc tích, đi thẳng vào trọng tâm hành động.
 
-```powershell
-Copy-Item .env.example .env   # sua password neu can, file .env khong commit
-docker compose up -d --build
-docker compose ps
-docker compose logs -f api
-```
+---
 
-- API: `http://localhost:8000` (docs: `/docs`, health: `/health`).
-- Postgres 16: `localhost:5432` (user/pass/db mac dinh `interviewly`,
-  volume `pgdata` giu data). Tat: `docker compose down` (them `-v` de xoa data).
-- Bien moi truong: xem `.env.example` (`POSTGRES_*`, `API_PORT`).
-  Container api doc `DATABASE_URL` tro ve service `db`, cho doi db healthy
-  roi moi start. Bien nay cung la diem cam cho unit persistence sau nay.
+## 6. Architecture & Implementation Guidelines
+- **Backend (`Interview_Coach_SRC_CODE/BE`)**:
+  - Clean Architecture (N-layer): `presentation -> application -> domain`, `infrastructure implements application ports`.
+  - Tuân thủ quy tắc phụ thuộc, không import ngược từ domain/application ra ngoài.
+- **Frontend (`Interview_Coach_SRC_CODE/FE`)**:
+  - Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS, Lucide Icons, RTK Query.
 
-### Venv local (moi worktree lam 1 lan)
+---
 
-```powershell
-cd reference_app
-.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-pytest -q
-uvicorn app.main:app --reload --port 8000
-```
+## 7. Strict Local Fix & CI/CD Deployment Rule (BẮT BUỘC FIX LOCAL)
+- **Mọi sửa đổi Logic Code, API, UI, Bug Fixes**:
+  - **BẮT BUỘC phải sửa và kiểm tra tại Local trước**.
+  - Sau đó Commit theo quy tắc nguyên tử (Atomic commit), Push nhánh, Merge vào `main` và Push GitHub để hệ thống **CI/CD GitHub Actions** tự động deploy lên VPS.
+  - **TUYỆT ĐỐI KHÔNG sửa code trực tiếp trên VPS qua SSH**: Vì mỗi lần CI/CD chạy lại sẽ pull code từ GitHub và ghi đè (`git reset --hard origin/main`), làm mất sạch thay đổi nóng trên VPS và gây lỗi hồi quy (regression)!
+- **Phạm vi DUY NHẤT được phép SSH vào VPS**:
+  - Cấu hình hạ tầng mạng, Reverse Proxy Nginx, chứng chỉ SSL Certbot, Firewall/Port, Docker daemon, PM2 system service.
+  - Kiểm tra logs hệ thống (`pm2 logs`, `docker logs`).
+- **Quản lý tệp Audio tạm thời (Audio Retention & Cleanup)**:
+  - Các file audio TTS (`.mp3`) và thu âm (`.webm`) sinh ra trong quá trình phỏng vấn **KHÔNG lưu trữ vĩnh viễn**.
+  - Khi cuộc phỏng vấn kết thúc (hoặc kết thúc phiên), Backend phải đưa vào background task/job để tự động xóa sạch toàn bộ thư mục audio của session đó, giải phóng triệt để dung lượng ổ đĩa VPS.
 
-Kiem tra: `GET /health` -> `{"status": "ok"}`; docs: `http://localhost:8000/docs`.
-
-## 5. Persistence (nen tang ORM)
-
-- `app/infrastructure/orm.py`: `Base` (SQLAlchemy `DeclarativeBase`, chua co
-  model) + `create_session_factory(engine)`.
-- `app/infrastructure/database.py`: tao engine + `check_database`.
-- `ServiceContainer` giu `engine` + `session_factory`; route can session
-  thi `Depends(get_session)` (mo -> yield -> dong, moi request 1 session).
-- Them model: tao entity domain truoc, roi map thanh model duoi
-  `app/infrastructure/persistence/` (tao thu muc khi co model dau tien),
-  Doi cot co san (ALTER) thi create_all khong lo duoc - toi do dung migration.
-- ORM tu tao/cap nhat bang: `build_services()` goi `Base.metadata.create_all(engine)` moi lan boot.
-  Model song o `app/infrastructure/persistence/models/` (map 1-1 tu `schema.sql`,
-  giu nguyen ten bang/cot/enum PG). Them bang = them model + restart api.
-- `schema.sql` + ERD giu lam tai lieu goc, khong nap tay nua.
-- Pytest can Postgres chay: `docker compose up -d db` truoc khi `pytest -q`.
-
-## 6. Auth (dang nhap / dang ky)
-
-- `POST /api/v1/auth/register` (201): `{full_name, email, password min 8}`.
-  Trung email -> `409`. Email chuan hoa lowercase/trim o domain.
-- `POST /api/v1/auth/login` (200): `{email, password}` -> `{access_token,
-  token_type: bearer}`. Sai thong tin -> `401`.
-- `GET /api/v1/auth/me` (200): gui `Authorization: Bearer <token>`.
-  Thieu/sai token -> `401`. Response user khong bao gio co password.
-- Mat khau hash PBKDF2-SHA256 (stdlib, khong dung bcrypt).
-  JWT HS256 qua PyJWT; cau hinh bang env `JWT_SECRET` (toi thieu 32 ky tu
-  khi deploy that) va `JWT_EXPIRES_MINUTES` (mac dinh 1440 = 1 ngay).
-- Mau test: `tests/unit/test_auth_service.py` (fake port),
-  `tests/acceptance/test_auth_api.py` (flow that qua TestClient + Postgres).
-
-## 7. OpenAPI tu sync
-
-- `API_TITLE`/`API_VERSION`/`API_DESCRIPTION` single-source o `app/config.py`,
-  `create_app()` doc tu do nen `/openapi.json` khong bao gio lech version.
-- Lifespan export `docs/openapi.json` moi lan boot (ca docker lan TestClient
-  chay lifespan); test `test_openapi_sync.py` assert file tren dia == spec live.
-- Them route moi nho chay pytest de file docs duoc sync roi commit kem.
-
-## 8. Git (RULE.md)
-
-Moi nguoi chi code tren worktree + branch cua minh, khong dong vao `main`
-truc tiep, code len `main` chi qua PR review. Cau hinh identity theo branch
-truoc khi commit. Day du 5 worktree BE:
-
-- `BE` <-> `nhatle08052004n`
-- `BE-vule556677`, `BE-lhieu20231`, `BE-xeniellq1`, `BE-thanhson240624`

@@ -285,6 +285,9 @@ async def handle_voice_websocket_session(
         })
     finally:
         await orchestrator.cancel_current_generation()
+        from ....application.voice.ports import VoiceSessionState
+        if getattr(orchestrator, "state", None) == VoiceSessionState.COMPLETED:
+            orchestrator._schedule_audio_cleanup(delay_seconds=60)
 
 
 @router.websocket("/api/v1/voice/ws/{session_id}")
