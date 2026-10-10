@@ -306,7 +306,8 @@ def build_services(
     # Edge & ElevenLabs TTS
     edge_tts = EdgeTTSAdapter()
     eleven_key = getattr(settings, "elevenlabs_api_key", "")
-    tts_adapter = ElevenLabsTTSAdapter(api_key=eleven_key, fallback_adapter=edge_tts)
+    # Su dung truc tiep EdgeTTSAdapter mien phi va khong gioi han quota, ho tro chinh pitch (do cao tram)
+    tts_adapter = edge_tts
 
     # Automated Job Ingestion Worker
     from .application.job_aggregator.worker import JobIngestionWorker
