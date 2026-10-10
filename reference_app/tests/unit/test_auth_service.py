@@ -223,15 +223,17 @@ def test_google_auth_flow() -> None:
     )
 
     # New user registers & logins via Google
-    token, user = service.google_auth(None, GoogleAuthCommand(credential="valid-token"))
+    token, user, is_new = service.google_auth(None, GoogleAuthCommand(credential="valid-token"))
     assert token == f"token-{user.user_id}"
     assert user.email == "googleuser@example.com"
     assert user.full_name == "Google User"
+    assert is_new is True
 
     # Subsequent login returns the existing user
-    token2, user2 = service.google_auth(None, GoogleAuthCommand(credential="valid-token"))
+    token2, user2, is_new2 = service.google_auth(None, GoogleAuthCommand(credential="valid-token"))
     assert user2.user_id == user.user_id
     assert token2 == token
+    assert is_new2 is False
 
     # Invalid credential raises AuthError
     with pytest.raises(AuthError):
