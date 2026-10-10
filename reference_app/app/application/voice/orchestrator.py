@@ -354,7 +354,33 @@ class VoiceInterviewOrchestrator:
 
     def get_target_turns_for_current_stage(self) -> int:
         cur = self.get_current_stage()
-        return self.questions_per_stage.get(cur.id, cur.default_target_turns)
+        if cur.id in self.questions_per_stage:
+            return self.questions_per_stage[cur.id]
+
+        if cur.id == StageId.WARMUP.value:
+            return 3  # Cho phép small talk 3 lượt tự nhiên
+
+        if cur.id == StageId.TECHNICAL.value:
+            total_questions = 4
+            if self.session_factory:
+                db = self.session_factory()
+                try:
+                    from ...infrastructure.persistence.models.jd_interview import JDGenerationJob
+                    jd_job = db.query(JDGenerationJob).filter_by(session_id=self.session_id).first()
+                    if jd_job and jd_job.script and jd_job.script.items:
+                        tech_items = [
+                            it for it in jd_job.script.items
+                            if str(it.get("section_type", "")).lower() in ("technical", "chuyên môn", "coding", "system_design")
+                        ]
+                        total_questions = len(tech_items) if tech_items else len(jd_job.script.items)
+                except Exception:
+                    pass
+                finally:
+                    db.close()
+            # Mỗi câu hỏi kỹ thuật có lượt câu hỏi chính + lượt phản biện hóc búa
+            return max(6, total_questions * 2)
+
+        return 3
 
     def get_current_stage_data(self) -> dict[str, Any]:
         cur = self.get_current_stage()
@@ -683,7 +709,7 @@ class VoiceInterviewOrchestrator:
         is_transitioning = False
 
         if is_last_stage:
-            if is_time_limit_reached or self.turns_in_current_stage >= 2:
+            if is_time_limit_reached or self.turns_in_current_stage >= 3:
                 is_session_finishing = True
         else:
             if is_time_limit_reached:
@@ -703,7 +729,8 @@ class VoiceInterviewOrchestrator:
 
         # Resolve câu hỏi ngân hàng kế tiếp TRƯỚC khi sinh câu hỏi mới để lượt
         # được liên kết thật với question_bank (hoặc None nếu không có).
-        if not is_session_finishing:
+        # TUYỆT ĐỐI không resolve câu hỏi mới khi đang chuyển chặng hoặc kết thúc.
+        if not is_session_finishing and not is_transitioning:
             self._resolve_next_intent(exclude_used=True)
             await self._emit_question_context()
 
@@ -918,13 +945,19 @@ class VoiceInterviewOrchestrator:
                 "DO NOT ask technical or engineering interview questions during this warm-up stage."
             )
         elif cur_stage.id == StageId.TECHNICAL.value:
+            is_follow_up = (self.turns_in_current_stage % 2 == 1)
             strict_note = (
                 " Ở chế độ Thực chiến, hãy đào sâu bắt bẻ các lỗ hổng kỹ thuật và hỏi xoáy trade-offs."
                 if self.mock_mode == "strict"
                 else " Ở chế độ Hướng dẫn, hãy gợi mở cấu trúc STAR khi ứng viên bối rối."
             )
+            follow_up_note = (
+                f" ĐÂY LÀ LƯỢT PHẢN BIỆN: Phân tích ngắn gọn câu trả lời vừa rồi của ứng viên (1 câu) và đặt một câu hỏi đào sâu hóc búa, thử thách phản biện về trade-offs, edge cases hoặc đánh đố giải pháp phù hợp với level {self.level}."
+                if is_follow_up
+                else " ĐÂY LÀ CÂU HỎI KỸ THUẬT MỚI: Dẫn dắt ngắn gọn và đặt câu hỏi chuyên môn tiếp theo."
+            )
             stage_desc = (
-                f"Bạn đang ở chặng: Phỏng vấn chuyên môn (Technical Interview).{strict_note} "
+                f"Bạn đang ở chặng: Phỏng vấn chuyên môn (Technical Interview).{strict_note}{follow_up_note} "
                 f"Vị trí: {self.role_name} ({self.level}). "
                 "Mục tiêu: Đào sâu vào kinh nghiệm thực tế, kiến trúc hệ thống, trade-offs kỹ thuật hoặc phương pháp STAR. "
                 "Phản hồi súc tích, chuyên nghiệp (2-3 câu)."
@@ -992,6 +1025,27 @@ class VoiceInterviewOrchestrator:
             messages.extend(self.conversation_history[-8:])
             if question_text is not None:
                 messages.append({"role": "user", "content": question_text})
+
+            if is_transitioning:
+                messages.append({
+                    "role": "system",
+                    "content": (
+                        "LỆNH BẮT BUỘC (CRITICAL OVERRIDE):\n"
+                        + stage_instruction
+                        + "\nBẠN CẤM TUYỆT ĐỐI ĐẶT THÊM CÂU HỎI KỸ THUẬT/CHUYÊN MÔN NÀO! "
+                        "BẠN CẤM TUYỆT ĐỐI NÓI 'HẾT GIỜ' HOẶC ĐỀ CẬP THỜI LƯỢNG! "
+                        "CHỈ ĐÁNH GIÁ TÍCH CỰC NGẮN GỌN (1 CÂU) VÀ DẪN DẮT CHUYỂN CHẶNG."
+                    ),
+                })
+            elif is_session_finishing:
+                messages.append({
+                    "role": "system",
+                    "content": (
+                        "LỆNH BẮT BUỘC (CRITICAL OVERRIDE):\n"
+                        "Buổi phỏng vấn đã hoàn tất tất cả các phần. Cảm ơn ứng viên chân thành, chúc may mắn và thông báo kết thúc. "
+                        "CẤM TUYỆT ĐỐI nói 'hết giờ' hay hỏi thêm bất kỳ câu hỏi nào."
+                    ),
+                })
 
             turn_audio_collector: dict[int, bytes] = {}
             synth_sem = asyncio.Semaphore(2)
@@ -1302,10 +1356,10 @@ class VoiceInterviewOrchestrator:
                     ]
                     chosen = None
                     if stage_matched:
-                        idx = min(self.turns_in_current_stage, len(stage_matched) - 1)
+                        idx = min(self.turns_in_current_stage // 2, len(stage_matched) - 1)
                         chosen = stage_matched[idx]
                     elif items:
-                        idx = self.turns_in_current_stage % len(items)
+                        idx = (self.turns_in_current_stage // 2) % len(items)
                         chosen = items[idx]
 
                     if chosen:
