@@ -370,5 +370,38 @@ CREATE INDEX IF NOT EXISTS idx_job_postings_seniority ON job_postings(seniority)
 CREATE INDEX IF NOT EXISTS idx_job_postings_domain_id ON job_postings(domain_id);
 CREATE INDEX IF NOT EXISTS idx_job_postings_created_at ON job_postings(created_at DESC);
 
+-- =====================================================================
+-- 18. cv_documents (AI CV Builder Module)
+-- =====================================================================
+CREATE TABLE IF NOT EXISTS cv_documents (
+    id                   SERIAL PRIMARY KEY,
+    user_id              BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    target_job_id        VARCHAR(64) REFERENCES job_postings(job_id) ON DELETE SET NULL,
+    template_id          VARCHAR(50) NOT NULL DEFAULT 'modern_tech',
+    title                VARCHAR(255) NOT NULL DEFAULT 'My Professional CV',
+    color_theme          VARCHAR(50) NOT NULL DEFAULT 'navy',
+    font_family          VARCHAR(50) NOT NULL DEFAULT 'inter',
+    personal_info        JSONB NOT NULL DEFAULT '{}'::jsonb,
+    summary              TEXT,
+    work_experiences     JSONB NOT NULL DEFAULT '[]'::jsonb,
+    projects             JSONB NOT NULL DEFAULT '[]'::jsonb,
+    skills               JSONB NOT NULL DEFAULT '[]'::jsonb,
+    educations           JSONB NOT NULL DEFAULT '[]'::jsonb,
+    certifications       JSONB NOT NULL DEFAULT '[]'::jsonb,
+    section_order        JSONB NOT NULL DEFAULT '["summary", "experience", "projects", "skills", "education", "certifications"]'::jsonb,
+    ats_score            NUMERIC(5, 2),
+    ats_feedback         JSONB DEFAULT '{}'::jsonb,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_cv_documents_user_id ON cv_documents(user_id);
+CREATE INDEX IF NOT EXISTS idx_cv_documents_target_job_id ON cv_documents(target_job_id);
+CREATE INDEX IF NOT EXISTS idx_cv_documents_created_at ON cv_documents(created_at DESC);
+
+CREATE TRIGGER trg_cv_documents_updated_at
+    BEFORE UPDATE ON cv_documents
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
 COMMIT;
+
 

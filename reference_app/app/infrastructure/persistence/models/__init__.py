@@ -36,6 +36,8 @@ from .session import (
 from .system import AuditLog, ModerationLog
 from .session_plan import InterviewSessionConfig, SessionQuestionSelection
 from .user import CandidateProfile, User
+from . import cv as cv
+from .cv import CvDocumentRecord
 from .user_skills import (
     UserSkillEvidenceRecord,
     UserSkillLevelRecord,
@@ -48,6 +50,7 @@ __all__ = [
     "AnswerEvaluation",
     "AuditLog",
     "CandidateProfile",
+    "CvDocumentRecord",
     "InterviewSession",
     "InterviewTurn",
     "JobDomain",
@@ -82,6 +85,7 @@ __all__ = [
     "jd_interview",
     "billing",
     "catalog",
+    "cv",
     "session",
     "system",
     "user",
