@@ -1530,10 +1530,14 @@ class VoiceInterviewOrchestrator:
         finally:
             db.close()
 
-    def _schedule_audio_cleanup(self, delay_seconds: int = 120) -> None:
+    def _schedule_audio_cleanup(self, delay_seconds: int = 180) -> None:
         async def _cleanup():
             try:
                 await asyncio.sleep(delay_seconds)
+                # Chỉ xóa nếu phiên đã hoàn toàn kết thúc (COMPLETED).
+                # Trong khi cuộc trò chuyện đang diễn ra, giữ nguyên toàn bộ cache audio để ứng viên nghe lại!
+                if self.state != VoiceSessionState.COMPLETED:
+                    return
                 import shutil
                 from ...config import get_audio_storage_dir
                 base_dir = get_audio_storage_dir()
@@ -1541,7 +1545,7 @@ class VoiceInterviewOrchestrator:
                 if session_dir.exists() and session_dir.is_dir():
                     shutil.rmtree(session_dir, ignore_errors=True)
                     logging.getLogger("VoiceOrchestrator").info(
-                        "Cleaned up temporary audio files for session #%s", self.session_id
+                        "Cleaned up audio cache for completed session #%s", self.session_id
                     )
             except Exception as exc:
                 logging.getLogger("VoiceOrchestrator").warning(

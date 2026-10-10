@@ -53,7 +53,7 @@ async def lifespan(app: FastAPI):
             pass
     try:
         from .config import cleanup_stale_audio_files
-        cleanup_stale_audio_files(max_age_seconds=1800)
+        cleanup_stale_audio_files(max_age_seconds=86400, session_factory=container.session_factory)
     except Exception:
         pass
     export_openapi(app)
