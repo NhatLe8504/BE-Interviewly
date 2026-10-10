@@ -12,13 +12,29 @@ logger = logging.getLogger("ElevenLabsTTSAdapter")
 
 # Curated ElevenLabs Voice aliases mapping (matching account premade voices)
 ELEVEN_VOICE_MAP = {
+    # Vietnamese Community / Native Voices (Added on ElevenLabs)
+    "tuan": "9EE00wK5qV6tPtpQIxvy",
+    "duchuy": "w2KTJ6MO4SIK6nWK4YH8",
+    "tonyhoang": "K7ewtjKRNtwwt3lKQ6M0",
+    "phananh": "mgBpvrNosWzExdPuRbXP",
+    # Japanese Voices (Added on ElevenLabs)
+    "hinata": "j210dv0vWm7fCknyQpbA",
+    "shizuka": "WQz3clzUdMqvBf0jswZQ",
+    "otani": "3JDquces8E8bkmvbh6Bc",
+    # Multilingual Premade Voices
     "george": "JBFqnCBsd6RMkjVDRZzb",
     "sarah": "EXAVITQu4vr4xnSDxMaL",
     "adam": "pNInz6obpgDQGcFmaJgB",
     "liam": "TX3LPaxmHKxFdv7VOQHJ",
     "lily": "pFZP5JQG7iQjIQuC4Bku",
     "alice": "Xb7hH8MSUJpSbSDYk0k2",
-    "rachel": "EXAVITQu4vr4xnSDxMaL",  # Alias to Sarah if requested
+    "river": "SAz9YHcvj6GT2YYXdXww",
+    "will": "bIHbv24MWmeRgasZH58o",
+    "jessica": "cgSgspJ2msm6clMCkdW9",
+    "eric": "cjVigY5qzO86Huf0OWal",
+    "bella": "hpp4J3VqNfWAUOO0d1Us",
+    "brian": "nPczCjzI2devNBz1zQrb",
+    "rachel": "EXAVITQu4vr4xnSDxMaL",
     "charlie": "IKne3meq5aSn9XLyUdCD",
     "roger": "CwhRBWXzGAHq8TQ4Fs17",
     "laura": "FGY2WhTYpPnrIDTdsKH5",
@@ -115,8 +131,10 @@ class ElevenLabsTTSAdapter(TTSPort):
                             response.status_code,
                             err_body[:200],
                         )
-                        # Fallback to EdgeTTS with safe voice
-                        async for chunk in self.fallback.synthesize_stream(cleaned, "vi-VN-HoaiMyNeural"):
+                        safe_edge = "vi-VN-HoaiMyNeural"
+                        if voice_id in ("j210dv0vWm7fCknyQpbA", "WQz3clzUdMqvBf0jswZQ", "3JDquces8E8bkmvbh6Bc"):
+                            safe_edge = "ja-JP-NanamiNeural"
+                        async for chunk in self.fallback.synthesize_stream(cleaned, safe_edge):
                             yield chunk
                         return
 
