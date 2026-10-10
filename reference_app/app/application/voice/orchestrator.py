@@ -604,13 +604,33 @@ class VoiceInterviewOrchestrator:
                 "turn_id": self.current_turn_id,
             })
 
+    @staticmethod
+    def _is_transition_agreement(text: str, language: str = "vi") -> bool:
+        clean = text.lower().strip()
+        agree_keywords_vi = [
+            "đồng ý", "sẵn sàng", "tiếp tục", "chuyển chặng", "chuyển tiếp", "qua chặng",
+            "bước tiếp", "tiếp theo", "vâng", "dạ vâng", "dạ được", "dạ ok", "ok anh", "ok chị",
+            "ok em", "ok", "okay", "được ạ", "qua phần mới", "qua phần chuyên môn",
+            "qua phần chào kết", "chuyển phần", "next", "chuyển đi ạ", "qua đi ạ",
+            "bắt đầu phần mới", "bắt đầu chuyên môn", "bước sang", "chuyển sang", "bước vào",
+        ]
+        agree_keywords_en = [
+            "yes", "agree", "ready", "next stage", "move on", "let's go", "sure", "proceed",
+            "continue", "sounds good", "let's do it", "go ahead", "next topic", "move forward",
+        ]
+        keywords = agree_keywords_vi if language == "vi" else agree_keywords_en
+        if len(clean) < 80 and any(k in clean for k in keywords):
+            return True
+        if any(clean.startswith(prefix) for prefix in ("vâng", "dạ vâng", "ok", "okay", "yes", "sure")) and len(clean) < 120:
+            return True
+        return False
+
     async def handle_final_transcript(
         self, text: str, duration_seconds: float = 0.0,
     ) -> None:
         clean_text = text.strip()
         if not clean_text:
             return
-
 
         # Ensure any leftover generation is stopped
         await self.cancel_current_generation()
@@ -628,6 +648,24 @@ class VoiceInterviewOrchestrator:
 
         self.conversation_history.append({"role": "user", "content": clean_text})
         self._persist_user_transcript(self.current_turn_id, clean_text)
+
+        # Check if user speech is responding to a stage transition proposal:
+        if self.is_waiting_stage_confirmation and self.pending_transition_next_stage:
+            if self._is_transition_agreement(clean_text, self.language):
+                # Candidate agreed verbally/textually to move to next stage
+                self.is_waiting_stage_confirmation = False
+                self.pending_transition_next_stage = None
+                await self.handle_stage_transition_confirm()
+                return
+            else:
+                # Candidate is answering the question / continuing in the current stage
+                self.is_waiting_stage_confirmation = False
+                self.pending_transition_next_stage = None
+                if self.connection.is_open():
+                    await self.connection.send_event({
+                        "type": "stage_transition_deferred",
+                    })
+
         self.turns_in_current_stage += 1
 
         # Transition state to THINK first
