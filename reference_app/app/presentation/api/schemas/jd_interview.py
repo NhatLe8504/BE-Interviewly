@@ -45,6 +45,11 @@ class JDJobSummaryOut(BaseModel):
     created_at: str | None = None
     is_public: bool = False
     error: str | None = None
+    origin_job_id: str | None = None
+    company_logo_url: str | None = None
+    company_banner_url: str | None = None
+    skills: list[str] = Field(default_factory=list)
+    is_custom_jd: bool = False
 
 
 class JDStartSessionIn(BaseModel):
