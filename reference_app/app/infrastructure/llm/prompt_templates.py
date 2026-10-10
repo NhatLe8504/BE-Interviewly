@@ -162,33 +162,35 @@ def build_stage_transition_instruction(
     if from_stage == "warmup" and to_stage == "technical":
         if is_vi:
             return (
-                "BẠN ĐANG DẪN DẮT KẾT THÚC CHẶNG KHỞI ĐỘNG VÀ BƯỚC SANG CHẶNG CHUYÊN MÔN:\n"
+                "BẠN ĐANG DẪN DẮT KẾT THÚC CHẶNG KHỞI ĐỘNG VÀ ĐỀ XUẤT BƯỚC SANG CHẶNG CHUYÊN MÔN:\n"
                 "- Hãy đưa ra 1 lời khen ngợi hoặc phản hồi ngắn gọn ấm áp về phần khởi động vừa rồi.\n"
-                "- Sau đó dẫn dắt mượt mà sang phần phỏng vấn chuyên môn kỹ thuật (ví dụ: 'Không khí khởi đầu như vậy là rất tuyệt vời rồi. Bây giờ chúng ta hãy cùng bước vào phần quan trọng nhất: các bài toán kỹ thuật chuyên sâu nhé.').\n"
-                "- TUYỆT ĐỐI KHÔNG NÓI 'hết giờ', 'thời gian đã hết' hay bất kỳ từ ngữ nào liên quan đến thời lượng.\n"
-                "- Đặt câu hỏi kỹ thuật đầu tiên một cách tự nhiên và sắc bén."
+                "- Sau đó thông báo tự nhiên rằng hai bên đã sẵn sàng bước sang phần phỏng vấn chuyên môn kỹ thuật, và hỏi ứng viên xem đã sẵn sàng chưa (ví dụ: 'Không khí khởi đầu như vậy là rất tuyệt vời rồi. Bây giờ chúng ta hãy cùng bước vào phần chuyên môn kỹ thuật nhé, bạn đã sẵn sàng chưa?').\n"
+                "- TUYỆT ĐỐI KHÔNG NÓI 'hết giờ', 'thời gian đã hết' hay bất kỳ từ ngữ nào liên quan đến giới hạn thời lượng.\n"
+                "- KHÔNG đặt câu hỏi kỹ thuật chuyên sâu ngay ở câu này mà hãy chờ ứng viên đồng ý chuyển chặng."
             )
         return (
             "YOU ARE TRANSITIONING FROM WARM-UP TO TECHNICAL INTERVIEW:\n"
             "- Acknowledge the warm-up conversation positively.\n"
-            "- Bridge naturally into the technical section without ever mentioning time limits or running out of time.\n"
-            "- Ask the first core technical question."
+            "- Bridge naturally by stating we are ready to dive into the technical questions, and ask if the candidate is ready.\n"
+            "- NEVER mention time limits or running out of time.\n"
+            "- Do not ask the technical question yet; wait for candidate confirmation."
         )
 
     if from_stage == "technical" and to_stage == "closing":
         if is_vi:
             return (
                 "BẠN ĐANG DẪN DẮT KẾT THÚC CHẶNG CHUYÊN MÔN VÀ BƯỚC SANG CHẶNG CHÀO KẾT (Q&A):\n"
-                "- Tóm tắt tích cực ngắn gọn: bạn đã nắm rõ năng lực và tư duy giải quyết vấn đề của ứng viên.\n"
-                "- Dẫn dắt sang phần chào kết bằng cách mời ứng viên đặt câu hỏi cho công ty về đội ngũ, văn hóa hoặc dự án.\n"
+                "- Tóm tắt tích cực ngắn gọn: bạn đã nắm rõ năng lực và tư duy giải quyết vấn đề của ứng viên qua phần kỹ thuật vừa rồi.\n"
+                "- Thông báo kết thúc phần chuyên môn và đề xuất chuyển sang phần Chào kết để ứng viên đặt câu hỏi cho công ty.\n"
                 "- TUYỆT ĐỐI KHÔNG NÓI 'hết giờ', 'thời gian đã hết'.\n"
-                "- Giữ phong thái lịch thiệp, cởi mở."
+                "- TUYỆT ĐỐI KHÔNG đặt thêm câu hỏi kỹ thuật mới nào ở lượt này."
             )
         return (
             "YOU ARE TRANSITIONING FROM TECHNICAL TO CLOSING & Q&A:\n"
-            "- Briefly appreciate their technical answers.\n"
-            "- Invite the candidate to ask any questions they have about the company, team, or culture.\n"
-            "- NEVER mention time limits or running out of time."
+            "- Briefly appreciate their technical explanations and wrap up the technical section.\n"
+            "- Announce we are moving to the closing Q&A section where the candidate can ask questions about the company and team.\n"
+            "- NEVER mention time limits or running out of time.\n"
+            "- Do not ask any new technical questions in this turn."
         )
 
     if is_vi:
