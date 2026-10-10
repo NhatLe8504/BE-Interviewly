@@ -1145,6 +1145,8 @@ class VoiceInterviewOrchestrator:
 
                 if is_session_finishing:
                     await self.set_state(VoiceSessionState.COMPLETED)
+                    self._schedule_session_tracking_sync()
+                    self._schedule_audio_cleanup(delay_seconds=120)
                     if self.connection.is_open():
                         await self.connection.send_event({
                             "type": VoiceEventType.DONE.value,
@@ -1528,9 +1530,32 @@ class VoiceInterviewOrchestrator:
         finally:
             db.close()
 
+    def _schedule_audio_cleanup(self, delay_seconds: int = 120) -> None:
+        async def _cleanup():
+            try:
+                await asyncio.sleep(delay_seconds)
+                import shutil
+                from ...config import get_audio_storage_dir
+                base_dir = get_audio_storage_dir()
+                session_dir = base_dir / str(self.session_id)
+                if session_dir.exists() and session_dir.is_dir():
+                    shutil.rmtree(session_dir, ignore_errors=True)
+                    logging.getLogger("VoiceOrchestrator").info(
+                        "Cleaned up temporary audio files for session #%s", self.session_id
+                    )
+            except Exception as exc:
+                logging.getLogger("VoiceOrchestrator").warning(
+                    "Failed to cleanup audio files for session #%s: %s", self.session_id, exc
+                )
+
+        task = asyncio.create_task(_cleanup())
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
     async def handle_stop_session(self) -> None:
         await self.cancel_current_generation()
         self._schedule_session_tracking_sync()
+        self._schedule_audio_cleanup(delay_seconds=120)
         await self.set_state(VoiceSessionState.COMPLETED)
         if self.connection.is_open():
             await self.connection.send_event({

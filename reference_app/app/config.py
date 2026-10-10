@@ -29,6 +29,27 @@ def get_audio_storage_dir() -> Path:
         return fallback
 
 
+def cleanup_stale_audio_files(max_age_seconds: int = 1800) -> None:
+    """Xóa các thư mục audio của phiên phỏng vấn đã kết thúc hoặc cũ hơn max_age_seconds."""
+    try:
+        import time
+        import shutil
+        base_dir = get_audio_storage_dir()
+        if not base_dir.exists():
+            return
+        now = time.time()
+        for item in base_dir.iterdir():
+            if item.is_dir():
+                try:
+                    mtime = item.stat().st_mtime
+                    if (now - mtime) > max_age_seconds:
+                        shutil.rmtree(item, ignore_errors=True)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+
 def _load_env_file() -> None:
     for candidate in [
         os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"),

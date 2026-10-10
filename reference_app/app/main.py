@@ -51,6 +51,11 @@ async def lifespan(app: FastAPI):
             seed_default_data(container.session_factory, container.auth_service.hasher)
         except Exception:
             pass
+    try:
+        from .config import cleanup_stale_audio_files
+        cleanup_stale_audio_files(max_age_seconds=1800)
+    except Exception:
+        pass
     export_openapi(app)
     if getattr(container, "job_worker", None):
         container.job_worker.start_background_scheduler()
