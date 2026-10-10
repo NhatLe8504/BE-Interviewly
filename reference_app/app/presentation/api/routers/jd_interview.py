@@ -204,7 +204,52 @@ async def submit_jd_file(
     )
 
 
-def _format_job_summary(job: JDGenerationJob) -> JDJobSummaryOut:
+def _resolve_linked_job(session: Session, job: JDGenerationJob) -> tuple[Any | None, bool]:
+    """
+    Tìm JobPostingRecord liên kết từ JDGenerationJob.
+    Trả về (posting_record, is_custom_jd)
+    """
+    from ....infrastructure.persistence.models.job_aggregator import JobPostingRecord, JobCompanyRecord
+
+    # 1. Check normalized_jd.original_url (e.g. job:xxx)
+    if job.normalized_jd and job.normalized_jd.original_url:
+        url = job.normalized_jd.original_url.strip()
+        if url.startswith("job:"):
+            job_post_id = url[4:].strip()
+            posting = session.get(JobPostingRecord, job_post_id)
+            if posting:
+                return posting, False
+
+    # 2. Check checksum match with job_postings
+    if job.checksum:
+        posting = (
+            session.query(JobPostingRecord)
+            .filter(JobPostingRecord.content_fingerprint == job.checksum)
+            .first()
+        )
+        if posting:
+            return posting, False
+
+    # 3. Fallback: match by title and company if analysis exists
+    if job.analysis and job.analysis.job_title and job.analysis.company_name:
+        clean_comp = job.analysis.company_name.strip()
+        if clean_comp:
+            posting = (
+                session.query(JobPostingRecord)
+                .join(JobCompanyRecord, JobCompanyRecord.company_id == JobPostingRecord.company_id)
+                .filter(
+                    JobPostingRecord.title == job.analysis.job_title,
+                    JobCompanyRecord.company_name.ilike(f"%{clean_comp}%"),
+                )
+                .first()
+            )
+            if posting:
+                return posting, False
+
+    return None, True
+
+
+def _format_job_summary(job: JDGenerationJob, session: Session | None = None) -> JDJobSummaryOut:
     role = "Software Engineer"
     seniority = "junior"
     company = ""
@@ -230,6 +275,27 @@ def _format_job_summary(job: JDGenerationJob) -> JDJobSummaryOut:
         total_questions = job.script.total_questions
         estimated_minutes = job.script.estimated_minutes
 
+    origin_job_id = None
+    company_logo_url = None
+    company_banner_url = None
+    skills: list[str] = []
+    is_custom_jd = True
+
+    if session:
+        posting, is_custom = _resolve_linked_job(session, job)
+        is_custom_jd = is_custom
+        if posting:
+            origin_job_id = posting.job_id
+            if posting.company:
+                company_logo_url = posting.company.logo_url
+                company_banner_url = posting.company.banner_url
+                if not company and posting.company.company_name:
+                    company = posting.company.company_name
+            skills = posting.skills_required or posting.technologies or []
+
+    if not skills:
+        skills = focus_areas
+
     return JDJobSummaryOut(
         job_id=job.job_id,
         status=job.status,
@@ -246,6 +312,11 @@ def _format_job_summary(job: JDGenerationJob) -> JDJobSummaryOut:
         created_at=job.created_at.isoformat() if job.created_at else None,
         is_public=bool(getattr(job, "is_public", False)),
         error=job.error_message,
+        origin_job_id=origin_job_id,
+        company_logo_url=company_logo_url,
+        company_banner_url=company_banner_url,
+        skills=skills,
+        is_custom_jd=is_custom_jd,
     )
 
 
@@ -267,7 +338,7 @@ def get_community_jd_jobs(
         .limit(limit)
     )
     jobs = query.all()
-    return [_format_job_summary(job) for job in jobs]
+    return [_format_job_summary(job, session=session) for job in jobs]
 
 
 @router.get("/my-jobs", response_model=list[JDJobSummaryOut])
@@ -295,7 +366,7 @@ def get_my_jd_jobs(
             .all()
         )
 
-    return [_format_job_summary(job) for job in jobs]
+    return [_format_job_summary(job, session=session) for job in jobs]
 
 
 @router.get("/jobs/{job_id}/status", response_model=JDJobStatusOut)
@@ -329,12 +400,25 @@ def get_job_status(
         bp_rec = session.query(InterviewBlueprintRecord).filter_by(job_id=job_id).first()
         if script_rec and bp_rec:
             company_name = job_record.analysis.company_name if job_record.analysis else ""
+            posting, is_custom_jd = _resolve_linked_job(session, job_record)
+            origin_job_id = posting.job_id if posting else None
+            company_logo_url = posting.company.logo_url if (posting and posting.company) else None
+            company_banner_url = posting.company.banner_url if (posting and posting.company) else None
+            if posting and posting.company and not company_name:
+                company_name = posting.company.company_name
+            skills = (posting.skills_required or posting.technologies) if posting else (bp_rec.competencies or [])
+
             result = {
                 "script_id": script_rec.script_id,
                 "job_id": job_id,
                 "role": bp_rec.target_role,
                 "seniority": bp_rec.seniority,
                 "company_name": company_name or "",
+                "company_logo_url": company_logo_url,
+                "company_banner_url": company_banner_url,
+                "origin_job_id": origin_job_id,
+                "skills": skills,
+                "is_custom_jd": is_custom_jd,
                 "focus_areas": bp_rec.competencies or [],
                 "total_questions": script_rec.total_questions,
                 "estimated_minutes": script_rec.estimated_minutes,
@@ -396,7 +480,13 @@ def start_interview_from_jd_job(
     job_record.session_id = orm_session.session_id
     session.commit()
 
+    posting, is_custom_jd = _resolve_linked_job(session, job_record)
+    origin_job_id = posting.job_id if posting else None
+    company_logo_url = posting.company.logo_url if (posting and posting.company) else None
     company_name = job_record.analysis.company_name if job_record.analysis else ""
+    if posting and posting.company and not company_name:
+        company_name = posting.company.company_name
+
     return {
         "session_id": orm_session.session_id,
         "first_question": first_q_text,
@@ -404,6 +494,9 @@ def start_interview_from_jd_job(
         "role": bp_rec.target_role,
         "seniority": bp_rec.seniority,
         "company_name": company_name or "",
+        "company_logo_url": company_logo_url,
+        "origin_job_id": origin_job_id,
+        "is_custom_jd": is_custom_jd,
         "focus_areas": bp_rec.competencies or [],
         "total_questions": script_rec.total_questions,
         "estimated_minutes": script_rec.estimated_minutes,

@@ -112,7 +112,7 @@ class JDWorkflowOrchestrator:
                     job_id=job_id,
                     source_type=normalized_jd.source_type,
                     original_filename=normalized_jd.original_filename,
-                    original_url=normalized_jd.original_url,
+                    original_url=input_data.get("url") or normalized_jd.original_url,
                     checksum=normalized_jd.checksum,
                     raw_content=normalized_jd.raw_content,
                     cleaned_text=normalized_jd.cleaned_text,
