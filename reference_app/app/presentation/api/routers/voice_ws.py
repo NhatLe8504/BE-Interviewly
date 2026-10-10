@@ -325,10 +325,12 @@ def get_voice_options(
     language: str | None = None,
     user_id: int | None = Depends(get_optional_user_id),
     session: Session = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
 ) -> VoiceOptionsOut:
     effective_user_id = user_id if user_id and user_id > 0 else None
     is_premium = check_user_voice_entitlement(session, effective_user_id) if effective_user_id else False
-    data = get_voice_catalog_options(is_premium, language=language)
+    api_key = getattr(container.settings, "elevenlabs_api_key", "")
+    data = get_voice_catalog_options(is_premium, language=language, api_key=api_key)
     return VoiceOptionsOut(**data)
 
 
