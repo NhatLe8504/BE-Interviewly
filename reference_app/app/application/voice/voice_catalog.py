@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from typing import Any
 
@@ -175,8 +175,58 @@ DEFAULT_EDGE_VOICES = [
 ]
 
 # Premium Premade ElevenLabs Voices (Active for English / International)
-# Premium Voices (Tối ưu tài khoản Free - toàn bộ sử dụng Edge TTS chất lượng cao)
-PREMIUM_ELEVEN_VOICES: list[dict[str, Any]] = []
+PREMIUM_ELEVEN_VOICES: list[dict[str, Any]] = [
+    {
+        "id": "elevenlabs-sarah",
+        "name": "Sarah (Nữ - ElevenLabs Studio Pro)",
+        "provider": "elevenlabs",
+        "language": "multi",
+        "gender": "female",
+        "description": "Giọng nữ chuẩn phòng thu ElevenLabs, tự nhiên, truyền cảm và biểu cảm đỉnh cao",
+        "is_default": False,
+        "is_premium": True,
+    },
+    {
+        "id": "elevenlabs-george",
+        "name": "George (Nam - ElevenLabs Studio Pro)",
+        "provider": "elevenlabs",
+        "language": "multi",
+        "gender": "male",
+        "description": "Giọng nam studio ấm áp, truyền cảm hứng, phong thái cố vấn cấp cao",
+        "is_default": False,
+        "is_premium": True,
+    },
+    {
+        "id": "elevenlabs-adam",
+        "name": "Adam (Nam - ElevenLabs Studio Pro)",
+        "provider": "elevenlabs",
+        "language": "multi",
+        "gender": "male",
+        "description": "Giọng nam trầm dày, đĩnh đạc, bản lĩnh chuyên gia quốc tế",
+        "is_default": False,
+        "is_premium": True,
+    },
+    {
+        "id": "elevenlabs-lily",
+        "name": "Lily (Nữ - ElevenLabs Studio Pro)",
+        "provider": "elevenlabs",
+        "language": "multi",
+        "gender": "female",
+        "description": "Giọng nữ nhẹ nhàng, truyền cảm, phong thái phỏng vấn chuyên nghiệp",
+        "is_default": False,
+        "is_premium": True,
+    },
+    {
+        "id": "elevenlabs-liam",
+        "name": "Liam (Nam - ElevenLabs Studio Pro)",
+        "provider": "elevenlabs",
+        "language": "multi",
+        "gender": "male",
+        "description": "Giọng nam năng động, hiện đại, phát âm đa ngữ sắc nét",
+        "is_default": False,
+        "is_premium": True,
+    },
+]
 
 # STT Providers
 STT_ENGINES = [
@@ -218,8 +268,8 @@ def get_voice_catalog_options(
 
     for v in PREMIUM_ELEVEN_VOICES:
         item = dict(v)
-        item["is_locked"] = False
-        item["lock_reason"] = None
+        item["is_locked"] = not is_premium_user
+        item["lock_reason"] = "Yêu cầu tài khoản Pro để mở khóa giọng đọc ElevenLabs chuẩn phòng thu." if not is_premium_user else None
         voices.append(item)
 
     # Lọc nghiêm ngặt: chỉ giữ giọng của ngôn ngữ được chọn HOẶC giọng đa ngôn ngữ (multi)
