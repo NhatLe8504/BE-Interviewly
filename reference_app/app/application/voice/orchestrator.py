@@ -139,9 +139,8 @@ class VoiceInterviewOrchestrator:
     
     def _save_audio_file(self, turn_id: int, speaker: str, audio_bytes: bytes) -> str | None:
         try:
-            base_dir = Path("/srv/storage/audio")
-            if not base_dir.exists():
-                base_dir = Path(__file__).resolve().parents[4] / "storage" / "audio"
+            from ...config import get_audio_storage_dir
+            base_dir = get_audio_storage_dir()
             session_dir = base_dir / str(self.session_id)
             session_dir.mkdir(parents=True, exist_ok=True)
             ext = "mp3" if speaker == "ai" else "webm"
