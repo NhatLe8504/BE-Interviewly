@@ -403,9 +403,8 @@ async def preview_voice_sample(
 @router.get("/api/v1/voice/audio/{session_id}/{filename}")
 @router.head("/api/v1/voice/audio/{session_id}/{filename}")
 async def get_turn_audio(session_id: str, filename: str):
-    base_dir = Path("/srv/storage/audio")
-    if not base_dir.exists():
-        base_dir = Path(__file__).resolve().parents[4] / "storage" / "audio"
+    from ....config import get_audio_storage_dir
+    base_dir = get_audio_storage_dir()
     file_path = base_dir / session_id / filename
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Audio file not found")
@@ -425,9 +424,8 @@ async def upload_user_turn_audio(
     if not content:
         raise HTTPException(status_code=400, detail="Empty audio payload")
 
-    base_dir = Path("/srv/storage/audio")
-    if not base_dir.exists():
-        base_dir = Path(__file__).resolve().parents[4] / "storage" / "audio"
+    from ....config import get_audio_storage_dir
+    base_dir = get_audio_storage_dir()
     session_dir = base_dir / str(session_id)
     session_dir.mkdir(parents=True, exist_ok=True)
     filename = f"turn_{turn_id}_user.webm"

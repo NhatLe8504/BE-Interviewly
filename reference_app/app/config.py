@@ -2,6 +2,31 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
+
+
+def get_audio_storage_dir() -> Path:
+    env_dir = os.environ.get("AUDIO_STORAGE_DIR")
+    if env_dir:
+        p = Path(env_dir)
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+    for candidate in [
+        Path("/srv/storage/audio"),
+        Path("/storage/audio"),
+        Path(__file__).resolve().parents[2] / "storage" / "audio",
+        Path(os.getcwd()) / "storage" / "audio",
+    ]:
+        if candidate.exists():
+            return candidate
+    target = Path("/srv/storage/audio")
+    try:
+        target.mkdir(parents=True, exist_ok=True)
+        return target
+    except Exception:
+        fallback = Path(os.getcwd()) / "storage" / "audio"
+        fallback.mkdir(parents=True, exist_ok=True)
+        return fallback
 
 
 def _load_env_file() -> None:

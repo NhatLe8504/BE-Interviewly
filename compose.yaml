@@ -54,6 +54,7 @@ services:
       ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
     volumes:
       - ./reference_app/app:/srv/app
+      - ./storage:/srv/storage
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:
