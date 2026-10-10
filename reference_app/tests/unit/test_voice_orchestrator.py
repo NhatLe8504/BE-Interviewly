@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
 from typing import Any, AsyncIterator
@@ -264,7 +264,7 @@ async def test_orchestrator_reconnect_does_not_repeat_voiced_question() -> None:
             pass
 
     existing_rows = [
-        FakeTurnRow(turn_number=1, speaker="ai", message_text="Câu hỏi 1 đã được phát", audio_url="voice_streamed")
+        FakeTurnRow(turn_number=1, speaker="ai", message_text="Chào bạn, hôm nay thời tiết thế nào?", audio_url="voice_streamed")
     ]
     def fake_session_factory():
         return FakeDbSession(existing_rows)

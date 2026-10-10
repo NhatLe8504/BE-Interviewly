@@ -704,28 +704,39 @@ class VoiceInterviewOrchestrator:
         is_time_limit_reached = elapsed_sec >= stage_limit_sec
         is_last_stage = self.current_stage_index >= len(self.active_stages) - 1
 
-        should_propose_transition = False
+        target_turns = self.get_target_turns_for_current_stage()
+        is_stage_completed = self.turns_in_current_stage >= target_turns
         is_session_finishing = False
         is_transitioning = False
 
         if is_last_stage:
-            if is_time_limit_reached or self.turns_in_current_stage >= 3:
+            if is_time_limit_reached or is_stage_completed or self.turns_in_current_stage >= 3:
                 is_session_finishing = True
         else:
-            if is_time_limit_reached:
-                should_propose_transition = True
-            elif cur_stage.id == StageId.WARMUP.value:
-                if self.turns_in_current_stage >= 3:
-                    should_propose_transition = True
-            else:
-                target_turns = self.get_target_turns_for_current_stage()
-                if self.turns_in_current_stage >= target_turns:
-                    should_propose_transition = True
-
-        if should_propose_transition and not is_last_stage:
-            is_transitioning = True
-            self.is_waiting_stage_confirmation = True
-            self.pending_transition_next_stage = self.active_stages[self.current_stage_index + 1]
+            if is_stage_completed:
+                # Target turns completed for current stage -> smoothly advance to next stage
+                self.current_stage_index += 1
+                self.turns_in_current_stage = 0
+                is_transitioning = True
+                next_stage = self.get_current_stage()
+                self.stage_start_times[next_stage.id] = time.time()
+                if self.connection.is_open():
+                    await self.connection.send_event({
+                        "type": VoiceEventType.STAGE_CHANGE.value,
+                        "stage_id": next_stage.id,
+                        "stage_index": self.current_stage_index + 1,
+                        "total_stages": len(self.active_stages),
+                        "stage_name": next_stage.name_vi if self.language == "vi" else next_stage.name_en,
+                        "turn_id": self.current_turn_id,
+                        "current_stage": self.get_current_stage_data(),
+                        "stages": self.get_all_stages_data(),
+                        "stage_max_seconds": self.stage_time_limits.get(next_stage.id, 600),
+                    })
+            elif is_time_limit_reached:
+                # Time limit reached before turns completed -> propose transition to candidate
+                is_transitioning = True
+                self.is_waiting_stage_confirmation = True
+                self.pending_transition_next_stage = self.active_stages[self.current_stage_index + 1]
 
         # Resolve câu hỏi ngân hàng kế tiếp TRƯỚC khi sinh câu hỏi mới để lượt
         # được liên kết thật với question_bank (hoặc None nếu không có).
