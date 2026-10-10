@@ -93,13 +93,13 @@ jobs:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_PORT: ${{ secrets.SERVER_PORT || '22' }}
           SERVER_USER: ${{ secrets.SERVER_USER || 'ubuntu' }}
-          # Database Config (PostgreSQL Docker Compose)
+          # Database Config (PostgreSQL & Redis chạy trực tiếp trong Docker Compose, không dùng AWS RDS)
           POSTGRES_USER: ${{ secrets.POSTGRES_USER || 'interviewly' }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD || 'interviewly' }}
           POSTGRES_DB: ${{ secrets.POSTGRES_DB || 'interviewly' }}
           POSTGRES_PORT: ${{ secrets.POSTGRES_PORT || '5432' }}
           API_PORT: ${{ secrets.API_PORT || '8000' }}
-          # Cloudinary Media Storage (Thay the AWS S3)
+          # Media Storage (Cloudinary - Lưu trữ media trên Cloudinary, không dùng AWS S3)
           CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
           CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
           CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
@@ -196,44 +196,3 @@ EOF
 
             echo '✅ Deployment completed successfully!'
           "
-
-  notify:
-    runs-on: ubuntu-24.04
-    needs: [lint, test, build, deploy]
-    if: always()
-    steps:
-      - name: Send Telegram notification
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          WORKFLOW_RESULT: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') && 'FAILED' || 'SUCCESS' }}
-          COMMIT_SHA: ${{ github.sha }}
-          COMMIT_MSG: ${{ github.event.head_commit.message }}
-          BRANCH: ${{ github.ref_name }}
-          ACTOR: ${{ github.actor }}
-        run: |
-          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
-            echo "Telegram notification skipped (TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not configured)."
-            exit 0
-          fi
-
-          if [ "$WORKFLOW_RESULT" = "SUCCESS" ]; then
-            STATUS_ICON="✅"
-            STATUS_TEXT="SUCCESS"
-          else
-            STATUS_ICON="❌"
-            STATUS_TEXT="FAILED"
-          fi
-
-          MESSAGE="$STATUS_ICON *CI/CD Pipeline $STATUS_TEXT*
-*Repository:* \`${{ github.repository }}\`
-*Branch:* \`$BRANCH\`
-*Author:* \`$ACTOR\`
-*Commit:* \`${COMMIT_SHA:0:7}\` - $COMMIT_MSG
-*Run URL:* [View Workflow](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
-
-          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-            -d "chat_id=${TELEGRAM_CHAT_ID}" \
-            -d "text=${MESSAGE}" \
-            -d "parse_mode=Markdown" \
-            -d "disable_web_page_preview=true" || true
