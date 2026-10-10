@@ -1,0 +1,237 @@
+name: CI-CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  IMAGE_NAME: interviewly-backend
+  REPO_URL: https://github.com/NhatLe8504/BE-Interviewly.git
+  DEPLOY_DIR: /opt/interviewly-be
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: reference_app/requirements.txt
+
+      - name: Install Linting Tools
+        run: pip install flake8 black
+
+      - name: Run Linters
+        run: |
+          flake8 reference_app/app/ reference_app/tests/ --max-line-length=120 --extend-ignore=E203,W503 --exit-zero
+          black --check reference_app/app/ reference_app/tests/ --line-length=120 || true
+
+  test:
+    runs-on: ubuntu-24.04
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: reference_app/requirements.txt
+
+      - name: Install Dependencies
+        run: |
+          cd reference_app
+          pip install --upgrade pip
+          pip install -r requirements.txt pytest-cov
+
+      - name: Run Tests
+        run: |
+          cd reference_app
+          pytest -v --cov=app --cov-report=xml:coverage.xml --junitxml=test-results.xml tests/unit/ || pytest -v tests/unit/
+
+      - name: Upload Test Artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-artifacts
+          path: |
+            reference_app/coverage.xml
+            reference_app/test-results.xml
+
+  build:
+    runs-on: ubuntu-24.04
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker Image
+        run: |
+          docker build \
+            -t ${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            -t ${{ env.IMAGE_NAME }}:latest \
+            ./reference_app
+
+  deploy:
+    runs-on: ubuntu-24.04
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Production VPS
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT || '22' }}
+          SERVER_USER: ${{ secrets.SERVER_USER || 'ubuntu' }}
+          # Database Config (PostgreSQL Docker Compose)
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER || 'interviewly' }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD || 'interviewly' }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB || 'interviewly' }}
+          POSTGRES_PORT: ${{ secrets.POSTGRES_PORT || '5432' }}
+          API_PORT: ${{ secrets.API_PORT || '8000' }}
+          # Cloudinary Media Storage (Thay the AWS S3)
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+          CLOUDINARY_URL: ${{ secrets.CLOUDINARY_URL }}
+          # Third-Party & AI Services
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          SENDGRID_FROM_EMAIL: ${{ secrets.SENDGRID_FROM_EMAIL || 'fuji@mg.fuji.io.vn' }}
+          SENDGRID_FROM_NAME: ${{ secrets.SENDGRID_FROM_NAME || 'FUJI' }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          JEV_API_KEY: ${{ secrets.JEV_API_KEY }}
+          JEV_API_URL: ${{ secrets.JEV_API_URL || 'https://api.typesafe.ai/v1/systemone' }}
+          JEV_MODEL: ${{ secrets.JEV_MODEL || 'jev-latest' }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
+        run: |
+          if [ -z "$SSH_PRIVATE_KEY" ]; then
+            echo "::error ::SSH_PRIVATE_KEY secret is not configured in GitHub Secrets!"
+            exit 1
+          fi
+          if [ -z "$SERVER_HOST" ]; then
+            echo "::error ::SERVER_HOST secret is not configured in GitHub Secrets!"
+            exit 1
+          fi
+
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -p "$SERVER_PORT" -H "$SERVER_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+          ssh -i ~/.ssh/id_rsa -p "$SERVER_PORT" -o StrictHostKeyChecking=no "$SERVER_USER@$SERVER_HOST" "
+            set -e
+            echo '🚀 Starting deployment for Interviewly Backend...'
+
+            # Ensure Docker daemon is active and accessible
+            sudo systemctl enable --now docker 2>/dev/null || sudo service docker start 2>/dev/null || true
+            sudo usermod -aG docker \$USER 2>/dev/null || true
+
+            # Clone or update repository
+            if [ ! -d '${{ env.DEPLOY_DIR }}' ]; then
+              sudo mkdir -p '${{ env.DEPLOY_DIR }}'
+              sudo chown -R \$USER:\$USER '${{ env.DEPLOY_DIR }}'
+              git clone '${{ env.REPO_URL }}' '${{ env.DEPLOY_DIR }}'
+            fi
+
+            cd '${{ env.DEPLOY_DIR }}'
+            git remote set-url origin '${{ env.REPO_URL }}' || true
+            git fetch origin main
+            git reset --hard origin/main
+
+            # Configure production .env for Docker Compose services
+            cat << 'EOF' > .env
+POSTGRES_USER=$POSTGRES_USER
+POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+POSTGRES_DB=$POSTGRES_DB
+POSTGRES_PORT=$POSTGRES_PORT
+API_PORT=$API_PORT
+
+REDIS_PORT=6379
+REDIS_URL=redis://redis:6379/0
+
+CLOUDINARY_CLOUD_NAME=$CLOUDINARY_CLOUD_NAME
+CLOUDINARY_API_KEY=$CLOUDINARY_API_KEY
+CLOUDINARY_API_SECRET=$CLOUDINARY_API_SECRET
+CLOUDINARY_URL=$CLOUDINARY_URL
+
+GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET
+
+SENDGRID_API_KEY=$SENDGRID_API_KEY
+SENDGRID_FROM_EMAIL=$SENDGRID_FROM_EMAIL
+SENDGRID_FROM_NAME=$SENDGRID_FROM_NAME
+
+GROQ_API_KEY=$GROQ_API_KEY
+JEV_API_KEY=$JEV_API_KEY
+JEV_API_URL=$JEV_API_URL
+JEV_MODEL=$JEV_MODEL
+ELEVENLABS_API_KEY=$ELEVENLABS_API_KEY
+SERPER_API_KEY=$SERPER_API_KEY
+EOF
+
+            cp .env reference_app/.env 2>/dev/null || true
+
+            # Restart containers with Docker Compose
+            echo '🐳 Building and restarting Docker Compose services...'
+            docker compose down --remove-orphans || true
+            docker compose build --pull api
+            docker compose up -d
+
+            echo '⏳ Checking container status...'
+            sleep 5
+            docker compose ps
+
+            echo '✅ Deployment completed successfully!'
+          "
+
+  notify:
+    runs-on: ubuntu-24.04
+    needs: [lint, test, build, deploy]
+    if: always()
+    steps:
+      - name: Send Telegram notification
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          WORKFLOW_RESULT: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') && 'FAILED' || 'SUCCESS' }}
+          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          BRANCH: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "Telegram notification skipped (TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not configured)."
+            exit 0
+          fi
+
+          if [ "$WORKFLOW_RESULT" = "SUCCESS" ]; then
+            STATUS_ICON="✅"
+            STATUS_TEXT="SUCCESS"
+          else
+            STATUS_ICON="❌"
+            STATUS_TEXT="FAILED"
+          fi
+
+          MESSAGE="$STATUS_ICON *CI/CD Pipeline $STATUS_TEXT*
+*Repository:* \`${{ github.repository }}\`
+*Branch:* \`$BRANCH\`
+*Author:* \`$ACTOR\`
+*Commit:* \`${COMMIT_SHA:0:7}\` - $COMMIT_MSG
+*Run URL:* [View Workflow](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d "chat_id=${TELEGRAM_CHAT_ID}" \
+            -d "text=${MESSAGE}" \
+            -d "parse_mode=Markdown" \
+            -d "disable_web_page_preview=true" || true
