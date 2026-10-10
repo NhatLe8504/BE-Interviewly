@@ -219,25 +219,25 @@ class JobReadinessEvaluator:
         # Explanation
         must_note = f" (yêu cầu bắt buộc: {must_known}/{must_total})" if must_total else ""
 
-        if verdict == "insufficient_data":
+        if verdict == "insufficient_data" or match_pct == 0:
             explanation = (
-                f"Hệ thống mới có bằng chứng cho {known_count}/{total_reqs} kỹ năng của vị trí này{must_note}. "
-                "Hãy hoàn thành thêm các buổi luyện tập để AI đánh giá chính xác độ sẵn sàng của bạn."
+                f"Interviewly AI đánh giá bạn chưa có kỹ năng để ứng tuyển vị trí {job_title}. "
+                "Hãy hoàn thành các buổi luyện tập phỏng vấn theo các kỹ năng bên dưới để nâng cao độ phù hợp."
             )
         elif verdict == "ready":
             explanation = (
-                f"Bạn đáp ứng {match_pct}% yêu cầu của vị trí {job_title} và đã có bằng chứng đạt toàn bộ kỹ năng bắt buộc. "
+                f"Interviewly AI đánh giá bạn đáp ứng {match_pct}% yêu cầu của vị trí {job_title} và đã có bằng chứng đạt toàn bộ kỹ năng bắt buộc. "
                 "Bạn có thể tự tin ứng tuyển, hoặc luyện thêm một buổi mô phỏng trước khi vào vòng thật."
             )
         elif verdict == "almost":
             explanation = (
-                f"Bạn đạt {match_pct}% độ tương thích với vị trí này dựa trên {known_count}/{total_reqs} kỹ năng đã có bằng chứng{must_note}. "
+                f"Interviewly AI đánh giá bạn đạt {match_pct}% độ tương thích với vị trí {job_title}. "
                 "Bạn đã có nền tảng vững nhưng còn một vài kỹ năng cần củng cố thêm trước khi ứng tuyển."
             )
         else:
             gap_note = " Bạn còn thiếu hoặc chưa đạt một số kỹ năng bắt buộc." if (has_must_gap or must_unresolved) else ""
             explanation = (
-                f"Độ tương thích hiện tại đạt {match_pct}% trên {known_count}/{total_reqs} kỹ năng đã có bằng chứng{must_note}.{gap_note} "
+                f"Interviewly AI đánh giá bạn đạt {match_pct}% độ tương thích với vị trí {job_title}.{gap_note} "
                 "Hãy ôn tập theo các kỹ năng được gợi ý bên dưới."
             )
 
