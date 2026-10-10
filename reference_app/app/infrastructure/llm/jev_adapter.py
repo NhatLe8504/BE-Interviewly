@@ -362,24 +362,28 @@ class JevSystemOneAdapter:
         recommended: list[str],
         name_by_id: dict[str, str],
     ) -> str:
-        sentences = [
-            f"Jev đánh giá mức độ phù hợp của hồ sơ đã kiểm chứng với vị trí {job_title} đạt {match_percent}% "
-            f"(độ tin cậy {round(confidence * 100)}%)."
-        ]
-        sentences.append(
-            {
-                "ready": "Bạn đã sẵn sàng ứng tuyển.",
-                "almost": "Bạn gần đạt yêu cầu; nên củng cố thêm trước khi ứng tuyển.",
-                "not_ready": "Bạn cần luyện tập thêm để đáp ứng các yêu cầu chính.",
-                "insufficient_data": (
-                    "Bằng chứng kiểm chứng còn ít nên kết luận chỉ mang tính tham khảo; "
-                    "hãy luyện tập để hệ thống có thêm dữ liệu."
-                ),
-            }.get(verdict, "")
-        )
+        sentences = []
+        if match_percent == 0 or verdict == "insufficient_data":
+            sentences.append(
+                f"Interviewly AI đánh giá bạn chưa có kỹ năng để ứng tuyển vị trí {job_title}."
+            )
+            sentences.append(
+                "Hãy hoàn thành các buổi luyện tập phỏng vấn theo các kỹ năng yêu cầu bên dưới để nâng cao độ phù hợp."
+            )
+        elif verdict == "not_ready":
+            sentences.append(
+                f"Interviewly AI đánh giá bạn đạt {match_percent}% độ phù hợp với vị trí {job_title}. Bạn cần luyện tập thêm để đáp ứng các yêu cầu chính."
+            )
+        elif verdict == "almost":
+            sentences.append(
+                f"Interviewly AI đánh giá bạn đạt {match_percent}% độ phù hợp với vị trí {job_title}. Bạn gần đạt yêu cầu; nên củng cố thêm trước khi ứng tuyển."
+            )
+        else:
+            sentences.append(
+                f"Interviewly AI đánh giá bạn đạt {match_percent}% độ phù hợp với vị trí {job_title}. Bạn đã sẵn sàng ứng tuyển."
+            )
+
         if recommended:
             names = [name_by_id.get(skill_id, skill_id) for skill_id in recommended[:5]]
             sentences.append("Ưu tiên luyện tập: " + ", ".join(names) + ".")
-        else:
-            sentences.append("Không có kỹ năng nào dưới mức yêu cầu.")
         return " ".join(part for part in sentences if part)

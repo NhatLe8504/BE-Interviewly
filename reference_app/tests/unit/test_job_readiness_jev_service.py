@@ -73,7 +73,7 @@ def _jev_result() -> JevReadinessResult:
             "python": JevSkillRating("python", 1.4, 0.8, "gap", 1),
             "sql": JevSkillRating("sql", 4.0, 0.9, "met", 4),
         },
-        explanation="Jev đánh giá 61%.",
+        explanation="Interviewly AI đánh giá 61%.",
         model="jev-latest",
     )
 
@@ -91,7 +91,7 @@ def test_jev_result_overrides_assessment_and_is_persisted():
     assert assessment.analysis_engine == "jev"
     assert assessment.match_percent == 61
     assert assessment.verdict == "almost"
-    assert assessment.explanation == "Jev đánh giá 61%."
+    assert assessment.explanation == "Interviewly AI đánh giá 61%."
 
     python_item = next(item for item in assessment.requirements if item.skill_id == "python")
     sql_item = next(item for item in assessment.requirements if item.skill_id == "sql")
