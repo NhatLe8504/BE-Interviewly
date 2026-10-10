@@ -202,6 +202,7 @@ async def handle_voice_websocket_session(
                         level=data.get("level"),
                         language=data.get("language"),
                         voice=data.get("voice"),
+                        pitch=data.get("pitch", "+0Hz"),
                         barge_in_enabled=data.get("barge_in_enabled"),
                         selected_stages=data.get("selected_stages"),
                         questions_per_stage=data.get("questions_per_stage"),
@@ -221,6 +222,12 @@ async def handle_voice_websocket_session(
                         await connection.send_event({
                             "type": "voice_configured",
                             "voice": orchestrator.voice,
+                        })
+                    if "pitch" in data and data["pitch"] is not None:
+                        orchestrator.set_pitch(data["pitch"])
+                        await connection.send_event({
+                            "type": "pitch_configured",
+                            "pitch": orchestrator.pitch,
                         })
 
                 elif msg_type == "abort":

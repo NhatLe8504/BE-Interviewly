@@ -30,7 +30,7 @@ class FakeTTS(TTSPort):
         self.synthesized_sentences: list[str] = []
 
     async def synthesize_stream(
-        self, text: str, voice: str = "vi-VN-HoaiMyNeural",
+        self, text: str, voice: str = "vi-VN-HoaiMyNeural", pitch: str = "+0Hz",
     ) -> AsyncIterator[bytes]:
         self.synthesized_sentences.append(text)
         yield b"fake_mp3_chunk_1"
@@ -336,3 +336,27 @@ async def test_orchestrator_markdown_sanitization_and_interviewer_prompt() -> No
     assert "`" not in done_text
     assert "Tôi hiểu rồi" in done_text
     assert "Redis Cache" in done_text
+
+@pytest.mark.anyio
+async def test_orchestrator_voice_pitch_configuration() -> None:
+    conn = FakeVoiceConnection()
+    tts = FakeTTS()
+    llm = FakeLLM("Xin chào, tôi là AI.")
+
+    orch = VoiceInterviewOrchestrator(
+        session_id=106,
+        connection=conn,
+        tts=tts,
+        llm=llm,
+    )
+    assert orch.pitch == "+0Hz"
+
+    # Set custom pitch
+    orch.set_pitch("-5Hz")
+    assert orch.pitch == "-5Hz"
+
+    orch.set_pitch(8)
+    assert orch.pitch == "+8Hz"
+
+    orch.set_pitch(-25)  # Should clamp to -15Hz
+    assert orch.pitch == "-15Hz"
