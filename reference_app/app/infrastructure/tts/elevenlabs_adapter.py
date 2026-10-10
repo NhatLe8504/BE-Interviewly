@@ -10,16 +10,18 @@ from .edge_tts_adapter import EdgeTTSAdapter, SILENT_MP3_FRAME
 
 logger = logging.getLogger("ElevenLabsTTSAdapter")
 
-# Curated ElevenLabs Voice aliases mapping
+# Curated ElevenLabs Voice aliases mapping (matching account premade voices)
 ELEVEN_VOICE_MAP = {
-    "rachel": "21m00Tcm4TlvDq8ikWAM",
-    "domi": "AZnzlk1XvdvUeBnXmlld",
-    "bella": "EXAVITQu4vr4xnSDxMaL",
-    "antoni": "ErXwobaYiN019PkySvjV",
+    "george": "JBFqnCBsd6RMkjVDRZzb",
+    "sarah": "EXAVITQu4vr4xnSDxMaL",
     "adam": "pNInz6obpgDQGcFmaJgB",
     "liam": "TX3LPaxmHKxFdv7VOQHJ",
-    "george": "JBFqnCBsd6RMkjVDRZzb",
-    "daniel": "onwK4e9ZLuTAKqWW03F9",
+    "lily": "pFZP5JQG7iQjIQuC4Bku",
+    "alice": "Xb7hH8MSUJpSbSDYk0k2",
+    "rachel": "EXAVITQu4vr4xnSDxMaL",  # Alias to Sarah if requested
+    "charlie": "IKne3meq5aSn9XLyUdCD",
+    "roger": "CwhRBWXzGAHq8TQ4Fs17",
+    "laura": "FGY2WhTYpPnrIDTdsKH5",
 }
 
 
@@ -34,7 +36,7 @@ class ElevenLabsTTSAdapter(TTSPort):
         self,
         api_key: str = "",
         fallback_adapter: TTSPort | None = None,
-        default_model: str = "eleven_flash_v2_5",
+        default_model: str = "eleven_multilingual_v2",
     ) -> None:
         self.api_key = api_key.strip()
         self.fallback = fallback_adapter or EdgeTTSAdapter()
@@ -45,15 +47,19 @@ class ElevenLabsTTSAdapter(TTSPort):
         if not voice:
             return False
         clean = voice.lower().strip()
+        if clean.startswith("elevenlabs-"):
+            clean = clean.replace("elevenlabs-", "")
         if clean in ELEVEN_VOICE_MAP or clean in ELEVEN_VOICE_MAP.values():
             return True
         # If it's a 20-character ElevenLabs ID
-        if len(voice) == 20 and not voice.startswith(("vi-", "en-", "zh-", "ja-", "ko-")):
+        if len(clean) == 20 and not clean.startswith(("vi-", "en-", "zh-", "ja-", "ko-")):
             return True
         return False
 
     def resolve_voice_id(self, voice: str) -> str:
         clean = voice.lower().strip()
+        if clean.startswith("elevenlabs-"):
+            clean = clean.replace("elevenlabs-", "")
         return ELEVEN_VOICE_MAP.get(clean, voice)
 
     async def synthesize_stream(
@@ -63,9 +69,12 @@ class ElevenLabsTTSAdapter(TTSPort):
         if not cleaned:
             return
 
-        # If it's an Edge voice or ElevenLabs API key is missing, delegate to fallback
-        if not self.is_eleven_voice(voice) or not self.api_key:
-            async for chunk in self.fallback.synthesize_stream(cleaned, voice):
+        is_eleven = self.is_eleven_voice(voice)
+
+        # If it's an Edge voice or ElevenLabs API key is missing, delegate to fallback safely
+        if not is_eleven or not self.api_key:
+            safe_edge_voice = voice if not is_eleven else "vi-VN-HoaiMyNeural"
+            async for chunk in self.fallback.synthesize_stream(cleaned, safe_edge_voice):
                 yield chunk
             return
 
@@ -106,7 +115,7 @@ class ElevenLabsTTSAdapter(TTSPort):
                             response.status_code,
                             err_body[:200],
                         )
-                        # Fallback to EdgeTTS
+                        # Fallback to EdgeTTS with safe voice
                         async for chunk in self.fallback.synthesize_stream(cleaned, "vi-VN-HoaiMyNeural"):
                             yield chunk
                         return
