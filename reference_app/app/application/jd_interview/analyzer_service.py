@@ -189,7 +189,20 @@ class InterviewPlannerService:
             JDSeniorityLevel.staff.value: 5,
             JDSeniorityLevel.principal.value: 5,
         }
-        diff = target_difficulty if target_difficulty is not None else seniority_diff_map.get(analysis.seniority, 3)
+        diff_val: int | None = None
+        if target_difficulty is not None:
+            if isinstance(target_difficulty, str):
+                mapping = {"easy": 2, "medium": 3, "hard": 4, "expert": 5}
+                if target_difficulty.isdigit():
+                    diff_val = int(target_difficulty)
+                else:
+                    diff_val = mapping.get(target_difficulty.lower().strip(), 3)
+            elif isinstance(target_difficulty, (int, float)):
+                diff_val = int(target_difficulty)
+            if diff_val is not None:
+                diff_val = max(1, min(5, diff_val))
+
+        diff = diff_val if diff_val is not None else seniority_diff_map.get(analysis.seniority, 3)
 
         # Distribute competencies and sections
         tech_competency = f"Kiến thức cốt lõi & Công nghệ ({', '.join(analysis.required_skills[:3]) if analysis.required_skills else analysis.job_title})"

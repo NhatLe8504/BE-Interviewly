@@ -47,6 +47,8 @@ class JobItemOut(BaseModel):
     country_codes: list[str] = Field(default_factory=list)
     is_global_remote: bool = False
     company: JobCompanyOut | None = None
+    has_practice_session: bool = False
+    practice_interview_id: str | None = None
 
 
 class JobDetailOut(JobItemOut):
@@ -86,3 +88,4 @@ class StartJobPracticeOut(BaseModel):
     interview_id: str
     job_id: str
     redirect_url: str
+    has_existing_session: bool = False
