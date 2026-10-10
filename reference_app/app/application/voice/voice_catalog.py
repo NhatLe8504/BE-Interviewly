@@ -175,68 +175,8 @@ DEFAULT_EDGE_VOICES = [
 ]
 
 # Premium Premade ElevenLabs Voices (Active for English / International)
-PREMIUM_ELEVEN_VOICES = [
-    {
-        "id": "JBFqnCBsd6RMkjVDRZzb",
-        "name": "George (Tech Leader • Đa ngôn ngữ)",
-        "provider": "elevenlabs",
-        "language": "multi",
-        "gender": "male",
-        "description": "Giọng nam trầm ấm, phát âm tự nhiên mọi ngôn ngữ và thuật ngữ quốc tế",
-        "is_default": False,
-        "is_premium": True,
-    },
-    {
-        "id": "EXAVITQu4vr4xnSDxMaL",
-        "name": "Sarah (Chuyên gia • Đa ngôn ngữ)",
-        "provider": "elevenlabs",
-        "language": "multi",
-        "gender": "female",
-        "description": "Giọng nữ trưởng thành, xử lý mượt mà mọi ngôn ngữ và tình huống song ngữ",
-        "is_default": False,
-        "is_premium": True,
-    },
-    {
-        "id": "pNInz6obpgDQGcFmaJgB",
-        "name": "Adam (Executive • Đa ngôn ngữ)",
-        "provider": "elevenlabs",
-        "language": "multi",
-        "gender": "male",
-        "description": "Giọng nam truyền cảm, bản lĩnh lãnh đạo công nghệ, phát âm chuẩn quốc tế",
-        "is_default": False,
-        "is_premium": True,
-    },
-    {
-        "id": "TX3LPaxmHKxFdv7VOQHJ",
-        "name": "Liam (Startup • Đa ngôn ngữ)",
-        "provider": "elevenlabs",
-        "language": "multi",
-        "gender": "male",
-        "description": "Giọng nam năng động, hiện đại, thích hợp phỏng vấn công nghệ mới",
-        "is_default": False,
-        "is_premium": True,
-    },
-    {
-        "id": "pFZP5JQG7iQjIQuC4Bku",
-        "name": "Lily (Warm • Đa ngôn ngữ)",
-        "provider": "elevenlabs",
-        "language": "multi",
-        "gender": "female",
-        "description": "Giọng nữ ấm áp, giao tiếp gần gũi và tự nhiên",
-        "is_default": False,
-        "is_premium": True,
-    },
-    {
-        "id": "Xb7hH8MSUJpSbSDYk0k2",
-        "name": "Alice (Professional • Đa ngôn ngữ)",
-        "provider": "elevenlabs",
-        "language": "multi",
-        "gender": "female",
-        "description": "Giọng nữ tự tin, phát âm chuẩn xác mọi ngôn ngữ",
-        "is_default": False,
-        "is_premium": True,
-    },
-]
+# Premium Voices (Tối ưu tài khoản Free - toàn bộ sử dụng Edge TTS chất lượng cao)
+PREMIUM_ELEVEN_VOICES: list[dict[str, Any]] = []
 
 # STT Providers
 STT_ENGINES = [
@@ -278,10 +218,8 @@ def get_voice_catalog_options(
 
     for v in PREMIUM_ELEVEN_VOICES:
         item = dict(v)
-        item["is_locked"] = not is_premium_user
-        item["lock_reason"] = (
-            None if is_premium_user else "Dành riêng cho các gói Sprint hoặc Pro"
-        )
+        item["is_locked"] = False
+        item["lock_reason"] = None
         voices.append(item)
 
     # Lọc nghiêm ngặt: chỉ giữ giọng của ngôn ngữ được chọn HOẶC giọng đa ngôn ngữ (multi)
@@ -292,12 +230,8 @@ def get_voice_catalog_options(
     stt: list[dict[str, Any]] = []
     for s in STT_ENGINES:
         item = dict(s)
-        item["is_locked"] = not is_premium_user if item["is_premium"] else False
-        item["lock_reason"] = (
-            None
-            if (is_premium_user or not item["is_premium"])
-            else "Dành riêng cho các gói Sprint hoặc Pro"
-        )
+        item["is_locked"] = False
+        item["lock_reason"] = None
         stt.append(item)
 
     return {

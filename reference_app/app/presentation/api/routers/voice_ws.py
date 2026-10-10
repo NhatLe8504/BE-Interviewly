@@ -6,7 +6,7 @@ import base64
 import json
 from typing import Any
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pathlib import Path
 from sqlalchemy.orm import Session
 from ..dependencies import get_container, get_optional_user_id, get_session
@@ -339,6 +339,50 @@ def get_voice_options(
     api_key = getattr(container.settings, "elevenlabs_api_key", "")
     data = get_voice_catalog_options(is_premium, language=language, api_key=api_key)
     return VoiceOptionsOut(**data)
+
+
+@router.get("/api/v1/voice/preview")
+async def preview_voice_sample(
+    voice: str = "vi-VN-HoaiMyNeural",
+    pitch: str = "+0Hz",
+    text: str | None = None,
+    container: ServiceContainer = Depends(get_container),
+):
+    sample_text = (text or "").strip()
+    if not sample_text:
+        if voice.startswith("en-"):
+            sample_text = "Hello! I am your AI interviewer."
+        elif voice.startswith("ja-"):
+            sample_text = "こんにちは、AI面接官です。"
+        elif voice.startswith("zh-"):
+            sample_text = "你好！我是你的AI面试官。"
+        elif voice.startswith("ko-"):
+            sample_text = "안녕하세요! AI 면접관입니다."
+        elif voice.startswith("fr-"):
+            sample_text = "Bonjour ! Je suis votre recruteur IA."
+        elif voice.startswith("de-"):
+            sample_text = "Hallo! Ich bin dein KI-Interviewer."
+        elif voice.startswith("es-"):
+            sample_text = "¡Hola! Soy tu entrevistador de IA."
+        else:
+            sample_text = "Xin chào! Tôi là trợ lý phỏng vấn viên AI của bạn."
+
+    tts = getattr(container, "tts_adapter", None)
+    if not tts:
+        raise HTTPException(status_code=500, detail="TTS service not configured")
+
+    async def audio_generator():
+        async for chunk in tts.synthesize_stream(sample_text, voice=voice, pitch=pitch):
+            yield chunk
+
+    return StreamingResponse(
+        audio_generator(),
+        media_type="audio/mpeg",
+        headers={
+            "Cache-Control": "public, max-age=3600",
+            "Content-Disposition": "inline; filename=preview.mp3",
+        },
+    )
 
 
 @router.get("/api/v1/voice/audio/{session_id}/{filename}")
