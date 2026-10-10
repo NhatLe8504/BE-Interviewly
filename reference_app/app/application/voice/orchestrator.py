@@ -843,6 +843,7 @@ class VoiceInterviewOrchestrator:
                             "turn_id": turn_id,
                             "generation_id": gen_id,
                             "full_text": final_text,
+                            "audio_url": ai_audio_url,
                             "is_completed": True,
                         })
                 else:
@@ -852,6 +853,7 @@ class VoiceInterviewOrchestrator:
                             "turn_id": turn_id,
                             "generation_id": gen_id,
                             "full_text": final_text,
+                            "audio_url": ai_audio_url,
                             "total_sentences": splitter.sentence_index,
                             "is_completed": False,
                         })
@@ -989,6 +991,7 @@ class VoiceInterviewOrchestrator:
                         "turn_id": turn_id,
                         "generation_id": gen_id,
                         "full_text": text,
+                        "audio_url": ai_audio_url,
                         "total_sentences": len(sentences),
                         "is_completed": False,
                     })
