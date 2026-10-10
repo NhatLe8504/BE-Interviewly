@@ -29,8 +29,11 @@ def get_audio_storage_dir() -> Path:
         return fallback
 
 
-def cleanup_stale_audio_files(max_age_seconds: int = 1800) -> None:
-    """Xóa các thư mục audio của phiên phỏng vấn đã kết thúc hoặc cũ hơn max_age_seconds."""
+def cleanup_stale_audio_files(max_age_seconds: int = 86400, session_factory=None) -> None:
+    """
+    Chỉ xóa các thư mục audio của phiên phỏng vấn ĐÃ KẾT THÚC (completed_at != None) hoặc rác cũ hơn 24 giờ.
+    Trong suốt cuộc trò chuyện phỏng vấn đang diễn ra: TUYỆT ĐỐI KHÔNG XÓA để bảo toàn toàn bộ audio cache!
+    """
     try:
         import time
         import shutil
@@ -39,13 +42,29 @@ def cleanup_stale_audio_files(max_age_seconds: int = 1800) -> None:
             return
         now = time.time()
         for item in base_dir.iterdir():
-            if item.is_dir():
+            if not item.is_dir():
+                continue
+            should_delete = False
+            session_id_str = item.name
+            if session_id_str.isdigit() and session_factory:
                 try:
-                    mtime = item.stat().st_mtime
-                    if (now - mtime) > max_age_seconds:
-                        shutil.rmtree(item, ignore_errors=True)
+                    db = session_factory()
+                    from .infrastructure.persistence.models.session import InterviewSession as OrmSession
+                    sess = db.query(OrmSession).filter_by(session_id=int(session_id_str)).first()
+                    db.close()
+                    if sess and sess.completed_at is not None:
+                        should_delete = True
+                    elif not sess:
+                        should_delete = True
                 except Exception:
                     pass
+            if not should_delete:
+                mtime = item.stat().st_mtime
+                if (now - mtime) > max_age_seconds:
+                    should_delete = True
+
+            if should_delete:
+                shutil.rmtree(item, ignore_errors=True)
     except Exception:
         pass
 
