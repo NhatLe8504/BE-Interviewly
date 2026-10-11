@@ -332,6 +332,12 @@ def build_services(
         clock=effective_clock,
     )
 
+    # Course Management Service
+    from .infrastructure.persistence.course_repository import CourseRepository
+    from .application.course.service import CourseService
+    course_repo = CourseRepository()
+    course_service = CourseService(repo=course_repo)
+
     return ServiceContainer(
         clock=effective_clock,
         settings=settings,
@@ -356,5 +362,7 @@ def build_services(
         llm_voice_adapter=llm_adapter,
         job_worker=job_worker,
         cv_service=cv_service,
+        course_service=course_service,
     )
+
 

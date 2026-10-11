@@ -32,6 +32,8 @@ from .presentation.api.routers import onboarding as onboarding_router
 from .presentation.api.routers import jd_interview as jd_interview_router
 from .presentation.api.routers import jobs as jobs_router
 from .presentation.api.routers import cv as cv_router
+from .presentation.api.routers import course as course_router
+
 
 
 def export_openapi(app: FastAPI) -> Path:
@@ -141,7 +143,9 @@ def create_app(services: ServiceContainer | None = None) -> FastAPI:
     app.include_router(jd_interview_router.router)
     app.include_router(jobs_router.router)
     app.include_router(cv_router.router)
+    app.include_router(course_router.router)
     register_error_handlers(app)
+
     return app
 
 

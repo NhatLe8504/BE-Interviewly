@@ -15,6 +15,8 @@ from .models.catalog import (
 )
 from .models.enums import ExperienceLevel, Language, QuestionType, UserRole, UserStatus
 from .models.user import User
+from .models.course import Course, CourseChapter, CourseLesson
+
 
 
 def seed_default_data(session_factory: Any, hasher: PasswordHasherPort) -> None:
@@ -41,7 +43,9 @@ def seed_default_data(session_factory: Any, hasher: PasswordHasherPort) -> None:
         has_domain = session.execute(select(JobDomain)).first()
         if has_domain is not None:
             seed_rich_questions_and_sets(session)
+            seed_default_courses(session)
             return
+
 
         # 3. Seed Standard Domains
         it_domain = JobDomain(
@@ -483,3 +487,159 @@ def seed_rich_questions_and_sets(session: Any) -> None:
                 ])
         session.commit()
     session.commit()
+
+
+def seed_default_courses(session: Any) -> None:
+    has_course = session.execute(select(Course)).first()
+    if has_course is not None:
+        return
+
+    c1 = Course(
+        title="Engineering Management Interview Prep",
+        slug="engineering-management",
+        type="Learning Path",
+        category="swe",
+        role="Engineering Manager (EM / Lead)",
+        level="senior",
+        level_label="Senior / Manager / Director",
+        estimated_hours=48,
+        description="Khóa học toàn diện nhất để làm chủ các vòng phỏng vấn Quản lý Kỹ thuật (Engineering Manager - EM). Học từ các câu hỏi quản lý con người (People Management), mổ xẻ dự án (Project Retrospective), thiết kế hệ thống cấp cao (System Design) và vòng phỏng vấn hành vi chuẩn hóa.",
+        target_companies=["Google", "Meta", "Amazon", "Slack", "Stripe"],
+        skills=["People Management", "Project Retrospective", "System Design", "Conflict Resolution", "Hiring & Team Building"],
+        highlights=[
+            "Chiến lược vòng People Management: Họp 1:1, xử lý nhân sự kém hiệu quả, quản lý OKRs.",
+            "Cấu trúc Project Retrospective: Kể câu chuyện dự án phức tạp có số liệu định lượng theo chuẩn STAR.",
+            "Thiết kế Hệ thống phân tán cho EM: Tập trung vào kiến trúc tổng thể và trade-offs.",
+        ],
+        image="https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=800&auto=format&fit=crop&q=60",
+        is_active=True,
+    )
+    session.add(c1)
+    session.flush()
+
+    ch1 = CourseChapter(
+        course_id=c1.course_id,
+        title="Chương 1: Nền Tảng Quản Lý Kỹ Thuật & Khung Năng Lực EM",
+        title_en="Engineering Management Fundamentals & Core Competencies",
+        description="Bản đồ kiến thức cốt lõi và các vòng phỏng vấn chuyên sâu cho vị trí EM.",
+        order_index=1,
+    )
+    ch2 = CourseChapter(
+        course_id=c1.course_id,
+        title="Chương 2: Project Retrospective & Vận Hành Hệ Thống",
+        title_en="Project Retrospective & Engineering Operations",
+        description="Phương pháp trình bày dự án phức tạp và giải quyết khủng hoảng kỹ thuật.",
+        order_index=2,
+    )
+    session.add_all([ch1, ch2])
+    session.flush()
+
+    l1 = CourseLesson(
+        chapter_id=ch1.chapter_id,
+        title="Tổng quan vai trò EM và ma trận trách nhiệm RACI",
+        duration_minutes=15,
+        type="video",
+        is_free=True,
+        order_index=1,
+        video_url="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+        content_html="<h2>Vai trò cốt lõi của một Engineering Manager</h2><p>Engineering Manager tập trung vào 3 trụ cột: Con người (People), Quy trình (Process) và Công nghệ (Technology)...</p>",
+    )
+    l2 = CourseLesson(
+        chapter_id=ch1.chapter_id,
+        title="Kỹ năng 1-on-1, quản trị hiệu suất và giải quyết xung đột",
+        duration_minutes=20,
+        type="reading",
+        is_free=True,
+        order_index=2,
+        content_html="<h2>Kỹ thuật điều hành buổi họp 1:1 hiệu quả</h2><p>1-on-1 không phải là buổi báo cáo tiến độ (Status update). Đây là không gian dành riêng cho thành viên đội ngũ chia sẻ về định hướng nghề nghiệp, khó khăn và phản hồi hai chiều...</p>",
+    )
+    l3 = CourseLesson(
+        chapter_id=ch1.chapter_id,
+        title="STAR Practice: Xử lý tình huống nhân sự cốt lõi xin nghỉ việc",
+        duration_minutes=25,
+        type="star_practice",
+        is_free=False,
+        order_index=3,
+        practice_question={
+            "prompt": "Một Senior Tech Lead chủ chốt bất ngờ nộp đơn xin nghỉ việc ngay trước đợt phát hành sản phẩm quan trọng 2 tuần. Bạn sẽ xử lý tình huống này thế nào?",
+            "intent": "Đánh giá khả năng giữ chân nhân tài, quản trị khủng hoảng và kế hoạch dự phòng (contingency plan).",
+            "starSituation": "Tech Lead xin nghỉ gấp sát deadline release.",
+            "starTask": "Lắng nghe lý do thực sự, giữ chân nếu có thể hoặc lập kế hoạch chuyển giao không gây gãy tiến độ.",
+            "starAction": "Tổ chức buổi trò chuyện chân thành tìm hiểu nguyên nhân gốc rễ, rà soát lại khối lượng công việc, chuẩn bị phương án phân bổ lại task.",
+            "starResult": "Nhân sự đồng ý ở lại hỗ trợ hết đợt release, chuyển giao tài liệu trơn tru hoặc giải tỏa được áp lực công việc.",
+            "sampleAnswer": "Tôi sẽ lập tức đặt lịch trao đổi riêng trong ngày với tinh thần lắng nghe chân thành...",
+        },
+    )
+    l4 = CourseLesson(
+        chapter_id=ch2.chapter_id,
+        title="Cấu trúc bài thuyết trình Project Retrospective chuẩn mực",
+        duration_minutes=18,
+        type="video",
+        is_free=False,
+        order_index=1,
+        content_html="<h2>Khung trình bày Project Retrospective</h2><p>Áp dụng mô hình STAR mở rộng để chứng minh tầm ảnh hưởng kỹ thuật và khả năng dẫn dắt liên phòng ban...</p>",
+    )
+    session.add_all([l1, l2, l3, l4])
+
+    c2 = Course(
+        title="System Design Masterclass for Senior SWE",
+        slug="system-design-masterclass",
+        type="Course",
+        category="system_design",
+        role="Senior Software Engineer",
+        level="senior",
+        level_label="Senior / Staff SWE",
+        estimated_hours=36,
+        description="Khóa học thiết kế hệ thống phân tán chịu tải lớn hàng triệu CCU. Phân tích sâu các bài toán Database Sharding, Caching, Event-driven Architecture và Trade-off analysis.",
+        target_companies=["Google", "Meta", "Amazon", "Shopee", "Grab"],
+        skills=["Distributed Systems", "Database Sharding", "Caching Strategies", "CAP Theorem", "Microservices"],
+        highlights=[
+            "Phân tích chuyên sâu 10 kiến trúc thực tế: Chat App, URL Shortener, Feed System, E-commerce Flash Sale.",
+            "Kỹ năng ước lượng dung lượng (Back-of-the-envelope calculation) chính xác.",
+            "Bảo vệ giải pháp kiến trúc tự tin trước Senior/Principal Interviewer.",
+        ],
+        image="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800&auto=format&fit=crop&q=60",
+        is_active=True,
+    )
+    session.add(c2)
+    session.flush()
+
+    ch2_1 = CourseChapter(
+        course_id=c2.course_id,
+        title="Chương 1: Nguyên Lý Thiết Kế Hệ Thống Chịu Tải Cao",
+        title_en="High Concurrency System Design Principles",
+        description="Nền tảng kiến trúc phân tán, định lý CAP và tính sẵn sàng cao.",
+        order_index=1,
+    )
+    session.add(ch2_1)
+    session.flush()
+
+    l2_1 = CourseLesson(
+        chapter_id=ch2_1.chapter_id,
+        title="Phân tích yêu cầu phi chức năng (Scalability, Latency, SLA)",
+        duration_minutes=15,
+        type="video",
+        is_free=True,
+        order_index=1,
+        content_html="<h2>Cách mở đầu vòng phỏng vấn System Design</h2><p>5 phút đầu tiên quyết định 80% kết quả: Hãy làm rõ Functional Requirements và Non-functional Requirements...</p>",
+    )
+    l2_2 = CourseLesson(
+        chapter_id=ch2_1.chapter_id,
+        title="STAR Practice: Thiết kế hệ thống URL Shortener triệu requests/giây",
+        duration_minutes=30,
+        type="star_practice",
+        is_free=False,
+        order_index=2,
+        practice_question={
+            "prompt": "Hãy thiết kế hệ thống rút gọn liên kết (như TinyURL / Bitly) phục vụ 100 triệu URL mới mỗi tháng và tỷ lệ đọc/ghi là 10:1.",
+            "intent": "Kiểm tra thuật toán sinh mã băm (Base62 vs MD5), chiến lược Caching (Redis), và cấu trúc lưu trữ cơ sở dữ liệu phân tán.",
+            "starSituation": "Hệ thống cần phục vụ quy mô toàn cầu với độ trễ chuyển hướng < 50ms.",
+            "starTask": "Thiết kế API endpoints, schema database, thuật toán hash ID duy nhất và kiến trúc cache.",
+            "starAction": "Sử dụng Base62 encoding kết hợp KGS (Key Generation Service) hoặc Counter phân tán qua Snowflake ID, cache các URL hot bằng Redis LRU.",
+            "starResult": "Hệ thống đáp ứng 10.000 QPS đọc mượt mà, độ trễ p99 dưới 20ms và không bị trùng lặp key.",
+            "sampleAnswer": "Đầu tiên tôi ước lượng dung lượng: 100M URL/tháng tương đương ~40 writes/s và ~400 reads/s...",
+        },
+    )
+    session.add_all([l2_1, l2_2])
+    session.commit()
+
