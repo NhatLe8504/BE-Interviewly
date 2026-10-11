@@ -23,6 +23,7 @@ from ....infrastructure.logging.server_log_store import global_server_log_store
 from ....infrastructure.persistence.models.billing import SubscriptionPlan, UserSubscription
 from ....infrastructure.persistence.models.enums import BillingCycle, SubStatus
 from ....infrastructure.persistence.models.user import User
+from ....infrastructure.persistence.models.system import SystemSetting
 from ..dependencies import get_container, get_session, require_admin
 from ..helpers.cache import invalidate_cache
 from ..schemas.admin import (
@@ -47,6 +48,9 @@ from ..schemas.admin import (
     UserSubscriptionAdminOut,
     UserSubscriptionPageOut,
     UserSubscriptionUpdateIn,
+    SystemSettingsOut,
+    SystemSettingsUpdateIn,
+    SystemHealthOut,
 )
 from ..schemas.catalog import (
     DomainCreateIn,
@@ -1297,5 +1301,144 @@ def admin_update_user_subscription(
         end_date=sub.end_date,
         created_at=sub.created_at,
     )
+
+
+# --- System Settings & Health Endpoints ---
+
+DEFAULT_SYSTEM_CONFIG = {
+    "ai_model": "openai/gpt-oss-120b",
+    "ai_temperature": 0.7,
+    "ai_max_tokens": 1500,
+    "ai_interviewer_persona": "Chuyên gia phỏng vấn công nghệ cấp cao, phong thái lịch sự, tập trung đào sâu tư duy giải quyết vấn đề và mô hình STAR.",
+    "tts_provider": "edge_tts",
+    "tts_default_voice": "vi-VN-HoaiMyNeural",
+    "stt_provider": "whisper",
+    "audio_retention_hours": 24,
+    "max_upload_size_mb": 25,
+    "smtp_host": "smtp.gmail.com",
+    "smtp_port": 587,
+    "smtp_sender_name": "Interviewly AI Coach",
+    "smtp_sender_email": "no-reply@interviewly.ai",
+    "maintenance_mode": False,
+}
+
+
+@router.get("/settings", response_model=SystemSettingsOut)
+def admin_get_system_settings(
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+) -> SystemSettingsOut:
+    row = session.query(SystemSetting).filter(SystemSetting.key == "core_config").first()
+    vals = dict(DEFAULT_SYSTEM_CONFIG)
+    updated_at = None
+    if row:
+        vals.update(row.value or {})
+        updated_at = row.updated_at
+    return SystemSettingsOut(
+        ai_model=vals.get("ai_model", DEFAULT_SYSTEM_CONFIG["ai_model"]),
+        ai_temperature=float(vals.get("ai_temperature", DEFAULT_SYSTEM_CONFIG["ai_temperature"])),
+        ai_max_tokens=int(vals.get("ai_max_tokens", DEFAULT_SYSTEM_CONFIG["ai_max_tokens"])),
+        ai_interviewer_persona=str(vals.get("ai_interviewer_persona", DEFAULT_SYSTEM_CONFIG["ai_interviewer_persona"])),
+        tts_provider=str(vals.get("tts_provider", DEFAULT_SYSTEM_CONFIG["tts_provider"])),
+        tts_default_voice=str(vals.get("tts_default_voice", DEFAULT_SYSTEM_CONFIG["tts_default_voice"])),
+        stt_provider=str(vals.get("stt_provider", DEFAULT_SYSTEM_CONFIG["stt_provider"])),
+        audio_retention_hours=int(vals.get("audio_retention_hours", DEFAULT_SYSTEM_CONFIG["audio_retention_hours"])),
+        max_upload_size_mb=int(vals.get("max_upload_size_mb", DEFAULT_SYSTEM_CONFIG["max_upload_size_mb"])),
+        smtp_host=str(vals.get("smtp_host", DEFAULT_SYSTEM_CONFIG["smtp_host"])),
+        smtp_port=int(vals.get("smtp_port", DEFAULT_SYSTEM_CONFIG["smtp_port"])),
+        smtp_sender_name=str(vals.get("smtp_sender_name", DEFAULT_SYSTEM_CONFIG["smtp_sender_name"])),
+        smtp_sender_email=str(vals.get("smtp_sender_email", DEFAULT_SYSTEM_CONFIG["smtp_sender_email"])),
+        maintenance_mode=bool(vals.get("maintenance_mode", DEFAULT_SYSTEM_CONFIG["maintenance_mode"])),
+        updated_at=updated_at,
+    )
+
+
+@router.put("/settings", response_model=SystemSettingsOut)
+def admin_update_system_settings(
+    data: SystemSettingsUpdateIn,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> SystemSettingsOut:
+    row = session.query(SystemSetting).filter(SystemSetting.key == "core_config").first()
+    vals = dict(DEFAULT_SYSTEM_CONFIG)
+    if row:
+        vals.update(row.value or {})
+    else:
+        row = SystemSetting(key="core_config", value=vals, description="Cấu hình hệ thống toàn cục")
+        session.add(row)
+
+    updates = data.model_dump(exclude_unset=True)
+    vals.update(updates)
+    row.value = vals
+    session.commit()
+    session.refresh(row)
+
+    container.admin_service.repo.record_audit(
+        session,
+        user_id=admin_id,
+        table_name="system_settings",
+        record_id=1,
+        action="update",
+        new_value=updates,
+    )
+
+    return SystemSettingsOut(
+        ai_model=vals.get("ai_model", DEFAULT_SYSTEM_CONFIG["ai_model"]),
+        ai_temperature=float(vals.get("ai_temperature", DEFAULT_SYSTEM_CONFIG["ai_temperature"])),
+        ai_max_tokens=int(vals.get("ai_max_tokens", DEFAULT_SYSTEM_CONFIG["ai_max_tokens"])),
+        ai_interviewer_persona=str(vals.get("ai_interviewer_persona", DEFAULT_SYSTEM_CONFIG["ai_interviewer_persona"])),
+        tts_provider=str(vals.get("tts_provider", DEFAULT_SYSTEM_CONFIG["tts_provider"])),
+        tts_default_voice=str(vals.get("tts_default_voice", DEFAULT_SYSTEM_CONFIG["tts_default_voice"])),
+        stt_provider=str(vals.get("stt_provider", DEFAULT_SYSTEM_CONFIG["stt_provider"])),
+        audio_retention_hours=int(vals.get("audio_retention_hours", DEFAULT_SYSTEM_CONFIG["audio_retention_hours"])),
+        max_upload_size_mb=int(vals.get("max_upload_size_mb", DEFAULT_SYSTEM_CONFIG["max_upload_size_mb"])),
+        smtp_host=str(vals.get("smtp_host", DEFAULT_SYSTEM_CONFIG["smtp_host"])),
+        smtp_port=int(vals.get("smtp_port", DEFAULT_SYSTEM_CONFIG["smtp_port"])),
+        smtp_sender_name=str(vals.get("smtp_sender_name", DEFAULT_SYSTEM_CONFIG["smtp_sender_name"])),
+        smtp_sender_email=str(vals.get("smtp_sender_email", DEFAULT_SYSTEM_CONFIG["smtp_sender_email"])),
+        maintenance_mode=bool(vals.get("maintenance_mode", DEFAULT_SYSTEM_CONFIG["maintenance_mode"])),
+        updated_at=row.updated_at,
+    )
+
+
+@router.get("/settings/health", response_model=SystemHealthOut)
+def admin_get_system_health(
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> SystemHealthOut:
+    import os
+    from datetime import datetime, timezone
+    from ....infrastructure.redis_client import check_redis
+    from ....config import AUDIO_STORAGE_DIR
+
+    audio_mb = 0.0
+    try:
+        if os.path.exists(AUDIO_STORAGE_DIR):
+            total_bytes = sum(
+                os.path.getsize(os.path.join(AUDIO_STORAGE_DIR, f))
+                for f in os.listdir(AUDIO_STORAGE_DIR)
+                if os.path.isfile(os.path.join(AUDIO_STORAGE_DIR, f))
+            )
+            audio_mb = round(total_bytes / (1024 * 1024), 2)
+    except Exception:
+        pass
+
+    redis_ok = False
+    try:
+        redis_ok = check_redis(container.redis_client)
+    except Exception:
+        pass
+
+    return SystemHealthOut(
+        database_connected=True,
+        redis_connected=redis_ok,
+        audio_storage_size_mb=audio_mb,
+        server_time=datetime.now(timezone.utc),
+        active_connections=1,
+        version="2.5.0-production",
+    )
+
 
 
