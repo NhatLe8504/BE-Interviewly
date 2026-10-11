@@ -247,3 +247,130 @@ class SystemHealthOut(BaseModel):
     version: str
 
 
+# --- Interview Oversight Schemas ---
+
+class InterviewTurnAdminOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    turn_id: int
+    turn_number: int
+    speaker: str
+    question_text: str | None = None
+    transcribed_text: str | None = None
+    audio_file_url: str | None = None
+    evaluation_score: float | None = None
+    evaluation_feedback: str | None = None
+    star_analysis: dict | None = None
+    wpm: float | None = None
+    filler_words_count: int | None = None
+
+
+class InterviewSessionAdminOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    session_id: int
+    candidate_id: int
+    candidate_name: str | None = None
+    candidate_email: str | None = None
+    domain_id: int | None = None
+    domain_name: str | None = None
+    role_id: int | None = None
+    role_name: str | None = None
+    experience_level: str | None = None
+    language: str
+    mode: str
+    status: str
+    total_score: float | None = None
+    turns_count: int = 0
+    started_at: datetime
+    completed_at: datetime | None = None
+
+
+class InterviewSessionDetailPageOut(InterviewSessionAdminOut):
+    turns: list[InterviewTurnAdminOut] = []
+
+
+class InterviewSessionPageOut(BaseModel):
+    items: list[InterviewSessionAdminOut]
+    total: int
+    limit: int
+    offset: int
+
+
+# --- CV Oversight Schemas ---
+
+class CvDocumentAdminOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: int
+    user_name: str | None = None
+    user_email: str | None = None
+    title: str
+    template_id: str
+    color_theme: str
+    font_family: str
+    ats_score: float | None = None
+    skills_count: int = 0
+    experiences_count: int = 0
+    created_at: datetime
+    updated_at: datetime | None = None
+
+
+class CvDocumentDetailPageOut(CvDocumentAdminOut):
+    personal_info: dict = Field(default_factory=dict)
+    summary: str | None = None
+    work_experiences: list = Field(default_factory=list)
+    projects: list = Field(default_factory=list)
+    skills: list = Field(default_factory=list)
+    educations: list = Field(default_factory=list)
+    certifications: list = Field(default_factory=list)
+
+
+class CvDocumentPageOut(BaseModel):
+    items: list[CvDocumentAdminOut]
+    total: int
+    limit: int
+    offset: int
+
+
+# --- Job Crawler Oversight Schemas ---
+
+class JobSourceAdminOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    source_id: str
+    source_name: str
+    source_type: str
+    base_url: str
+    is_active: bool
+    crawl_interval_m: int
+    last_synced_at: datetime | None = None
+    created_at: datetime
+    postings_count: int = 0
+
+
+class JobPostingAdminOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    job_id: str
+    source_id: str
+    source_name: str | None = None
+    company_name: str | None = None
+    company_logo: str | None = None
+    title: str
+    location: str | None = None
+    salary_text: str | None = None
+    url: str
+    is_active: bool
+    created_at: datetime
+
+
+class JobPostingPageOut(BaseModel):
+    items: list[JobPostingAdminOut]
+    total: int
+    limit: int
+    offset: int
+
+
+

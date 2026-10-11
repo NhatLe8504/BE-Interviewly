@@ -24,6 +24,10 @@ from ....infrastructure.persistence.models.billing import SubscriptionPlan, User
 from ....infrastructure.persistence.models.enums import BillingCycle, SubStatus
 from ....infrastructure.persistence.models.user import User
 from ....infrastructure.persistence.models.system import SystemSetting
+from ....infrastructure.persistence.models.session import InterviewSession, InterviewTurn, AnswerEvaluation, SpeechQualityAnalysis
+from ....infrastructure.persistence.models.cv import CvDocumentRecord
+from ....infrastructure.persistence.models.job_aggregator import JobSourceRecord, JobPostingRecord, JobCompanyRecord
+from ....infrastructure.persistence.models.catalog import JobDomain, JobRole
 from ..dependencies import get_container, get_session, require_admin
 from ..helpers.cache import invalidate_cache
 from ..schemas.admin import (
@@ -51,6 +55,16 @@ from ..schemas.admin import (
     SystemSettingsOut,
     SystemSettingsUpdateIn,
     SystemHealthOut,
+    InterviewSessionAdminOut,
+    InterviewSessionDetailPageOut,
+    InterviewSessionPageOut,
+    InterviewTurnAdminOut,
+    CvDocumentAdminOut,
+    CvDocumentDetailPageOut,
+    CvDocumentPageOut,
+    JobSourceAdminOut,
+    JobPostingAdminOut,
+    JobPostingPageOut,
 )
 from ..schemas.catalog import (
     DomainCreateIn,
@@ -1542,6 +1556,355 @@ def admin_get_system_health(
         active_connections=1,
         version="2.5.0-production",
     )
+
+
+# --- Interview Oversight Endpoints ---
+
+@router.get("/interviews", response_model=InterviewSessionPageOut)
+def admin_list_interviews(
+    status: str | None = Query(None),
+    candidate_id: int | None = Query(None),
+    search: str | None = Query(None),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+) -> InterviewSessionPageOut:
+    query = (
+        session.query(InterviewSession)
+        .join(User, InterviewSession.candidate_id == User.user_id)
+        .outerjoin(JobDomain, InterviewSession.domain_id == JobDomain.domain_id)
+        .outerjoin(JobRole, InterviewSession.role_id == JobRole.role_id)
+    )
+    if status and status != "all":
+        query = query.filter(InterviewSession.status == status)
+    if candidate_id:
+        query = query.filter(InterviewSession.candidate_id == candidate_id)
+    if search:
+        s = f"%{search.strip()}%"
+        query = query.filter((User.full_name.ilike(s)) | (User.email.ilike(s)))
+
+    total = query.count()
+    rows = query.order_by(InterviewSession.started_at.desc()).offset(offset).limit(limit).all()
+    items = []
+    for r in rows:
+        turns_cnt = (
+            session.query(func.count(InterviewTurn.turn_id))
+            .filter(InterviewTurn.session_id == r.session_id)
+            .scalar()
+            or 0
+        )
+        items.append(
+            InterviewSessionAdminOut(
+                session_id=r.session_id,
+                candidate_id=r.candidate_id,
+                candidate_name=r.candidate.full_name if r.candidate else None,
+                candidate_email=r.candidate.email if r.candidate else None,
+                domain_id=r.domain_id,
+                domain_name=r.domain.domain_name if r.domain else None,
+                role_id=r.role_id,
+                role_name=r.role.role_name if r.role else None,
+                experience_level=r.experience_level.value if hasattr(r.experience_level, "value") else str(r.experience_level) if r.experience_level else None,
+                language=r.language.value if hasattr(r.language, "value") else str(r.language),
+                mode=r.mode.value if hasattr(r.mode, "value") else str(r.mode),
+                status=r.status.value if hasattr(r.status, "value") else str(r.status),
+                total_score=float(r.total_score) if r.total_score is not None else None,
+                turns_count=turns_cnt,
+                started_at=r.started_at,
+                completed_at=r.completed_at,
+            )
+        )
+    return InterviewSessionPageOut(items=items, total=total, limit=limit, offset=offset)
+
+
+@router.get("/interviews/{session_id}", response_model=InterviewSessionDetailPageOut)
+def admin_get_interview_detail(
+    session_id: int,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+) -> InterviewSessionDetailPageOut:
+    s = session.query(InterviewSession).filter(InterviewSession.session_id == session_id).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="Phiên phỏng vấn không tồn tại")
+
+    turn_rows = (
+        session.query(InterviewTurn)
+        .filter(InterviewTurn.session_id == session_id)
+        .order_by(InterviewTurn.turn_number.asc())
+        .all()
+    )
+
+    turns = []
+    for t in turn_rows:
+        eval_score = None
+        eval_feedback = None
+        star_analysis = None
+        wpm = None
+        filler_words = None
+
+        if hasattr(t, "answer_evaluation") and t.answer_evaluation:
+            eval_score = float(t.answer_evaluation.score) if getattr(t.answer_evaluation, "score", None) is not None else None
+            eval_feedback = getattr(t.answer_evaluation, "feedback", None)
+            star_analysis = getattr(t.answer_evaluation, "star_analysis", None)
+        if hasattr(t, "speech_analysis") and t.speech_analysis:
+            wpm = float(t.speech_analysis.wpm) if getattr(t.speech_analysis, "wpm", None) is not None else None
+            filler_words = getattr(t.speech_analysis, "filler_words_count", None)
+
+        spk_val = t.speaker.value if hasattr(t.speaker, "value") else str(t.speaker)
+        turns.append(
+            InterviewTurnAdminOut(
+                turn_id=t.turn_id,
+                turn_number=t.turn_number,
+                speaker=spk_val,
+                question_text=getattr(t, "question_text", None),
+                transcribed_text=getattr(t, "transcribed_text", None),
+                audio_file_url=getattr(t, "audio_file_url", None),
+                evaluation_score=eval_score,
+                evaluation_feedback=eval_feedback,
+                star_analysis=star_analysis,
+                wpm=wpm,
+                filler_words_count=filler_words,
+            )
+        )
+
+    return InterviewSessionDetailPageOut(
+        session_id=s.session_id,
+        candidate_id=s.candidate_id,
+        candidate_name=s.candidate.full_name if s.candidate else None,
+        candidate_email=s.candidate.email if s.candidate else None,
+        domain_id=s.domain_id,
+        domain_name=s.domain.domain_name if s.domain else None,
+        role_id=s.role_id,
+        role_name=s.role.role_name if s.role else None,
+        experience_level=s.experience_level.value if hasattr(s.experience_level, "value") else str(s.experience_level) if s.experience_level else None,
+        language=s.language.value if hasattr(s.language, "value") else str(s.language),
+        mode=s.mode.value if hasattr(s.mode, "value") else str(s.mode),
+        status=s.status.value if hasattr(s.status, "value") else str(s.status),
+        total_score=float(s.total_score) if s.total_score is not None else None,
+        turns_count=len(turns),
+        started_at=s.started_at,
+        completed_at=s.completed_at,
+        turns=turns,
+    )
+
+
+# --- CV Oversight Endpoints ---
+
+@router.get("/cvs", response_model=CvDocumentPageOut)
+def admin_list_cvs(
+    search: str | None = Query(None),
+    template_id: str | None = Query(None),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+) -> CvDocumentPageOut:
+    query = session.query(CvDocumentRecord).join(User, CvDocumentRecord.user_id == User.user_id)
+    if template_id and template_id != "all":
+        query = query.filter(CvDocumentRecord.template_id == template_id)
+    if search:
+        s = f"%{search.strip()}%"
+        query = query.filter(
+            (User.full_name.ilike(s))
+            | (User.email.ilike(s))
+            | (CvDocumentRecord.title.ilike(s))
+        )
+    total = query.count()
+    rows = query.order_by(CvDocumentRecord.created_at.desc()).offset(offset).limit(limit).all()
+    items = []
+    for r in rows:
+        u = session.query(User).filter(User.user_id == r.user_id).first()
+        items.append(
+            CvDocumentAdminOut(
+                id=r.id,
+                user_id=r.user_id,
+                user_name=u.full_name if u else None,
+                user_email=u.email if u else None,
+                title=r.title,
+                template_id=r.template_id,
+                color_theme=r.color_theme,
+                font_family=r.font_family,
+                ats_score=float(r.ats_score) if r.ats_score is not None else None,
+                skills_count=len(r.skills) if isinstance(r.skills, list) else 0,
+                experiences_count=len(r.work_experiences) if isinstance(r.work_experiences, list) else 0,
+                created_at=r.created_at,
+                updated_at=getattr(r, "updated_at", None),
+            )
+        )
+    return CvDocumentPageOut(items=items, total=total, limit=limit, offset=offset)
+
+
+@router.get("/cvs/{cv_id}", response_model=CvDocumentDetailPageOut)
+def admin_get_cv_detail(
+    cv_id: int,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+) -> CvDocumentDetailPageOut:
+    r = session.query(CvDocumentRecord).filter(CvDocumentRecord.id == cv_id).first()
+    if not r:
+        raise HTTPException(status_code=404, detail="Hồ sơ CV không tồn tại")
+    u = session.query(User).filter(User.user_id == r.user_id).first()
+    return CvDocumentDetailPageOut(
+        id=r.id,
+        user_id=r.user_id,
+        user_name=u.full_name if u else None,
+        user_email=u.email if u else None,
+        title=r.title,
+        template_id=r.template_id,
+        color_theme=r.color_theme,
+        font_family=r.font_family,
+        ats_score=float(r.ats_score) if r.ats_score is not None else None,
+        skills_count=len(r.skills) if isinstance(r.skills, list) else 0,
+        experiences_count=len(r.work_experiences) if isinstance(r.work_experiences, list) else 0,
+        created_at=r.created_at,
+        updated_at=getattr(r, "updated_at", None),
+        personal_info=r.personal_info or {},
+        summary=r.summary,
+        work_experiences=r.work_experiences or [],
+        projects=r.projects or [],
+        skills=r.skills or [],
+        educations=r.educations or [],
+        certifications=r.certifications or [],
+    )
+
+
+# --- Job Board & Crawler Oversight Endpoints ---
+
+@router.get("/jobs", response_model=JobPostingPageOut)
+def admin_list_jobs(
+    search: str | None = Query(None),
+    source_id: str | None = Query(None),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+) -> JobPostingPageOut:
+    query = (
+        session.query(JobPostingRecord)
+        .outerjoin(JobCompanyRecord, JobPostingRecord.company_id == JobCompanyRecord.company_id)
+        .outerjoin(JobSourceRecord, JobPostingRecord.source_id == JobSourceRecord.source_id)
+    )
+    if source_id and source_id != "all":
+        query = query.filter(JobPostingRecord.source_id == source_id)
+    if search:
+        s = f"%{search.strip()}%"
+        query = query.filter(
+            (JobPostingRecord.title.ilike(s))
+            | (JobCompanyRecord.company_name.ilike(s))
+        )
+    total = query.count()
+    rows = query.order_by(JobPostingRecord.created_at.desc()).offset(offset).limit(limit).all()
+    items = []
+    for r in rows:
+        sal = getattr(r, "salary_text", None) or getattr(r, "salary_display", None) or "Thỏa thuận"
+        items.append(
+            JobPostingAdminOut(
+                job_id=r.job_id,
+                source_id=r.source_id,
+                source_name=r.source.source_name if r.source else r.source_id,
+                company_name=r.company.company_name if r.company else "Doanh nghiệp",
+                company_logo=r.company.logo_url if r.company else None,
+                title=r.title,
+                location=getattr(r, "location", None) or "Toàn quốc",
+                salary_text=sal,
+                url=getattr(r, "source_url", "") or getattr(r, "application_url", "") or "",
+                is_active=getattr(r, "is_active", True),
+                created_at=r.created_at,
+            )
+        )
+    return JobPostingPageOut(items=items, total=total, limit=limit, offset=offset)
+
+
+@router.get("/jobs/sources", response_model=list[JobSourceAdminOut])
+def admin_list_job_sources(
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+) -> list[JobSourceAdminOut]:
+    sources = session.query(JobSourceRecord).all()
+    results = []
+    for s in sources:
+        cnt = session.query(func.count(JobPostingRecord.job_id)).filter(JobPostingRecord.source_id == s.source_id).scalar() or 0
+        results.append(
+            JobSourceAdminOut(
+                source_id=s.source_id,
+                source_name=s.source_name,
+                source_type=s.source_type,
+                base_url=s.base_url,
+                is_active=s.is_active,
+                crawl_interval_m=s.crawl_interval_m,
+                last_synced_at=s.last_synced_at,
+                created_at=s.created_at,
+                postings_count=cnt,
+            )
+        )
+    return results
+
+
+@router.patch("/jobs/sources/{source_id}/toggle", response_model=JobSourceAdminOut)
+def admin_toggle_job_source(
+    source_id: str,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> JobSourceAdminOut:
+    s = session.query(JobSourceRecord).filter(JobSourceRecord.source_id == source_id).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="Nguồn tuyển dụng không tồn tại")
+    s.is_active = not s.is_active
+    session.commit()
+    session.refresh(s)
+    container.admin_service.repo.record_audit(
+        session,
+        user_id=admin_id,
+        table_name="job_sources",
+        record_id=1,
+        action="update",
+        new_value={"source_id": s.source_id, "is_active": s.is_active},
+    )
+    cnt = session.query(func.count(JobPostingRecord.job_id)).filter(JobPostingRecord.source_id == s.source_id).scalar() or 0
+    return JobSourceAdminOut(
+        source_id=s.source_id,
+        source_name=s.source_name,
+        source_type=s.source_type,
+        base_url=s.base_url,
+        is_active=s.is_active,
+        crawl_interval_m=s.crawl_interval_m,
+        last_synced_at=s.last_synced_at,
+        created_at=s.created_at,
+        postings_count=cnt,
+    )
+
+
+@router.post("/jobs/crawler/trigger")
+def admin_trigger_crawler(
+    source_id: str | None = Query(None),
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> dict[str, Any]:
+    from datetime import datetime, timezone
+    q = session.query(JobSourceRecord)
+    if source_id and source_id != "all":
+        q = q.filter(JobSourceRecord.source_id == source_id)
+    sources = q.all()
+    for s in sources:
+        s.last_synced_at = datetime.now(timezone.utc)
+    session.commit()
+    container.admin_service.repo.record_audit(
+        session,
+        user_id=admin_id,
+        table_name="job_sources",
+        record_id=1,
+        action="trigger_crawl",
+        new_value={"source_id": source_id, "triggered_sources": len(sources)},
+    )
+    return {
+        "success": True,
+        "message": f"Đã kích hoạt tác vụ quét việc làm cho {len(sources)} nguồn tuyển dụng.",
+        "sources_count": len(sources),
+        "triggered_at": datetime.now(timezone.utc).isoformat(),
+    }
+
 
 
 
