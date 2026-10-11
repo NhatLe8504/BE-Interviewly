@@ -2326,6 +2326,11 @@
         ],
         "summary": "List Audit Logs",
         "operationId": "list_audit_logs_api_v1_admin_audit_logs_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "table_name",
@@ -2399,6 +2404,11 @@
         "summary": "Get Server Logs",
         "description": "Get live server terminal lines and API route logs recorded within the last 24 hours.\nOld logs beyond 24h are automatically pruned.",
         "operationId": "get_server_logs_api_v1_admin_server_logs_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "limit",
@@ -3334,6 +3344,84 @@
         }
       }
     },
+    "/api/v1/admin/skills": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List Skill Options",
+        "description": "Danh mục nhãn kỹ năng để UI admin tìm kiếm và gán nhãn câu hỏi.",
+        "operationId": "list_skill_options_api_v1_admin_skills_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SkillOptionOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Skill Options Api V1 Admin Skills Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/questions/skill-suggestions": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Suggest Question Skills",
+        "description": "LLM gợi ý nhãn kỹ năng cho nội dung câu hỏi; chỉ để admin rà lại, không ghi DB.",
+        "operationId": "suggest_question_skills_api_v1_admin_questions_skill_suggestions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SkillSuggestionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillSuggestionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/admin/question-sets": {
       "post": {
         "tags": [
@@ -3914,7 +4002,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/app__presentation__api__schemas__evaluation__SessionResultOut"
+                  "$ref": "#/components/schemas/reference_app__app__presentation__api__schemas__evaluation__SessionResultOut"
                 }
               }
             }
@@ -3961,7 +4049,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/app__presentation__api__schemas__analytics__SessionResultOut"
+                  "$ref": "#/components/schemas/reference_app__app__presentation__api__schemas__analytics__SessionResultOut"
                 }
               }
             }
@@ -5110,6 +5198,287 @@
         }
       }
     },
+    "/api/v1/voice/options": {
+      "get": {
+        "tags": [
+          "voice"
+        ],
+        "summary": "Get Voice Options",
+        "operationId": "get_voice_options_api_v1_voice_options_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Language"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceOptionsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/voice/preview": {
+      "get": {
+        "tags": [
+          "voice"
+        ],
+        "summary": "Preview Voice Sample",
+        "operationId": "preview_voice_sample_api_v1_voice_preview_get",
+        "parameters": [
+          {
+            "name": "voice",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "vi-VN-HoaiMyNeural",
+              "title": "Voice"
+            }
+          },
+          {
+            "name": "pitch",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "+0Hz",
+              "title": "Pitch"
+            }
+          },
+          {
+            "name": "text",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Text"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/voice/audio/{session_id}/{filename}": {
+      "head": {
+        "tags": [
+          "voice"
+        ],
+        "summary": "Get Turn Audio",
+        "operationId": "get_turn_audio_api_v1_voice_audio__session_id___filename__head",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "filename",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Filename"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "voice"
+        ],
+        "summary": "Get Turn Audio",
+        "operationId": "get_turn_audio_api_v1_voice_audio__session_id___filename__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "filename",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Filename"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/interviews/sessions/{session_id}/turns/{turn_id}/user-audio": {
+      "post": {
+        "tags": [
+          "voice"
+        ],
+        "summary": "Upload User Turn Audio",
+        "operationId": "upload_user_turn_audio_api_v1_interviews_sessions__session_id__turns__turn_id__user_audio_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "turn_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Turn Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_user_turn_audio_api_v1_interviews_sessions__session_id__turns__turn_id__user_audio_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/onboarding": {
       "post": {
         "tags": [
@@ -5375,6 +5744,64 @@
             "HTTPBearer": []
           }
         ]
+      }
+    },
+    "/api/v1/interviews/from-jd/community-jobs": {
+      "get": {
+        "tags": [
+          "jd-interviews"
+        ],
+        "summary": "Get Community Jd Jobs",
+        "description": "Lấy danh sách các bộ đề JD đã tạo thành công và được chia sẻ công khai bởi cộng đồng.",
+        "operationId": "get_community_jd_jobs_api_v1_interviews_from_jd_community_jobs_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 30,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/JDJobSummaryOut"
+                  },
+                  "title": "Response Get Community Jd Jobs Api V1 Interviews From Jd Community Jobs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/interviews/from-jd/my-jobs": {
@@ -6104,6 +6531,404 @@
           }
         }
       }
+    },
+    "/api/v1/cvs/user-skills-summary": {
+      "get": {
+        "tags": [
+          "cv"
+        ],
+        "summary": "Get User Skills Summary",
+        "operationId": "get_user_skills_summary_api_v1_cvs_user_skills_summary_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSkillsSummaryOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/cvs": {
+      "get": {
+        "tags": [
+          "cv"
+        ],
+        "summary": "List User Cvs",
+        "operationId": "list_user_cvs_api_v1_cvs_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CvListItemOut"
+                  },
+                  "type": "array",
+                  "title": "Response List User Cvs Api V1 Cvs Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "cv"
+        ],
+        "summary": "Create Cv",
+        "operationId": "create_cv_api_v1_cvs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CvCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CvOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/cvs/generate-draft": {
+      "post": {
+        "tags": [
+          "cv"
+        ],
+        "summary": "Generate Ai Draft",
+        "operationId": "generate_ai_draft_api_v1_cvs_generate_draft_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CvGenerateDraftIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Generate Ai Draft Api V1 Cvs Generate Draft Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/cvs/refine-selection": {
+      "post": {
+        "tags": [
+          "cv"
+        ],
+        "summary": "Refine Selection",
+        "operationId": "refine_selection_api_v1_cvs_refine_selection_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CvSelectionRefineIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CvSelectionRefineOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/cvs/{cv_id}": {
+      "get": {
+        "tags": [
+          "cv"
+        ],
+        "summary": "Get Cv",
+        "operationId": "get_cv_api_v1_cvs__cv_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cv_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Cv Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CvOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "cv"
+        ],
+        "summary": "Update Cv",
+        "operationId": "update_cv_api_v1_cvs__cv_id__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cv_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Cv Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CvUpdateIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CvOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "cv"
+        ],
+        "summary": "Delete Cv",
+        "operationId": "delete_cv_api_v1_cvs__cv_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cv_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Cv Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cvs/{cv_id}/ats-score": {
+      "post": {
+        "tags": [
+          "cv"
+        ],
+        "summary": "Calculate Ats Score",
+        "operationId": "calculate_ats_score_api_v1_cvs__cv_id__ats_score_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cv_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Cv Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CvAtsScoreIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CvAtsScoreOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -6247,6 +7072,11 @@
             "type": "string",
             "title": "Language",
             "default": "vi"
+          },
+          "is_public": {
+            "type": "boolean",
+            "title": "Is Public",
+            "default": false
           }
         },
         "type": "object",
@@ -6320,6 +7150,20 @@
           "file"
         ],
         "title": "Body_upload_file_api_v1_upload_post"
+      },
+      "Body_upload_user_turn_audio_api_v1_interviews_sessions__session_id__turns__turn_id__user_audio_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_user_turn_audio_api_v1_interviews_sessions__session_id__turns__turn_id__user_audio_post"
       },
       "CandidateDashboardOut": {
         "properties": {
@@ -6466,7 +7310,6 @@
           },
           "amount": {
             "type": "string",
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Amount"
           },
           "currency": {
@@ -6511,6 +7354,734 @@
           "amount"
         ],
         "title": "CheckoutUrlOut"
+      },
+      "CvAtsScoreIn": {
+        "properties": {
+          "target_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Job Id"
+          },
+          "target_jd_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Jd Text"
+          }
+        },
+        "type": "object",
+        "title": "CvAtsScoreIn"
+      },
+      "CvAtsScoreOut": {
+        "properties": {
+          "ats_score": {
+            "type": "number",
+            "title": "Ats Score"
+          },
+          "match_keywords": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Match Keywords"
+          },
+          "missing_keywords": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing Keywords"
+          },
+          "strengths": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Strengths"
+          },
+          "improvements": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Improvements"
+          },
+          "summary_verdict": {
+            "type": "string",
+            "title": "Summary Verdict"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ats_score",
+          "summary_verdict"
+        ],
+        "title": "CvAtsScoreOut"
+      },
+      "CvCreateIn": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "default": "My Professional CV"
+          },
+          "template_id": {
+            "type": "string",
+            "title": "Template Id",
+            "default": "modern_tech"
+          },
+          "color_theme": {
+            "type": "string",
+            "title": "Color Theme",
+            "default": "navy"
+          },
+          "font_family": {
+            "type": "string",
+            "title": "Font Family",
+            "default": "inter"
+          },
+          "target_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Job Id"
+          },
+          "target_jd_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Jd Text"
+          },
+          "load_from_user_skills": {
+            "type": "boolean",
+            "title": "Load From User Skills",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "CvCreateIn"
+      },
+      "CvGenerateDraftIn": {
+        "properties": {
+          "target_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Job Id"
+          },
+          "target_jd_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Jd Text"
+          },
+          "role_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role Title"
+          },
+          "experience_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Experience Level"
+          },
+          "user_provided_skills": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "User Provided Skills"
+          },
+          "use_system_skills": {
+            "type": "boolean",
+            "title": "Use System Skills",
+            "default": true
+          },
+          "current_cv_data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Cv Data"
+          }
+        },
+        "type": "object",
+        "title": "CvGenerateDraftIn"
+      },
+      "CvListItemOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "template_id": {
+            "type": "string",
+            "title": "Template Id"
+          },
+          "color_theme": {
+            "type": "string",
+            "title": "Color Theme"
+          },
+          "target_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Job Id"
+          },
+          "target_job_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Job Title"
+          },
+          "target_company_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Company Name"
+          },
+          "ats_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ats Score"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "title",
+          "template_id",
+          "color_theme",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CvListItemOut"
+      },
+      "CvOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "target_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Job Id"
+          },
+          "target_job_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Job Title"
+          },
+          "target_company_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Company Name"
+          },
+          "template_id": {
+            "type": "string",
+            "title": "Template Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "color_theme": {
+            "type": "string",
+            "title": "Color Theme"
+          },
+          "font_family": {
+            "type": "string",
+            "title": "Font Family"
+          },
+          "personal_info": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Personal Info"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "work_experiences": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Work Experiences"
+          },
+          "projects": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Projects"
+          },
+          "skills": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skills"
+          },
+          "educations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Educations"
+          },
+          "certifications": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Certifications"
+          },
+          "section_order": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Section Order"
+          },
+          "ats_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ats Score"
+          },
+          "ats_feedback": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ats Feedback"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "template_id",
+          "title",
+          "color_theme",
+          "font_family",
+          "personal_info",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CvOut"
+      },
+      "CvSelectionRefineIn": {
+        "properties": {
+          "selected_text": {
+            "type": "string",
+            "title": "Selected Text"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "star_metrics",
+              "tailor_to_job",
+              "strong_verbs",
+              "shorten",
+              "custom"
+            ],
+            "title": "Action",
+            "default": "star_metrics"
+          },
+          "custom_instruction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Instruction"
+          },
+          "context_section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Section"
+          },
+          "target_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Job Id"
+          },
+          "target_jd_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Jd Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "selected_text"
+        ],
+        "title": "CvSelectionRefineIn"
+      },
+      "CvSelectionRefineOut": {
+        "properties": {
+          "original_text": {
+            "type": "string",
+            "title": "Original Text"
+          },
+          "refined_text": {
+            "type": "string",
+            "title": "Refined Text"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "original_text",
+          "refined_text",
+          "action",
+          "explanation"
+        ],
+        "title": "CvSelectionRefineOut"
+      },
+      "CvUpdateIn": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "template_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Id"
+          },
+          "color_theme": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color Theme"
+          },
+          "font_family": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Font Family"
+          },
+          "personal_info": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Personal Info"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "work_experiences": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Experiences"
+          },
+          "projects": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Projects"
+          },
+          "skills": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skills"
+          },
+          "educations": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Educations"
+          },
+          "certifications": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Certifications"
+          },
+          "section_order": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section Order"
+          },
+          "target_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Job Id"
+          }
+        },
+        "type": "object",
+        "title": "CvUpdateIn"
       },
       "DomainAdminDetailOut": {
         "properties": {
@@ -7245,6 +8816,11 @@
             ],
             "title": "Created At"
           },
+          "is_public": {
+            "type": "boolean",
+            "title": "Is Public",
+            "default": false
+          },
           "error": {
             "anyOf": [
               {
@@ -7255,6 +8831,51 @@
               }
             ],
             "title": "Error"
+          },
+          "origin_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Origin Job Id"
+          },
+          "company_logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Logo Url"
+          },
+          "company_banner_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Banner Url"
+          },
+          "skills": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skills"
+          },
+          "is_custom_jd": {
+            "type": "boolean",
+            "title": "Is Custom Jd",
+            "default": false
           }
         },
         "type": "object",
@@ -7351,6 +8972,12 @@
             "title": "Language",
             "description": "Ngôn ngữ phỏng vấn (vi hoặc en)",
             "default": "vi"
+          },
+          "is_public": {
+            "type": "boolean",
+            "title": "Is Public",
+            "description": "Chia sẻ công khai với cộng đồng",
+            "default": false
           }
         },
         "type": "object",
@@ -7393,6 +9020,12 @@
             "title": "Language",
             "description": "Ngôn ngữ phỏng vấn (vi hoặc en)",
             "default": "vi"
+          },
+          "is_public": {
+            "type": "boolean",
+            "title": "Is Public",
+            "description": "Chia sẻ công khai với cộng đồng",
+            "default": false
           }
         },
         "type": "object",
@@ -7714,6 +9347,22 @@
               }
             ]
           },
+          "has_practice_session": {
+            "type": "boolean",
+            "title": "Has Practice Session",
+            "default": false
+          },
+          "practice_interview_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Practice Interview Id"
+          },
           "raw_description": {
             "type": "string",
             "title": "Raw Description"
@@ -8026,6 +9675,22 @@
                 "type": "null"
               }
             ]
+          },
+          "has_practice_session": {
+            "type": "boolean",
+            "title": "Has Practice Session",
+            "default": false
+          },
+          "practice_interview_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Practice Interview Id"
           }
         },
         "type": "object",
@@ -8879,7 +10544,6 @@
           },
           "amount": {
             "type": "string",
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Amount"
           },
           "currency": {
@@ -8969,7 +10633,6 @@
           },
           "price": {
             "type": "string",
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Price"
           },
           "billing_cycle": {
@@ -9735,6 +11398,20 @@
               }
             ],
             "title": "Tips"
+          },
+          "skill_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skill Ids"
           }
         },
         "type": "object",
@@ -9862,6 +11539,13 @@
               }
             ],
             "title": "Updated At"
+          },
+          "skill_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skill Ids"
           },
           "star_template": {
             "anyOf": [
@@ -10185,6 +11869,13 @@
               }
             ],
             "title": "Updated At"
+          },
+          "skill_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skill Ids"
           }
         },
         "type": "object",
@@ -11086,6 +12777,20 @@
               }
             ],
             "title": "Tips"
+          },
+          "skill_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skill Ids"
           }
         },
         "type": "object",
@@ -11496,6 +13201,60 @@
         ],
         "title": "RubricScoreItemOut"
       },
+      "STTEngineItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "is_default": {
+            "type": "boolean",
+            "title": "Is Default",
+            "default": false
+          },
+          "is_premium": {
+            "type": "boolean",
+            "title": "Is Premium",
+            "default": false
+          },
+          "is_locked": {
+            "type": "boolean",
+            "title": "Is Locked",
+            "default": false
+          },
+          "lock_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lock Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "provider",
+          "description"
+        ],
+        "title": "STTEngineItem"
+      },
       "SendOtpIn": {
         "properties": {
           "email": {
@@ -11858,6 +13617,36 @@
         ],
         "title": "SkillLevelItemOut"
       },
+      "SkillOptionOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "role_tracks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Role Tracks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "category"
+        ],
+        "title": "SkillOptionOut"
+      },
       "SkillRadarOut": {
         "properties": {
           "clarity": {
@@ -11895,6 +13684,44 @@
           "star_method"
         ],
         "title": "SkillRadarOut"
+      },
+      "SkillSuggestionIn": {
+        "properties": {
+          "question_text": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Question Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question_text"
+        ],
+        "title": "SkillSuggestionIn"
+      },
+      "SkillSuggestionOut": {
+        "properties": {
+          "suggested_skill_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Suggested Skill Ids"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "title": "SkillSuggestionOut"
       },
       "SpeechMetricsOut": {
         "properties": {
@@ -12243,6 +14070,11 @@
           "redirect_url": {
             "type": "string",
             "title": "Redirect Url"
+          },
+          "has_existing_session": {
+            "type": "boolean",
+            "title": "Has Existing Session",
+            "default": false
           }
         },
         "type": "object",
@@ -13204,6 +15036,73 @@
         ],
         "title": "UserRoleUpdateIn"
       },
+      "UserSkillsSummaryOut": {
+        "properties": {
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "target_domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Domain"
+          },
+          "experience_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Experience Level"
+          },
+          "skills": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skills"
+          },
+          "skill_details": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Skill Details"
+          },
+          "evidences": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidences"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "full_name",
+          "email"
+        ],
+        "title": "UserSkillsSummaryOut"
+      },
       "UserStatusUpdateIn": {
         "properties": {
           "status": {
@@ -13388,6 +15287,99 @@
         ],
         "title": "VoiceEvaluationQueueIn"
       },
+      "VoiceOptionItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "language": {
+            "type": "string",
+            "title": "Language"
+          },
+          "gender": {
+            "type": "string",
+            "title": "Gender"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "is_default": {
+            "type": "boolean",
+            "title": "Is Default",
+            "default": false
+          },
+          "is_premium": {
+            "type": "boolean",
+            "title": "Is Premium",
+            "default": false
+          },
+          "is_locked": {
+            "type": "boolean",
+            "title": "Is Locked",
+            "default": false
+          },
+          "lock_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lock Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "provider",
+          "language",
+          "gender",
+          "description"
+        ],
+        "title": "VoiceOptionItem"
+      },
+      "VoiceOptionsOut": {
+        "properties": {
+          "is_premium_user": {
+            "type": "boolean",
+            "title": "Is Premium User"
+          },
+          "voices": {
+            "items": {
+              "$ref": "#/components/schemas/VoiceOptionItem"
+            },
+            "type": "array",
+            "title": "Voices"
+          },
+          "stt_engines": {
+            "items": {
+              "$ref": "#/components/schemas/STTEngineItem"
+            },
+            "type": "array",
+            "title": "Stt Engines"
+          }
+        },
+        "type": "object",
+        "required": [
+          "is_premium_user",
+          "voices",
+          "stt_engines"
+        ],
+        "title": "VoiceOptionsOut"
+      },
       "WeakPointRecommendationOut": {
         "properties": {
           "weak_area": {
@@ -13467,7 +15459,7 @@
         ],
         "title": "XGateSyncOut"
       },
-      "app__presentation__api__schemas__analytics__SessionResultOut": {
+      "reference_app__app__presentation__api__schemas__analytics__SessionResultOut": {
         "properties": {
           "session_id": {
             "type": "integer",
@@ -13569,7 +15561,7 @@
         ],
         "title": "SessionResultOut"
       },
-      "app__presentation__api__schemas__evaluation__SessionResultOut": {
+      "reference_app__app__presentation__api__schemas__evaluation__SessionResultOut": {
         "properties": {
           "session_id": {
             "type": "integer",

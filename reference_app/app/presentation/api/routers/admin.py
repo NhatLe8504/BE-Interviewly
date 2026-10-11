@@ -17,6 +17,7 @@ from ....application.catalog.commands import (
 from ....application.container import ServiceContainer
 from ....application.skills.taxonomy import get_default_taxonomy
 from ....infrastructure.llm.question_tagging import suggest_skill_ids_with_llm
+from ....infrastructure.llm.question_generator import generate_interview_questions_with_llm
 from ....infrastructure.logging.server_log_store import global_server_log_store
 from ..dependencies import get_container, get_session, require_admin
 from ..helpers.cache import invalidate_cache
@@ -62,6 +63,8 @@ from ..schemas.catalog import (
     CatalogStatusUpdateIn,
     StarTemplateCreateIn,
     StarTemplateOut,
+    QuestionAiGenerateIn,
+    QuestionAiGenerateOut,
 )
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
@@ -680,6 +683,44 @@ def suggest_question_skills(
     except Exception:
         return SkillSuggestionOut(reason="llm_error")
     return SkillSuggestionOut(suggested_skill_ids=suggested)
+
+
+@router.post("/questions/ai-generate", response_model=QuestionAiGenerateOut)
+def ai_generate_questions(
+    data: QuestionAiGenerateIn,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> QuestionAiGenerateOut:
+    """Sinh ngân hàng câu hỏi phỏng vấn chuẩn hóa bằng LLM (Groq / OpenAI)."""
+    domain_name = data.domain_name or ""
+    role_name = data.role_name or ""
+
+    if not domain_name and data.domain_id:
+        domain = container.catalog_service.get_domain(session, data.domain_id)
+        if domain:
+            domain_name = domain.domain_name
+
+    if not role_name and data.role_id:
+        role = container.catalog_service.get_role(session, data.role_id)
+        if role:
+            role_name = role.role_name
+
+    questions = generate_interview_questions_with_llm(
+        domain_name=domain_name or "Công nghệ thông tin (IT)",
+        role_name=role_name or "Software Engineer",
+        experience_level=data.experience_level or "junior",
+        tech_stack=data.tech_stack or "",
+        question_count=data.question_count or 3,
+        question_distribution=data.question_distribution or "balanced",
+        custom_prompt=data.custom_prompt or "",
+        source_type=data.source_type or "prompt",
+        source_value=data.source_value or "",
+        base_url=container.settings.openai_base_url,
+        api_key=container.settings.openai_api_key,
+        model=container.settings.openai_model,
+    )
+    return QuestionAiGenerateOut(questions=questions)
 
 
 @router.post("/question-sets", response_model=QuestionSetDetailOut, status_code=201)

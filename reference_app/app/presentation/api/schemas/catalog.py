@@ -454,3 +454,40 @@ class OverallSynthesisOut(BaseModel):
     strengths: list[str]
     improvements: list[str]
     career_readiness_verdict: str
+
+
+class QuestionAiGenerateIn(BaseModel):
+    domain_id: int | None = None
+    role_id: int | None = None
+    domain_name: str | None = None
+    role_name: str | None = None
+    experience_level: str = "junior"
+    tech_stack: str = ""
+    question_count: int = Field(default=3, ge=1, le=10)
+    question_distribution: str = "balanced"
+    custom_prompt: str = ""
+    source_type: str = "prompt"
+    source_value: str = ""
+
+
+class GeneratedQuestionItemOut(BaseModel):
+    id: str
+    question_text: str
+    question_type: str
+    difficulty: int
+    intent: str
+    situation_guide: str = ""
+    task_guide: str = ""
+    action_guide: str = ""
+    result_guide: str = ""
+    sample_answer: str = ""
+    follow_up_questions: list[str] = Field(default_factory=list)
+    tips: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    is_active: bool = True
+    status: str = "approved"
+
+
+class QuestionAiGenerateOut(BaseModel):
+    questions: list[GeneratedQuestionItemOut]
+
