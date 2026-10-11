@@ -76,6 +76,7 @@ from ..schemas.catalog import (
     SkillSuggestionOut,
     CatalogStatusUpdateIn,
     StarTemplateCreateIn,
+    StarTemplateUpdateIn,
     StarTemplateOut,
     QuestionAiGenerateIn,
     QuestionAiGenerateOut,
@@ -463,6 +464,25 @@ def delete_domain(
     invalidate_cache(container, "catalog:")
 
 
+@router.get("/roles", response_model=list[RoleAdminSummaryOut])
+def admin_list_roles(
+    domain_id: int | None = Query(None),
+    status: str = Query("all", pattern="^(all|active|archived)$"),
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> list[RoleAdminSummaryOut]:
+    is_active = True if status == "active" else (False if status == "archived" else None)
+    if domain_id is not None:
+        items = container.catalog_service.get_role_summaries(session, domain_id=domain_id, is_active=is_active)
+    else:
+        domains = container.catalog_service.get_domains(session, is_active=None)
+        items = []
+        for d in domains:
+            items.extend(container.catalog_service.get_role_summaries(session, domain_id=d.domain_id, is_active=is_active))
+    return [RoleAdminSummaryOut(**it) for it in items]
+
+
 @router.post("/roles", response_model=RoleOut, status_code=201)
 def create_role(
     data: RoleCreateIn,
@@ -559,6 +579,17 @@ def delete_role(
     invalidate_cache(container, "catalog:")
 
 
+@router.get("/star-templates", response_model=list[StarTemplateOut])
+def admin_list_star_templates(
+    language: str | None = Query(None, pattern="^(vi|en)$"),
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> list[StarTemplateOut]:
+    items = container.catalog_service.get_star_templates(session, language=language)
+    return [StarTemplateOut.model_validate(t) for t in items]
+
+
 @router.post("/star-templates", response_model=StarTemplateOut, status_code=201)
 def create_star_template(
     data: StarTemplateCreateIn,
@@ -578,6 +609,78 @@ def create_star_template(
         ),
     )
     return StarTemplateOut.model_validate(tmpl)
+
+
+@router.put("/star-templates/{template_id}", response_model=StarTemplateOut)
+def admin_update_star_template(
+    template_id: int,
+    data: StarTemplateUpdateIn,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> StarTemplateOut:
+    from ....infrastructure.persistence.models.catalog import StarGuidanceTemplate
+    from ....infrastructure.persistence.models.enums import Language
+
+    tmpl = session.query(StarGuidanceTemplate).filter(StarGuidanceTemplate.star_template_id == template_id).first()
+    if not tmpl:
+        raise HTTPException(status_code=404, detail="Mẫu STAR không tồn tại")
+    
+    old_title = tmpl.title
+    if data.title is not None:
+        tmpl.title = data.title.strip()
+    if data.situation_guide is not None:
+        tmpl.situation_guide = data.situation_guide
+    if data.task_guide is not None:
+        tmpl.task_guide = data.task_guide
+    if data.action_guide is not None:
+        tmpl.action_guide = data.action_guide
+    if data.result_guide is not None:
+        tmpl.result_guide = data.result_guide
+    if data.language is not None:
+        tmpl.language = Language(data.language)
+
+    session.commit()
+    session.refresh(tmpl)
+
+    container.admin_service.repo.record_audit(
+        session,
+        user_id=admin_id,
+        table_name="star_guidance_templates",
+        record_id=template_id,
+        action="update",
+        old_value={"title": old_title},
+        new_value={"title": tmpl.title},
+    )
+    invalidate_cache(container, "catalog:")
+    return StarTemplateOut.model_validate(tmpl)
+
+
+@router.delete("/star-templates/{template_id}", status_code=204)
+def admin_delete_star_template(
+    template_id: int,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> None:
+    from ....infrastructure.persistence.models.catalog import StarGuidanceTemplate
+
+    tmpl = session.query(StarGuidanceTemplate).filter(StarGuidanceTemplate.star_template_id == template_id).first()
+    if not tmpl:
+        raise HTTPException(status_code=404, detail="Mẫu STAR không tồn tại")
+    
+    session.delete(tmpl)
+    session.commit()
+
+    container.admin_service.repo.record_audit(
+        session,
+        user_id=admin_id,
+        table_name="star_guidance_templates",
+        record_id=template_id,
+        action="delete",
+    )
+    invalidate_cache(container, "catalog:")
+
 
 
 @router.post("/questions", response_model=QuestionDetailOut, status_code=201)

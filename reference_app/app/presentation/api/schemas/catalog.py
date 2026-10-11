@@ -104,6 +104,16 @@ class StarTemplateCreateIn(BaseModel):
     language: str = Field("vi", pattern="^(vi|en)$")
 
 
+class StarTemplateUpdateIn(BaseModel):
+    title: str | None = Field(None, min_length=1, max_length=150)
+    situation_guide: str | None = None
+    task_guide: str | None = None
+    action_guide: str | None = None
+    result_guide: str | None = None
+    language: str | None = Field(None, pattern="^(vi|en)$")
+
+
+
 class QuestionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
