@@ -141,3 +141,62 @@ class XGateSyncOut(BaseModel):
     matched_count: int
     new_confirmed_count: int
     message: str
+
+
+class SubscriptionPlanAdminOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    plan_id: int
+    plan_name: str
+    price: float
+    billing_cycle: str
+    feature_limits: dict = Field(default_factory=dict)
+    is_active: bool
+    created_at: datetime | None = None
+    subscribers_count: int = 0
+
+
+class SubscriptionPlanCreateIn(BaseModel):
+    plan_name: str = Field(..., min_length=2, max_length=100)
+    price: float = Field(0.0, ge=0)
+    billing_cycle: str = Field("monthly", pattern="^(free|weekly|monthly|quarterly|yearly)$")
+    feature_limits: dict = Field(default_factory=dict)
+    is_active: bool = True
+
+
+class SubscriptionPlanUpdateIn(BaseModel):
+    plan_name: str | None = None
+    price: float | None = None
+    billing_cycle: str | None = Field(None, pattern="^(free|weekly|monthly|quarterly|yearly)$")
+    feature_limits: dict | None = None
+    is_active: bool | None = None
+
+
+class UserSubscriptionAdminOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user_subscription_id: int
+    user_id: int
+    user_email: str | None = None
+    user_name: str | None = None
+    plan_id: int
+    plan_name: str | None = None
+    status: str
+    auto_renew: bool
+    start_date: datetime
+    end_date: datetime | None = None
+    created_at: datetime | None = None
+
+
+class UserSubscriptionUpdateIn(BaseModel):
+    status: str | None = Field(None, pattern="^(active|expired|cancelled|past_due)$")
+    auto_renew: bool | None = None
+    end_date: datetime | None = None
+
+
+class UserSubscriptionPageOut(BaseModel):
+    items: list[UserSubscriptionAdminOut]
+    total: int
+    limit: int
+    offset: int
+
