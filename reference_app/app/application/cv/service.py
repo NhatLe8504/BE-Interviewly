@@ -6,10 +6,10 @@ import re
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
-from ...domain.errors import NotFoundError, ForbiddenError
+from ...domain.errors import DomainValidationError, ForbiddenError, NotFoundError
 from ...infrastructure.persistence.models.cv import CvDocumentRecord
 from ...infrastructure.persistence.models.job_aggregator import JobPostingRecord
 from ...infrastructure.persistence.models.user import CandidateProfile, User
@@ -140,6 +140,18 @@ class CvService:
         user = session.get(User, user_id)
         if not user:
             raise NotFoundError("User not found")
+
+        # Check quota limit: Maximum 5 CVs per user
+        existing_count = (
+            session.scalar(
+                select(func.count(CvDocumentRecord.id)).where(CvDocumentRecord.user_id == user_id)
+            )
+            or 0
+        )
+        if existing_count >= 5:
+            raise DomainValidationError(
+                "Bạn đã đạt giới hạn lưu tối đa 5 bản CV. Vui lòng xóa bớt bản cũ để tạo mới."
+            )
 
         profile = session.get(CandidateProfile, user_id)
 
