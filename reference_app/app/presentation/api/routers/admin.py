@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
+from sqlalchemy import func
 
 from ....application.admin.commands import CreateModerationCommand
 from ....application.catalog.commands import (
@@ -19,6 +20,9 @@ from ....application.skills.taxonomy import get_default_taxonomy
 from ....infrastructure.llm.question_tagging import suggest_skill_ids_with_llm
 from ....infrastructure.llm.question_generator import generate_interview_questions_with_llm
 from ....infrastructure.logging.server_log_store import global_server_log_store
+from ....infrastructure.persistence.models.billing import SubscriptionPlan, UserSubscription
+from ....infrastructure.persistence.models.enums import BillingCycle, SubStatus
+from ....infrastructure.persistence.models.user import User
 from ..dependencies import get_container, get_session, require_admin
 from ..helpers.cache import invalidate_cache
 from ..schemas.admin import (
@@ -37,6 +41,12 @@ from ..schemas.admin import (
     PaymentListPageOut,
     PaymentStatusUpdateIn,
     XGateSyncOut,
+    SubscriptionPlanAdminOut,
+    SubscriptionPlanCreateIn,
+    SubscriptionPlanUpdateIn,
+    UserSubscriptionAdminOut,
+    UserSubscriptionPageOut,
+    UserSubscriptionUpdateIn,
 )
 from ..schemas.catalog import (
     DomainCreateIn,
@@ -1043,6 +1053,249 @@ def admin_delete_lesson(
 ) -> None:
     success = container.course_service.delete_lesson(session, lesson_id)
     if not success:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Bài học không tồn tại")
+
+
+# --- Subscription & Plan Management Endpoints ---
+
+@router.get("/plans", response_model=list[SubscriptionPlanAdminOut])
+def admin_list_plans(
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+) -> list[SubscriptionPlanAdminOut]:
+    plans = session.query(SubscriptionPlan).order_by(SubscriptionPlan.plan_id.asc()).all()
+    results = []
+    for p in plans:
+        sub_count = (
+            session.query(func.count(UserSubscription.user_subscription_id))
+            .filter(UserSubscription.plan_id == p.plan_id, UserSubscription.status == SubStatus.active)
+            .scalar()
+            or 0
+        )
+        cycle_val = p.billing_cycle.value if hasattr(p.billing_cycle, "value") else str(p.billing_cycle)
+        results.append(
+            SubscriptionPlanAdminOut(
+                plan_id=p.plan_id,
+                plan_name=p.plan_name,
+                price=float(p.price),
+                billing_cycle=cycle_val,
+                feature_limits=p.feature_limits or {},
+                is_active=p.is_active,
+                created_at=p.created_at,
+                subscribers_count=sub_count,
+            )
+        )
+    return results
+
+
+@router.post("/plans", response_model=SubscriptionPlanAdminOut, status_code=201)
+def admin_create_plan(
+    data: SubscriptionPlanCreateIn,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> SubscriptionPlanAdminOut:
+    cycle_enum = BillingCycle(data.billing_cycle)
+    new_plan = SubscriptionPlan(
+        plan_name=data.plan_name,
+        price=data.price,
+        billing_cycle=cycle_enum,
+        feature_limits=data.feature_limits,
+        is_active=data.is_active,
+    )
+    session.add(new_plan)
+    session.commit()
+    session.refresh(new_plan)
+
+    container.admin_service.repo.record_audit(
+        session,
+        user_id=admin_id,
+        table_name="subscription_plans",
+        record_id=new_plan.plan_id,
+        action="create",
+        new_value={"plan_name": new_plan.plan_name, "price": float(new_plan.price)},
+    )
+
+    return SubscriptionPlanAdminOut(
+        plan_id=new_plan.plan_id,
+        plan_name=new_plan.plan_name,
+        price=float(new_plan.price),
+        billing_cycle=new_plan.billing_cycle.value if hasattr(new_plan.billing_cycle, "value") else str(new_plan.billing_cycle),
+        feature_limits=new_plan.feature_limits or {},
+        is_active=new_plan.is_active,
+        created_at=new_plan.created_at,
+        subscribers_count=0,
+    )
+
+
+@router.put("/plans/{plan_id}", response_model=SubscriptionPlanAdminOut)
+def admin_update_plan(
+    plan_id: int,
+    data: SubscriptionPlanUpdateIn,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> SubscriptionPlanAdminOut:
+    plan = session.query(SubscriptionPlan).filter(SubscriptionPlan.plan_id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Gói cước không tồn tại")
+    
+    old_data = {"plan_name": plan.plan_name, "price": float(plan.price), "is_active": plan.is_active}
+
+    if data.plan_name is not None:
+        plan.plan_name = data.plan_name
+    if data.price is not None:
+        plan.price = data.price
+    if data.billing_cycle is not None:
+        plan.billing_cycle = BillingCycle(data.billing_cycle)
+    if data.feature_limits is not None:
+        plan.feature_limits = data.feature_limits
+    if data.is_active is not None:
+        plan.is_active = data.is_active
+
+    session.commit()
+    session.refresh(plan)
+
+    container.admin_service.repo.record_audit(
+        session,
+        user_id=admin_id,
+        table_name="subscription_plans",
+        record_id=plan.plan_id,
+        action="update",
+        old_value=old_data,
+        new_value={"plan_name": plan.plan_name, "price": float(plan.price), "is_active": plan.is_active},
+    )
+
+    sub_count = (
+        session.query(func.count(UserSubscription.user_subscription_id))
+        .filter(UserSubscription.plan_id == plan.plan_id, UserSubscription.status == SubStatus.active)
+        .scalar()
+        or 0
+    )
+
+    return SubscriptionPlanAdminOut(
+        plan_id=plan.plan_id,
+        plan_name=plan.plan_name,
+        price=float(plan.price),
+        billing_cycle=plan.billing_cycle.value if hasattr(plan.billing_cycle, "value") else str(plan.billing_cycle),
+        feature_limits=plan.feature_limits or {},
+        is_active=plan.is_active,
+        created_at=plan.created_at,
+        subscribers_count=sub_count,
+    )
+
+
+@router.delete("/plans/{plan_id}", status_code=204)
+def admin_delete_plan(
+    plan_id: int,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> None:
+    plan = session.query(SubscriptionPlan).filter(SubscriptionPlan.plan_id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Gói cước không tồn tại")
+    plan.is_active = False
+    session.commit()
+    container.admin_service.repo.record_audit(
+        session,
+        user_id=admin_id,
+        table_name="subscription_plans",
+        record_id=plan_id,
+        action="update",
+        new_value={"is_active": False},
+    )
+
+
+@router.get("/user-subscriptions", response_model=UserSubscriptionPageOut)
+def admin_list_user_subscriptions(
+    status: str | None = Query(None),
+    search: str | None = Query(None),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+) -> UserSubscriptionPageOut:
+    query = (
+        session.query(UserSubscription)
+        .join(User, UserSubscription.user_id == User.user_id)
+        .join(SubscriptionPlan, UserSubscription.plan_id == SubscriptionPlan.plan_id)
+    )
+    if status:
+        query = query.filter(UserSubscription.status == SubStatus(status))
+    if search:
+        s = f"%{search.strip()}%"
+        query = query.filter((User.full_name.ilike(s)) | (User.email.ilike(s)))
+    
+    total = query.count()
+    rows = query.order_by(UserSubscription.created_at.desc()).offset(offset).limit(limit).all()
+    items = []
+    for r in rows:
+        st_val = r.status.value if hasattr(r.status, "value") else str(r.status)
+        items.append(
+            UserSubscriptionAdminOut(
+                user_subscription_id=r.user_subscription_id,
+                user_id=r.user_id,
+                user_email=r.user.email if r.user else None,
+                user_name=r.user.full_name if r.user else None,
+                plan_id=r.plan_id,
+                plan_name=r.plan.plan_name if r.plan else None,
+                status=st_val,
+                auto_renew=r.auto_renew,
+                start_date=r.start_date,
+                end_date=r.end_date,
+                created_at=r.created_at,
+            )
+        )
+    return UserSubscriptionPageOut(items=items, total=total, limit=limit, offset=offset)
+
+
+@router.patch("/user-subscriptions/{user_subscription_id}", response_model=UserSubscriptionAdminOut)
+def admin_update_user_subscription(
+    user_subscription_id: int,
+    data: UserSubscriptionUpdateIn,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> UserSubscriptionAdminOut:
+    sub = session.query(UserSubscription).filter(UserSubscription.user_subscription_id == user_subscription_id).first()
+    if not sub:
+        raise HTTPException(status_code=404, detail="Thuê bao không tồn tại")
+    
+    old_status = sub.status.value if hasattr(sub.status, "value") else str(sub.status)
+    if data.status is not None:
+        sub.status = SubStatus(data.status)
+    if data.auto_renew is not None:
+        sub.auto_renew = data.auto_renew
+    if data.end_date is not None:
+        sub.end_date = data.end_date
+    
+    session.commit()
+    session.refresh(sub)
+
+    container.admin_service.repo.record_audit(
+        session,
+        user_id=admin_id,
+        table_name="user_subscriptions",
+        record_id=sub.user_subscription_id,
+        action="update",
+        old_value={"status": old_status},
+        new_value={"status": sub.status.value if hasattr(sub.status, "value") else str(sub.status)},
+    )
+
+    st_val = sub.status.value if hasattr(sub.status, "value") else str(sub.status)
+    return UserSubscriptionAdminOut(
+        user_subscription_id=sub.user_subscription_id,
+        user_id=sub.user_id,
+        user_email=sub.user.email if sub.user else None,
+        user_name=sub.user.full_name if sub.user else None,
+        plan_id=sub.plan_id,
+        plan_name=sub.plan.plan_name if sub.plan else None,
+        status=st_val,
+        auto_renew=sub.auto_renew,
+        start_date=sub.start_date,
+        end_date=sub.end_date,
+        created_at=sub.created_at,
+    )
+
 
