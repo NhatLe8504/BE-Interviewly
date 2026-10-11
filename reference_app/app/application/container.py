@@ -32,3 +32,5 @@ class ServiceContainer:
     llm_voice_adapter: Any = None
     job_worker: Any = None
     cv_service: Any = None
+    course_service: Any = None
+

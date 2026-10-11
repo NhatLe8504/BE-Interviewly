@@ -67,7 +67,23 @@ from ..schemas.catalog import (
     QuestionAiGenerateOut,
 )
 
+from ..schemas.course import (
+    CourseCreateIn,
+    CourseUpdateIn,
+    ChapterCreateIn,
+    ChapterUpdateIn,
+    LessonCreateIn,
+    LessonUpdateIn,
+    CourseOut,
+    CourseDetailOut,
+    ChapterOut,
+    ChapterDetailOut,
+    LessonOut,
+)
+from .course import _to_course_out, _to_course_detail_out
+
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
+
 
 
 @router.get("/users", response_model=UserListPageOut)
@@ -807,3 +823,226 @@ def delete_question_set(
         action="delete",
     )
     invalidate_cache(container, "catalog:")
+
+
+# =========================================================================
+# Course, Chapter, and Lesson Management
+# =========================================================================
+
+@router.get("/courses", response_model=dict[str, Any])
+def admin_list_courses(
+    category: str | None = Query(None),
+    level: str | None = Query(None),
+    role: str | None = Query(None),
+    search: str | None = Query(None),
+    is_active: bool | None = Query(None),
+    limit: int = Query(100, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> dict[str, Any]:
+    items, total = container.course_service.list_courses(
+        session,
+        category=category,
+        level=level,
+        role=role,
+        search=search,
+        is_active=is_active,
+        limit=limit,
+        offset=offset,
+    )
+    return {
+        "items": [_to_course_out(c) for c in items],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
+
+
+@router.post("/courses", response_model=CourseDetailOut, status_code=201)
+def admin_create_course(
+    data: CourseCreateIn,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> CourseDetailOut:
+    course = container.course_service.create_course(session, data.model_dump())
+    container.admin_service.repo.record_audit(
+        session,
+        user_id=admin_id,
+        table_name="courses",
+        record_id=course.course_id,
+        action="insert",
+        new_value={"title": course.title, "slug": course.slug},
+    )
+    return _to_course_detail_out(course)
+
+
+@router.get("/courses/{course_id}", response_model=CourseDetailOut)
+def admin_get_course(
+    course_id: int,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> CourseDetailOut:
+    c = container.course_service.get_course_by_id(session, course_id)
+    if not c:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Khóa học không tồn tại")
+    return _to_course_detail_out(c)
+
+
+@router.put("/courses/{course_id}", response_model=CourseDetailOut)
+def admin_update_course(
+    course_id: int,
+    data: CourseUpdateIn,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> CourseDetailOut:
+    updated = container.course_service.update_course(
+        session, course_id, data.model_dump(exclude_unset=True),
+    )
+    if not updated:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Khóa học không tồn tại")
+    container.admin_service.repo.record_audit(
+        session,
+        user_id=admin_id,
+        table_name="courses",
+        record_id=course_id,
+        action="update",
+        new_value={"course_id": course_id},
+    )
+    return _to_course_detail_out(updated)
+
+
+@router.delete("/courses/{course_id}", status_code=204)
+def admin_delete_course(
+    course_id: int,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> None:
+    success = container.course_service.delete_course(session, course_id)
+    if not success:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Khóa học không tồn tại")
+    container.admin_service.repo.record_audit(
+        session,
+        user_id=admin_id,
+        table_name="courses",
+        record_id=course_id,
+        action="delete",
+    )
+
+
+@router.post("/courses/{course_id}/chapters", response_model=ChapterDetailOut, status_code=201)
+def admin_create_chapter(
+    course_id: int,
+    data: ChapterCreateIn,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> ChapterDetailOut:
+    chapter = container.course_service.create_chapter(session, course_id, data.model_dump())
+    if not chapter:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Khóa học không tồn tại")
+    return ChapterDetailOut(
+        chapter_id=chapter.chapter_id,
+        course_id=chapter.course_id,
+        title=chapter.title,
+        title_en=chapter.title_en,
+        description=chapter.description,
+        order_index=chapter.order_index,
+        lesson_count=0,
+        lessons=[],
+    )
+
+
+@router.put("/courses/chapters/{chapter_id}", response_model=ChapterDetailOut)
+def admin_update_chapter(
+    chapter_id: int,
+    data: ChapterUpdateIn,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> ChapterDetailOut:
+    ch = container.course_service.update_chapter(
+        session, chapter_id, data.model_dump(exclude_unset=True),
+    )
+    if not ch:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Chương học không tồn tại")
+    lessons_out = [LessonOut.model_validate(ls) for ls in ch.lessons] if hasattr(ch, "lessons") and ch.lessons else []
+    return ChapterDetailOut(
+        chapter_id=ch.chapter_id,
+        course_id=ch.course_id,
+        title=ch.title,
+        title_en=ch.title_en,
+        description=ch.description,
+        order_index=ch.order_index,
+        lesson_count=len(lessons_out),
+        lessons=lessons_out,
+    )
+
+
+@router.delete("/courses/chapters/{chapter_id}", status_code=204)
+def admin_delete_chapter(
+    chapter_id: int,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> None:
+    success = container.course_service.delete_chapter(session, chapter_id)
+    if not success:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Chương học không tồn tại")
+
+
+@router.post("/courses/chapters/{chapter_id}/lessons", response_model=LessonOut, status_code=201)
+def admin_create_lesson(
+    chapter_id: int,
+    data: LessonCreateIn,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> LessonOut:
+    lesson = container.course_service.create_lesson(session, chapter_id, data.model_dump())
+    if not lesson:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Chương học không tồn tại")
+    return LessonOut.model_validate(lesson)
+
+
+@router.put("/courses/lessons/{lesson_id}", response_model=LessonOut)
+def admin_update_lesson(
+    lesson_id: int,
+    data: LessonUpdateIn,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> LessonOut:
+    ls = container.course_service.update_lesson(
+        session, lesson_id, data.model_dump(exclude_unset=True),
+    )
+    if not ls:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Bài học không tồn tại")
+    return LessonOut.model_validate(ls)
+
+
+@router.delete("/courses/lessons/{lesson_id}", status_code=204)
+def admin_delete_lesson(
+    lesson_id: int,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> None:
+    success = container.course_service.delete_lesson(session, lesson_id)
+    if not success:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Bài học không tồn tại")
+

@@ -38,6 +38,8 @@ from .session_plan import InterviewSessionConfig, SessionQuestionSelection
 from .user import CandidateProfile, User
 from . import cv as cv
 from .cv import CvDocumentRecord
+from . import course as course
+from .course import Course, CourseChapter, CourseLesson
 from .user_skills import (
     UserSkillEvidenceRecord,
     UserSkillLevelRecord,
@@ -45,6 +47,7 @@ from .user_skills import (
     JobReadinessRecord,
     PracticeEvaluationRecord,
 )
+
 
 __all__ = [
     "AnswerEvaluation",
@@ -81,8 +84,13 @@ __all__ = [
     "UserCareerProfileRecord",
     "JobReadinessRecord",
     "PracticeEvaluationRecord",
+    "Course",
+    "CourseChapter",
+    "CourseLesson",
+    "course",
     "job_aggregator",
     "jd_interview",
+
     "billing",
     "catalog",
     "cv",
