@@ -66,6 +66,8 @@ from ..schemas.admin import (
     JobSourceAdminOut,
     JobPostingAdminOut,
     JobPostingPageOut,
+    AtsRulesConfig,
+    AdminPasswordResetIn,
 )
 from ..schemas.catalog import (
     DomainCreateIn,
@@ -2038,6 +2040,154 @@ def admin_get_onboarding_stats(
         "levels": levels,
         "candidates": candidates,
     }
+
+
+# --- ATS Scoring Rules Configuration Endpoints ---
+
+@router.get("/ats-rules", response_model=AtsRulesConfig)
+def admin_get_ats_rules(
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+) -> AtsRulesConfig:
+    setting = session.query(SystemSetting).filter_by(key="ats_rules").first()
+    if setting and setting.value and isinstance(setting.value, dict):
+        try:
+            return AtsRulesConfig(**setting.value)
+        except Exception:
+            pass
+    return AtsRulesConfig()
+
+
+@router.put("/ats-rules", response_model=AtsRulesConfig)
+def admin_update_ats_rules(
+    payload: AtsRulesConfig,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+) -> AtsRulesConfig:
+    setting = session.query(SystemSetting).filter_by(key="ats_rules").first()
+    data = payload.model_dump()
+    if setting:
+        setting.value = data
+    else:
+        setting = SystemSetting(
+            key="ats_rules",
+            value=data,
+            description="Quy chuẩn tính điểm ATS và giới hạn CV",
+            is_secret=False,
+        )
+        session.add(setting)
+    session.commit()
+    return AtsRulesConfig(**setting.value)
+
+
+# --- Job Posting Status & Moderation Endpoints ---
+
+@router.patch("/jobs/{job_id}/status")
+def admin_update_job_status(
+    job_id: str,
+    is_active: bool = Query(...),
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+) -> dict[str, Any]:
+    job = session.get(JobPostingRecord, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Tin tuyển dụng không tồn tại")
+    job.is_active = is_active
+    session.commit()
+    return {
+        "status": "success",
+        "message": f"Đã {'kích hoạt' if is_active else 'ẩn'} tin tuyển dụng thành công",
+        "job_id": job_id,
+        "is_active": is_active,
+    }
+
+
+# --- Interview AI Re-evaluation Endpoint ---
+
+@router.post("/interviews/{session_id}/re-evaluate")
+def admin_re_evaluate_interview(
+    session_id: str,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+) -> dict[str, Any]:
+    from uuid import UUID
+    try:
+        sess_uuid = UUID(session_id)
+    except Exception:
+        sess_uuid = session_id
+
+    s = session.get(InterviewSession, sess_uuid)
+    if not s:
+        raise HTTPException(status_code=404, detail="Phiên phỏng vấn không tồn tại")
+
+    turns = session.query(InterviewTurn).filter_by(session_id=s.session_id).all()
+    eval_scores = []
+    for t in turns:
+        ev = session.query(AnswerEvaluation).filter_by(turn_id=t.turn_id).first()
+        if ev and ev.score is not None:
+            eval_scores.append(float(ev.score))
+
+    if eval_scores:
+        new_avg = round(sum(eval_scores) / len(eval_scores), 1)
+        s.overall_score = new_avg
+        session.commit()
+        return {
+            "status": "success",
+            "message": f"Đã chấm lại phiên phỏng vấn. Điểm tổng kết mới: {new_avg}/100",
+            "overall_score": new_avg,
+            "evaluated_turns": len(eval_scores),
+        }
+    return {
+        "status": "success",
+        "message": "Đã hoàn tất đánh giá lại phiên phỏng vấn.",
+        "overall_score": float(s.overall_score) if s.overall_score else 0.0,
+        "evaluated_turns": 0,
+    }
+
+
+# --- Admin User Password Reset & Verification Endpoints ---
+
+@router.post("/users/{user_id}/reset-password")
+def admin_reset_user_password(
+    user_id: int,
+    payload: AdminPasswordResetIn | None = None,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> dict[str, Any]:
+    import secrets
+    target_user = session.get(User, user_id)
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Người dùng không tồn tại")
+
+    raw_password = (payload.new_password.strip() if payload and payload.new_password else None) or f"Iv_{secrets.token_hex(4)}!"
+    target_user.password_hash = container.auth_service.hasher.hash(raw_password)
+    session.commit()
+    return {
+        "status": "success",
+        "message": "Đã đặt lại mật khẩu người dùng thành công",
+        "user_id": user_id,
+        "temporary_password": raw_password,
+    }
+
+
+@router.post("/users/{user_id}/verify-email")
+def admin_verify_user_email(
+    user_id: int,
+    admin_id: int = Depends(require_admin),
+    session: Any = Depends(get_session),
+) -> dict[str, Any]:
+    target_user = session.get(User, user_id)
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Người dùng không tồn tại")
+    target_user.email_verified = True
+    session.commit()
+    return {
+        "status": "success",
+        "message": "Đã xác minh email người dùng thành công",
+        "user_id": user_id,
+    }
+
 
 
 

@@ -373,4 +373,41 @@ class JobPostingPageOut(BaseModel):
     offset: int
 
 
+# --- ATS Rules & User Administration Schemas ---
+
+class AtsRulesConfig(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    keyword_weight: float = 65.0
+    metrics_weight: float = 30.0
+    base_score: float = 5.0
+    min_passing_score: float = 70.0
+    required_sections: list[str] = [
+        "Thông tin cá nhân",
+        "Kinh nghiệm làm việc",
+        "Dự án nổi bật",
+        "Kỹ năng chuyên môn",
+        "Học vấn",
+    ]
+    standard_action_verbs: list[str] = [
+        "Xây dựng",
+        "Thiết kế",
+        "Tối ưu hóa",
+        "Triển khai",
+        "Dẫn dắt",
+        "Tái cấu trúc",
+        "Phát triển",
+        "Tích hợp",
+        "Tăng trưởng",
+        "Chỉ đạo",
+    ]
+    pro_cv_limit: int = 5
+    free_cv_limit: int = 0
+
+
+class AdminPasswordResetIn(BaseModel):
+    new_password: str | None = None
+
+
+
 
