@@ -200,3 +200,50 @@ class UserSubscriptionPageOut(BaseModel):
     limit: int
     offset: int
 
+
+class SystemSettingsOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    ai_model: str
+    ai_temperature: float
+    ai_max_tokens: int
+    ai_interviewer_persona: str
+    tts_provider: str
+    tts_default_voice: str
+    stt_provider: str
+    audio_retention_hours: int
+    max_upload_size_mb: int
+    smtp_host: str
+    smtp_port: int
+    smtp_sender_name: str
+    smtp_sender_email: str
+    maintenance_mode: bool
+    updated_at: datetime | None = None
+
+
+class SystemSettingsUpdateIn(BaseModel):
+    ai_model: str | None = None
+    ai_temperature: float | None = None
+    ai_max_tokens: int | None = None
+    ai_interviewer_persona: str | None = None
+    tts_provider: str | None = None
+    tts_default_voice: str | None = None
+    stt_provider: str | None = None
+    audio_retention_hours: int | None = None
+    max_upload_size_mb: int | None = None
+    smtp_host: str | None = None
+    smtp_port: int | None = None
+    smtp_sender_name: str | None = None
+    smtp_sender_email: str | None = None
+    maintenance_mode: bool | None = None
+
+
+class SystemHealthOut(BaseModel):
+    database_connected: bool
+    redis_connected: bool
+    audio_storage_size_mb: float
+    server_time: datetime
+    active_connections: int
+    version: str
+
+

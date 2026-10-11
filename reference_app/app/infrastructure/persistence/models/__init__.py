@@ -33,7 +33,7 @@ from .session import (
     SessionProgressSummary,
     SpeechQualityAnalysis,
 )
-from .system import AuditLog, ModerationLog
+from .system import AuditLog, ModerationLog, SystemSetting
 from .session_plan import InterviewSessionConfig, SessionQuestionSelection
 from .user import CandidateProfile, User
 from . import cv as cv
@@ -63,6 +63,7 @@ __all__ = [
     "QuestionSet",
     "QuestionSetItem",
     "ModerationLog",
+    "SystemSetting",
     "PaymentTransaction",
     "PdfReport",
     "QuestionBank",
