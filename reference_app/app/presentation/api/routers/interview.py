@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from ....application.container import ServiceContainer
@@ -115,10 +115,29 @@ def submit_turn(
     session_id: int,
     data: TurnSubmitIn,
     turn_number: int = Query(default=1, ge=1),
+    user_id: int = Depends(get_current_user_id),
     session: Any = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
 ) -> TurnSubmitResultOut:
     interview_session = container.interview_service.get_session(session, session_id)
+
+    if interview_session.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    if interview_session.status in ("completed", "cancelled"):
+        raise HTTPException(status_code=409, detail="Cannot submit turns to a completed session")
+
+    existing_turns = container.interview_service.get_turns(session, session_id)
+    target_turn = next((t for t in existing_turns if t.turn_number == turn_number), None)
+    if target_turn and target_turn.answer_text and target_turn.answer_text.strip():
+        raise HTTPException(status_code=409, detail=f"Turn #{turn_number} has already been answered")
+
+    from ....infrastructure.persistence.models.catalog import JobRole
+    role_name = "Software Engineer"
+    if interview_session.role_id:
+        r = session.get(JobRole, interview_session.role_id)
+        if r and r.role_name:
+            role_name = r.role_name
 
     cmd = SubmitTurnCommand(
         session_id=session_id,
@@ -131,7 +150,7 @@ def submit_turn(
     saved_turn, next_turn, is_completed = container.interview_service.submit_turn(
         session=session,
         command=cmd,
-        role_name="Software Engineer",
+        role_name=role_name,
         level=interview_session.level,
         language=interview_session.language,
     )
@@ -143,7 +162,7 @@ def submit_turn(
             turn_id=saved_turn.turn_id,
             question_text=saved_turn.question_text,
             answer_text=data.answer_text,
-            role_name="Software Engineer",
+            role_name=role_name,
             level=interview_session.level,
             language=interview_session.language,
         )
