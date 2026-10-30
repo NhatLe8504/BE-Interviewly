@@ -29,45 +29,119 @@ def get_audio_storage_dir() -> Path:
         return fallback
 
 
-def cleanup_stale_audio_files(max_age_seconds: int = 86400, session_factory=None) -> None:
+def cleanup_stale_audio_files(
+    max_age_seconds: int = 86400,
+    session_factory=None,
+    completed_ttl_seconds: int = 1800,
+    orphan_ttl_seconds: int = 3600,
+) -> int:
     """
-    Chỉ xóa các thư mục audio của phiên phỏng vấn ĐÃ KẾT THÚC (completed_at != None) hoặc rác cũ hơn 24 giờ.
-    Trong suốt cuộc trò chuyện phỏng vấn đang diễn ra: TUYỆT ĐỐI KHÔNG XÓA để bảo toàn toàn bộ audio cache!
+    Sweep and clean expired session audio directories:
+    - Never delete active session audio (status == in_progress and age < max_age_seconds).
+    - Remove completed, cancelled, or abandoned sessions once retention TTL (completed_ttl_seconds) expires.
+    - Remove orphan / non-existent session folders older than orphan_ttl_seconds.
+    - Prevent directory traversal and skip symlinks.
+    Returns the count of directories cleaned.
     """
+    cleaned_count = 0
     try:
         import time
         import shutil
-        base_dir = get_audio_storage_dir()
+        import logging
+        from .infrastructure.persistence.models.enums import SessionStatus
+
+        base_dir = get_audio_storage_dir().resolve()
         if not base_dir.exists():
-            return
+            return 0
+
         now = time.time()
         for item in base_dir.iterdir():
-            if not item.is_dir():
+            # Skip non-directories and symlinks
+            if not item.is_dir() or item.is_symlink():
                 continue
+
+            # Path containment verification: reject symlinks and directory traversal
+            resolved_item = item.resolve()
+            if resolved_item == base_dir or not resolved_item.is_relative_to(base_dir):
+                continue
+
             should_delete = False
-            session_id_str = item.name
-            if session_id_str.isdigit() and session_factory:
+            session_name = item.name
+            mtime = item.stat().st_mtime
+            age = now - mtime
+
+            # 1. Numeric normal session directories
+            if session_name.isdigit() and session_factory:
                 try:
                     db = session_factory()
                     from .infrastructure.persistence.models.session import InterviewSession as OrmSession
-                    sess = db.query(OrmSession).filter_by(session_id=int(session_id_str)).first()
+                    sess = db.get(OrmSession, int(session_name))
                     db.close()
-                    if sess and sess.completed_at is not None:
-                        should_delete = True
-                    elif not sess:
-                        should_delete = True
-                except Exception:
-                    pass
-            if not should_delete:
-                mtime = item.stat().st_mtime
-                if (now - mtime) > max_age_seconds:
-                    should_delete = True
+
+                    if sess:
+                        # Active interview: never delete during active session
+                        if (
+                            sess.status == SessionStatus.in_progress
+                            or str(sess.status).lower() == "in_progress"
+                        ) and sess.completed_at is None:
+                            if age >= max_age_seconds:
+                                should_delete = True
+                            else:
+                                should_delete = False
+                        elif (
+                            sess.status in (SessionStatus.completed, SessionStatus.abandoned)
+                            or str(sess.status).lower() in ("completed", "abandoned", "cancelled")
+                            or sess.completed_at is not None
+                        ):
+                            if age >= completed_ttl_seconds:
+                                should_delete = True
+                    else:
+                        # Session row not found in DB (orphan folder)
+                        if age >= orphan_ttl_seconds:
+                            should_delete = True
+                except Exception as exc:
+                    logging.getLogger("AudioCleanup").warning(
+                        "Error checking session %s during cleanup: %s", session_name, exc
+                    )
+            # 2. JD Generation Job directories (e.g. jd_abc or UUID)
+            elif (session_name.startswith("jd_") or len(session_name) == 36) and session_factory:
+                try:
+                    db = session_factory()
+                    from .infrastructure.persistence.models.jd_interview import JDGenerationJob
+                    job_key = session_name
+                    job = db.get(JDGenerationJob, job_key)
+                    if not job and session_name.startswith("jd_"):
+                        job = db.get(JDGenerationJob, session_name[3:])
+                    db.close()
+
+                    if job:
+                        if str(job.status).upper() in ("COMPLETED", "FAILED"):
+                            if age >= completed_ttl_seconds:
+                                should_delete = True
+                        else:
+                            if age >= max_age_seconds:
+                                should_delete = True
+                    else:
+                        if age >= orphan_ttl_seconds:
+                            should_delete = True
+                except Exception as exc:
+                    logging.getLogger("AudioCleanup").warning(
+                        "Error checking JD job %s during cleanup: %s", session_name, exc
+                    )
+            # 3. Fallback: if session_factory is not provided or other orphan folders
+            elif age >= (orphan_ttl_seconds if session_factory else max_age_seconds):
+                should_delete = True
 
             if should_delete:
-                shutil.rmtree(item, ignore_errors=True)
-    except Exception:
-        pass
+                shutil.rmtree(resolved_item, ignore_errors=True)
+                cleaned_count += 1
+                logging.getLogger("AudioCleanup").info(
+                    "Cleaned up expired audio folder: %s (age=%.1fs)", session_name, age
+                )
+    except Exception as exc:
+        logging.getLogger("AudioCleanup").error("Failed during audio cleanup sweep: %s", exc)
 
+    return cleaned_count
 
 def _load_env_file() -> None:
     for candidate in [

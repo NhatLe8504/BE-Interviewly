@@ -62,9 +62,25 @@ async def lifespan(app: FastAPI):
     export_openapi(app)
     if getattr(container, "job_worker", None):
         container.job_worker.start_background_scheduler()
-    yield
-    if getattr(container, "job_worker", None):
-        container.job_worker.stop()
+
+    async def _periodic_audio_cleanup():
+        while True:
+            try:
+                await asyncio.sleep(1800)
+                from .config import cleanup_stale_audio_files
+                cleanup_stale_audio_files(session_factory=container.session_factory)
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                pass
+
+    cleanup_task = asyncio.create_task(_periodic_audio_cleanup())
+    try:
+        yield
+    finally:
+        cleanup_task.cancel()
+        if getattr(container, "job_worker", None):
+            container.job_worker.stop()
 
 
 def create_app(services: ServiceContainer | None = None) -> FastAPI:

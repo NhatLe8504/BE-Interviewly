@@ -1581,8 +1581,12 @@ class VoiceInterviewOrchestrator:
                     return
                 import shutil
                 from ...config import get_audio_storage_dir
-                base_dir = get_audio_storage_dir()
-                session_dir = base_dir / str(self.session_id)
+                base_dir = get_audio_storage_dir().resolve()
+                session_dir = (base_dir / str(self.session_id)).resolve()
+                if session_dir.is_symlink():
+                    return
+                if not session_dir.is_relative_to(base_dir) or session_dir == base_dir:
+                    return
                 if session_dir.exists() and session_dir.is_dir():
                     shutil.rmtree(session_dir, ignore_errors=True)
                     logging.getLogger("VoiceOrchestrator").info(
