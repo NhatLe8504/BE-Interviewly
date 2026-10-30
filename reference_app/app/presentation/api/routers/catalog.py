@@ -9,7 +9,7 @@ import time
 from ....application.container import ServiceContainer
 import json
 from decimal import Decimal
-from ..dependencies import get_container, get_session, get_optional_user_id
+from ..dependencies import get_container, get_session, get_optional_user_id, get_current_user_id
 from ..helpers.cache import cache_response
 from ..schemas.catalog import (
     DomainOut,
@@ -561,9 +561,9 @@ def _get_user_info(session: Any, container: ServiceContainer, user_id: int | Non
 @router.post("/practice-history", response_model=PracticeHistoryOut)
 def save_practice_history(
     data: PracticeHistoryCreateIn,
+    user_id: int = Depends(get_current_user_id),
     session: Any = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
-    user_id: int | None = Depends(get_optional_user_id),
 ) -> PracticeHistoryOut:
     summary_str = json.dumps(data.questions_summary, ensure_ascii=False) if data.questions_summary else None
     record = PracticeHistoryModel(
@@ -622,9 +622,9 @@ def save_practice_history(
 @router.get("/practice-history/me", response_model=list[PracticeHistoryOut])
 def get_my_practice_history(
     limit: int = Query(50, ge=1, le=100),
+    user_id: int = Depends(get_current_user_id),
     session: Any = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
-    user_id: int | None = Depends(get_optional_user_id),
 ) -> list[PracticeHistoryOut]:
     records = container.catalog_service.repo.list_practice_history(session, user_id=user_id, limit=limit)
     out: list[PracticeHistoryOut] = []
@@ -794,9 +794,9 @@ def get_question_set_reviews(
 def submit_question_set_review(
     set_id: str,
     data: QuestionSetReviewIn,
+    user_id: int = Depends(get_current_user_id),
     session: Any = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
-    user_id: int | None = Depends(get_optional_user_id),
 ) -> QuestionSetReviewOut:
     user_name, avatar_url, is_pro = _get_user_info(session, container, user_id)
     review = QuestionSetReviewModel(
@@ -826,14 +826,21 @@ def submit_question_set_review(
 async def enqueue_question_evaluation(
     data: EvaluationQueueIn,
     background_tasks: BackgroundTasks,
+    user_id: int = Depends(get_current_user_id),
     container: ServiceContainer = Depends(get_container),
-    user_id: int | None = Depends(get_optional_user_id),
 ) -> EvaluationQueueOut:
     """
     Pipeline B: Asynchronous Background Enqueue for Question Evaluation.
     Calculates instant Quiz score (0ms) and enqueues Text STAR & Voice analysis
     into Redis / In-Memory Pull MQ without blocking the candidate's workspace.
     """
+    if data.text_answer and len(data.text_answer) > 25000:
+        raise HTTPException(status_code=400, detail="Nội dung câu trả lời vượt quá giới hạn 25,000 ký tự")
+    if data.transcript and len(data.transcript) > 25000:
+        raise HTTPException(status_code=400, detail="Nội dung bóc băng giọng nói vượt quá giới hạn 25,000 ký tự")
+    if data.audio_duration_seconds and data.audio_duration_seconds > 600:
+        raise HTTPException(status_code=400, detail="Thời lượng audio vượt quá giới hạn 600 giây")
+
     quiz_score = 15.0 if data.is_quiz_correct is True else 0.0
 
     # Enqueue task in Pull MQ (kèm user để worker lưu đánh giá đã xác minh)
@@ -853,13 +860,32 @@ async def enqueue_question_evaluation(
 
 
 @router.get("/evaluations/pull/{task_id}", response_model=EvaluationPullOut)
-def pull_evaluation_result(task_id: str) -> EvaluationPullOut:
+def pull_evaluation_result(
+    task_id: str,
+    user_id: int = Depends(get_current_user_id),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> EvaluationPullOut:
     """
     Client pulls evaluation result with minimal polling backoff.
     """
     task = eval_pull_queue.get_task(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Evaluation task not found")
+
+    task_user_id = (task.get("payload") or {}).get("user_id")
+    if task_user_id is not None and task_user_id != user_id:
+        is_admin = False
+        try:
+            caller = container.auth_service.get_user(session, user_id)
+            role_val = getattr(caller.role, "value", str(caller.role)) if getattr(caller, "role", None) else ""
+            if str(role_val).lower() == "admin":
+                is_admin = True
+        except Exception:
+            pass
+        if not is_admin:
+            raise HTTPException(status_code=403, detail="Forbidden")
+
     return EvaluationPullOut(
         task_id=task_id,
         status=task.get("status", "queued"),
@@ -989,12 +1015,15 @@ def get_question_set_detail(
 async def enqueue_text_evaluation(
     data: TextEvaluationQueueIn,
     background_tasks: BackgroundTasks,
+    user_id: int = Depends(get_current_user_id),
     container: ServiceContainer = Depends(get_container),
-    user_id: int | None = Depends(get_optional_user_id),
 ) -> EvaluationQueueOut:
     """
     Decoupled Endpoint: Enqueues Written Essay (35% STAR) to Background Pull MQ.
     """
+    if data.answer_text and len(data.answer_text) > 25000:
+        raise HTTPException(status_code=400, detail="Nội dung câu trả lời vượt quá giới hạn 25,000 ký tự")
+
     payload = data.model_dump()
     payload["user_id"] = user_id
     task_id = eval_pull_queue.enqueue(payload)
@@ -1012,12 +1041,15 @@ async def enqueue_text_evaluation(
 async def enqueue_voice_evaluation(
     data: VoiceEvaluationQueueIn,
     background_tasks: BackgroundTasks,
+    user_id: int = Depends(get_current_user_id),
     container: ServiceContainer = Depends(get_container),
-    user_id: int | None = Depends(get_optional_user_id),
 ) -> EvaluationQueueOut:
     """
     Decoupled Endpoint: Enqueues Spoken STT Transcript + Telemetry (50%) to Background Pull MQ.
     """
+    if data.transcript and len(data.transcript) > 25000:
+        raise HTTPException(status_code=400, detail="Nội dung bóc băng giọng nói vượt quá giới hạn 25,000 ký tự")
+
     payload = data.model_dump()
     payload["user_id"] = user_id
     task_id = eval_pull_queue.enqueue(payload)
@@ -1035,12 +1067,18 @@ async def enqueue_voice_evaluation(
 async def enqueue_overall_synthesis(
     data: OverallSynthesisIn,
     background_tasks: BackgroundTasks,
+    user_id: int = Depends(get_current_user_id),
     container: ServiceContainer = Depends(get_container),
 ) -> EvaluationQueueOut:
     """
     Final Overall Synthesis: Summarizes all N evaluated questions into overarching assessment.
     """
-    task_id = eval_pull_queue.enqueue(data.model_dump())
+    if len(data.evaluated_questions) > 50:
+        raise HTTPException(status_code=400, detail="Số lượng câu hỏi tổng hợp vượt quá giới hạn 50 câu")
+
+    payload = data.model_dump()
+    payload["user_id"] = user_id
+    task_id = eval_pull_queue.enqueue(payload)
     background_tasks.add_task(eval_pull_queue.process_synthesis_task_async, task_id, container)
 
     return EvaluationQueueOut(
