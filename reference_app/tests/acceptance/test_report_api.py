@@ -115,3 +115,50 @@ def test_pdf_report_not_found(client) -> None:
     headers, _ = auth_headers(client)
     resp = client.get("/api/v1/sessions/999999/pdf/download", headers=headers)
     assert resp.status_code == 404
+
+
+def test_pdf_report_ownership_boundaries(client) -> None:
+    headers_a, user_a_id = auth_headers(client)
+    headers_b, user_b_id = auth_headers(client)
+
+    session_factory = client.app.state.services.session_factory
+    db = session_factory()
+    try:
+        from decimal import Decimal
+        from app.infrastructure.persistence.models.session import InterviewSession
+        from app.infrastructure.persistence.models.enums import Language, SessionMode, SessionStatus
+
+        sess = InterviewSession(
+            candidate_id=user_a_id,
+            language=Language.vi,
+            mode=SessionMode.text,
+            status=SessionStatus.completed,
+            total_score=Decimal("8.0"),
+        )
+        db.add(sess)
+        db.commit()
+        db.refresh(sess)
+        session_id = sess.session_id
+    finally:
+        db.close()
+
+    # 1. Anonymous request -> 401
+    assert client.get(f"/api/v1/sessions/{session_id}/pdf/download").status_code == 401
+    assert client.get(f"/api/v1/sessions/{session_id}/pdf/preview").status_code == 401
+    assert client.get(f"/api/v1/sessions/{session_id}/pdf/meta").status_code == 401
+
+    # 2. Other user request -> 403
+    assert client.get(f"/api/v1/sessions/{session_id}/pdf/download", headers=headers_b).status_code == 403
+    assert client.get(f"/api/v1/sessions/{session_id}/pdf/preview", headers=headers_b).status_code == 403
+    assert client.get(f"/api/v1/sessions/{session_id}/pdf/meta", headers=headers_b).status_code == 403
+
+    # 3. Owner request via query token -> 200
+    token_a = headers_a["Authorization"].split("Bearer ", 1)[1]
+    query_resp = client.get(f"/api/v1/sessions/{session_id}/pdf/download?token={token_a}")
+    assert query_resp.status_code == 200
+    assert query_resp.headers["content-type"] == "application/pdf"
+
+    # 4. Meta returns authorized download url
+    meta_resp = client.get(f"/api/v1/sessions/{session_id}/pdf/meta", headers=headers_a)
+    assert meta_resp.status_code == 200
+    assert meta_resp.json()["file_url"] == f"/api/v1/sessions/{session_id}/pdf/download"
