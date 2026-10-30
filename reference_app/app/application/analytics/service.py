@@ -9,7 +9,7 @@ from ...domain.analytics import (
     SessionDetail,
     SessionResultReport,
 )
-from ...domain.errors import NotFoundError
+from ...domain.errors import ForbiddenError, NotFoundError
 from ..common import PageRequest, PageResult
 from .ports import AnalyticsRepoPort
 
@@ -56,6 +56,10 @@ class AnalyticsService:
     ) -> SessionDetail:
         detail = self._repo.get_session_detail(session, candidate_id, session_id)
         if detail is None:
+            from ...infrastructure.persistence.models.session import InterviewSession as OrmSession
+            sess = session.get(OrmSession, session_id)
+            if sess is not None and sess.user_id != candidate_id:
+                raise ForbiddenError("Forbidden")
             raise NotFoundError(f"interview session {session_id} not found")
         return detail
 
@@ -64,5 +68,9 @@ class AnalyticsService:
     ) -> SessionResultReport:
         result = self._repo.get_session_result(session, candidate_id, session_id)
         if result is None:
+            from ...infrastructure.persistence.models.session import InterviewSession as OrmSession
+            sess = session.get(OrmSession, session_id)
+            if sess is not None and sess.user_id != candidate_id:
+                raise ForbiddenError("Forbidden")
             raise NotFoundError(f"result for session {session_id} not found")
         return result

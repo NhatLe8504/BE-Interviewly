@@ -71,3 +71,23 @@ def get_optional_user_id(
         return container.auth_service.tokens.parse(credentials.credentials)
     except Exception:
         return None
+
+
+def ensure_session_owner(
+    session_id: int,
+    user_id: int,
+    session: Any,
+    container: ServiceContainer,
+    allow_admin: bool = True,
+) -> Any:
+    interview_session = container.interview_service.get_session(session, session_id)
+    if interview_session.user_id != user_id:
+        if allow_admin:
+            try:
+                user = container.auth_service.get_user(session, user_id)
+                if getattr(user, "role", None) == "admin":
+                    return interview_session
+            except Exception:
+                pass
+        raise ForbiddenError("Forbidden")
+    return interview_session

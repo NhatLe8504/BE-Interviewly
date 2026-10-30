@@ -73,7 +73,6 @@ def get_history(
 
 
 @router.get("/api/v1/analytics/sessions/{session_id}", response_model=SessionDetailOut)
-@router.get("/api/v1/interviews/sessions/{session_id}", response_model=SessionDetailOut)
 def get_session_detail(
     session_id: int,
     user_id: int = Depends(get_current_user_id),
@@ -85,7 +84,6 @@ def get_session_detail(
 
 
 @router.get("/api/v1/analytics/sessions/{session_id}/result", response_model=SessionResultOut)
-@router.get("/api/v1/interviews/sessions/{session_id}/result", response_model=SessionResultOut, operation_id="get_interview_session_result_analytics")
 def get_session_result(
     session_id: int,
     user_id: int = Depends(get_current_user_id),

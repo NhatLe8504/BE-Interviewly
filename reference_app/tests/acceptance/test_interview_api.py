@@ -125,3 +125,80 @@ def test_start_session_requires_authentication(client) -> None:
     )
 
     assert response.status_code == 401
+
+
+
+from unittest.mock import patch
+
+def test_interview_read_ownership_and_boundaries(client) -> None:
+    async def mock_stream(self, text):
+        yield "Xin"
+        yield " chào"
+
+    with patch(
+        "app.infrastructure.llm.openai_adapter.OpenAILLMAdapter.generate_first_question",
+        return_value="Xin chào, hãy giới thiệu bản thân.",
+    ), patch(
+        "app.infrastructure.llm.openai_adapter.OpenAILLMAdapter.stream_question",
+        mock_stream,
+    ):
+        # 1. User A creates a session
+        headers_a = get_authenticated_headers(client)
+        start_resp = client.post(
+            "/api/v1/interviews/sessions",
+            json={
+                "role_name": "Fullstack Engineer",
+                "level": "junior",
+                "language": "vi",
+                "mode": "text",
+            },
+            headers=headers_a,
+        )
+        assert start_resp.status_code == 201
+        session_data = start_resp.json()
+        session_id = session_data["session_id"]
+        first_turn_id = session_data["current_turn"]["turn_id"]
+
+        # 2. User B
+        headers_b = get_authenticated_headers(client)
+
+        # 3. GET session details boundaries
+        # Anonymous -> 401
+        assert client.get(f"/api/v1/interviews/sessions/{session_id}").status_code == 401
+        # Other user -> 403
+        assert client.get(f"/api/v1/interviews/sessions/{session_id}", headers=headers_b).status_code == 403
+        # Nonexistent session -> 404
+        assert client.get("/api/v1/interviews/sessions/999999", headers=headers_a).status_code == 404
+        # Owner -> 200
+        owner_resp = client.get(f"/api/v1/interviews/sessions/{session_id}", headers=headers_a)
+        assert owner_resp.status_code == 200
+        assert owner_resp.json()["session_id"] == session_id
+
+        # 4. SSE Stream boundaries
+        # Anonymous -> 401
+        assert client.get(f"/api/v1/interviews/sessions/{session_id}/stream").status_code == 401
+        # Other user -> 403
+        assert client.get(f"/api/v1/interviews/sessions/{session_id}/stream", headers=headers_b).status_code == 403
+        # Owner via Bearer header -> 200
+        assert client.get(f"/api/v1/interviews/sessions/{session_id}/stream", headers=headers_a).status_code == 200
+        # Owner via query token -> 200
+        token_a = headers_a["Authorization"].split("Bearer ", 1)[1]
+        query_stream_resp = client.get(f"/api/v1/interviews/sessions/{session_id}/stream?token={token_a}")
+        assert query_stream_resp.status_code == 200
+        assert "text/event-stream" in query_stream_resp.headers["content-type"]
+
+        # 5. Evaluation boundaries
+        # Anonymous -> 401
+        assert client.get(f"/api/v1/interviews/sessions/{session_id}/turns/{first_turn_id}/evaluation").status_code == 401
+        # Other user -> 403
+        assert client.get(f"/api/v1/interviews/sessions/{session_id}/turns/{first_turn_id}/evaluation", headers=headers_b).status_code == 403
+        # Mismatched turn ID that does not belong to session -> 404
+        assert client.get(f"/api/v1/interviews/sessions/{session_id}/turns/999999/evaluation", headers=headers_a).status_code == 404
+
+        # 6. Session Result boundaries
+        # Anonymous -> 401
+        assert client.get(f"/api/v1/interviews/sessions/{session_id}/result").status_code == 401
+        # Other user -> 403
+        assert client.get(f"/api/v1/interviews/sessions/{session_id}/result", headers=headers_b).status_code == 403
+        # Owner -> 200
+        assert client.get(f"/api/v1/interviews/sessions/{session_id}/result", headers=headers_a).status_code == 200

@@ -6,7 +6,13 @@ from fastapi import APIRouter, Depends
 
 from ....application.container import ServiceContainer
 from ....application.evaluation.commands import GenerateSessionSummaryCommand
-from ..dependencies import get_container, get_session
+from ....domain.errors import NotFoundError
+from ..dependencies import (
+    ensure_session_owner,
+    get_container,
+    get_current_user_id,
+    get_session,
+)
 from ..schemas.evaluation import (
     RubricEvaluationOut,
     SessionResultOut,
@@ -24,18 +30,20 @@ router = APIRouter(prefix="/api/v1/interviews", tags=["evaluations"])
 def get_turn_evaluation(
     session_id: int,
     turn_id: int,
+    user_id: int = Depends(get_current_user_id),
     session: Any = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
 ) -> RubricEvaluationOut:
-    turn_eval = container.evaluation_service.get_turn_evaluation(session, turn_id)
+    interview_session = ensure_session_owner(session_id, user_id, session, container)
 
-    # If speech service is available, analyze speech metrics
-    turn = None
     turns = container.interview_service.get_turns(session, session_id)
-    for t in turns:
-        if t.turn_id == turn_id:
-            turn = t
-            break
+    turn = next((t for t in turns if t.turn_id == turn_id), None)
+    if turn is None:
+        raise NotFoundError(f"Turn #{turn_id} not found in session #{session_id}")
+
+    turn_eval = container.evaluation_service.get_turn_evaluation(session, turn_id)
+    if turn_eval is None:
+        raise NotFoundError(f"Evaluation for turn #{turn_id} not found")
 
     speech_out = None
     if turn and turn.answer_text and container.speech_service is not None:
@@ -76,10 +84,11 @@ def get_turn_evaluation(
 )
 def get_session_result(
     session_id: int,
+    user_id: int = Depends(get_current_user_id),
     session: Any = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
 ) -> SessionResultOut:
-    interview_session = container.interview_service.get_session(session, session_id)
+    interview_session = ensure_session_owner(session_id, user_id, session, container)
     turns = container.interview_service.get_turns(session, session_id)
 
     eval_list = []

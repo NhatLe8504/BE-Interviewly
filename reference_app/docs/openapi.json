@@ -6270,6 +6270,11 @@
         ],
         "summary": "Submit Turn",
         "operationId": "submit_turn_api_v1_interviews_sessions__session_id__turns_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "session_id",
@@ -7476,6 +7481,11 @@
         ],
         "summary": "Get Turn Audio",
         "operationId": "get_turn_audio_api_v1_voice_audio__session_id___filename__head",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "session_id",
@@ -7493,6 +7503,22 @@
             "schema": {
               "type": "string",
               "title": "Filename"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
             }
           }
         ],
@@ -7523,6 +7549,11 @@
         ],
         "summary": "Get Turn Audio",
         "operationId": "get_turn_audio_api_v1_voice_audio__session_id___filename__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "session_id",
@@ -7540,6 +7571,22 @@
             "schema": {
               "type": "string",
               "title": "Filename"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
             }
           }
         ],

@@ -9,7 +9,15 @@ from fastapi.responses import StreamingResponse
 from ....application.container import ServiceContainer
 from ....application.evaluation.commands import EvaluateTurnCommand
 from ....application.interview.commands import StartSessionCommand, SubmitTurnCommand
-from ..dependencies import get_container, get_current_user_id, get_session
+from fastapi.security import HTTPAuthorizationCredentials
+from ....domain.errors import AuthError
+from ..dependencies import (
+    bearer_scheme,
+    ensure_session_owner,
+    get_container,
+    get_current_user_id,
+    get_session,
+)
 from ..schemas.auth import UserOut
 from ..schemas.interview import (
     SessionOut,
@@ -82,10 +90,11 @@ def start_session(
 @router.get("/sessions/{session_id}", response_model=SessionOut)
 def get_session_details(
     session_id: int,
+    user_id: int = Depends(get_current_user_id),
     session: Any = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
 ) -> SessionOut:
-    interview_session = container.interview_service.get_session(session, session_id)
+    interview_session = ensure_session_owner(session_id, user_id, session, container)
     turns = container.interview_service.get_turns(session, session_id)
     last_turn = turns[-1] if turns else None
 
@@ -119,10 +128,7 @@ def submit_turn(
     session: Any = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
 ) -> TurnSubmitResultOut:
-    interview_session = container.interview_service.get_session(session, session_id)
-
-    if interview_session.user_id != user_id:
-        raise HTTPException(status_code=403, detail="Forbidden")
+    interview_session = ensure_session_owner(session_id, user_id, session, container)
 
     if interview_session.status in ("completed", "cancelled"):
         raise HTTPException(status_code=409, detail="Cannot submit turns to a completed session")
@@ -202,10 +208,16 @@ def submit_turn(
 @router.get("/sessions/{session_id}/stream")
 async def stream_question(
     session_id: int,
+    token: str | None = Query(default=None),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     session: Any = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
 ) -> StreamingResponse:
-    interview_session = container.interview_service.get_session(session, session_id)
+    auth_token = credentials.credentials if (credentials and credentials.credentials) else token
+    if not auth_token:
+        raise AuthError("missing authentication token")
+    user_id = container.auth_service.tokens.parse(auth_token)
+    interview_session = ensure_session_owner(session_id, user_id, session, container)
     turns = container.interview_service.get_turns(session, session_id)
     question_text = turns[-1].question_text if turns else "Xin chào, hãy bắt đầu buổi phỏng vấn."
 
