@@ -19,7 +19,7 @@ from ....infrastructure.persistence.models.jd_interview import (
     JobAnalysisRecord,
     NormalizedJDRecord,
 )
-from ..dependencies import get_container, get_optional_user_id, get_session
+from ..dependencies import get_container, get_current_user_id, get_optional_user_id, get_session
 from ..schemas.jd_interview import (
     JDJobStatusOut,
     JDJobSummaryOut,
@@ -82,11 +82,11 @@ def _init_job(session: Session, user_id: int, source_type: str, checksum: str, i
 @router.post("/text", response_model=JDJobStatusOut, status_code=status.HTTP_202_ACCEPTED)
 async def submit_jd_text(
     payload: JDTextSubmissionIn,
-    user_id: int | None = Depends(get_optional_user_id),
+    user_id: int = Depends(get_current_user_id),
     session: Session = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
 ) -> JDJobStatusOut:
-    effective_user_id = user_id if user_id and user_id > 0 else 1
+    effective_user_id = user_id
     checksum = NormalizedJD.calculate_checksum(payload.text)
     job_id = _init_job(session, effective_user_id, JDSourceType.text.value, checksum, is_public=payload.is_public)
 
@@ -121,11 +121,11 @@ async def submit_jd_text(
 @router.post("/url", response_model=JDJobStatusOut, status_code=status.HTTP_202_ACCEPTED)
 async def submit_jd_url(
     payload: JDUrlSubmissionIn,
-    user_id: int | None = Depends(get_optional_user_id),
+    user_id: int = Depends(get_current_user_id),
     session: Session = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
 ) -> JDJobStatusOut:
-    effective_user_id = user_id if user_id and user_id > 0 else 1
+    effective_user_id = user_id
     checksum = NormalizedJD.calculate_checksum(payload.url)
     job_id = _init_job(session, effective_user_id, JDSourceType.url.value, checksum, is_public=payload.is_public)
 
@@ -164,11 +164,11 @@ async def submit_jd_file(
     difficulty: int | None = Form(None),
     language: str = Form("vi"),
     is_public: bool = Form(False),
-    user_id: int | None = Depends(get_optional_user_id),
+    user_id: int = Depends(get_current_user_id),
     session: Session = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
 ) -> JDJobStatusOut:
-    effective_user_id = user_id if user_id and user_id > 0 else 1
+    effective_user_id = user_id
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Tệp tải lên không có dữ liệu")
@@ -345,26 +345,19 @@ def get_community_jd_jobs(
 def get_my_jd_jobs(
     limit: int = 30,
     offset: int = 0,
-    user_id: int | None = Depends(get_optional_user_id),
+    user_id: int = Depends(get_current_user_id),
     session: Session = Depends(get_session),
 ) -> list[JDJobSummaryOut]:
-    effective_user_id = user_id if user_id and user_id > 0 else 1
     query = (
         session.query(JDGenerationJob)
-        .filter(JDGenerationJob.user_id == effective_user_id)
+        .filter(JDGenerationJob.user_id == user_id)
         .order_by(JDGenerationJob.created_at.desc())
         .offset(offset)
         .limit(limit)
     )
     jobs = query.all()
     if not jobs:
-        jobs = (
-            session.query(JDGenerationJob)
-            .order_by(JDGenerationJob.created_at.desc())
-            .offset(offset)
-            .limit(limit)
-            .all()
-        )
+        return []
 
     return [_format_job_summary(job, session=session) for job in jobs]
 
@@ -372,6 +365,7 @@ def get_my_jd_jobs(
 @router.get("/jobs/{job_id}/status", response_model=JDJobStatusOut)
 def get_job_status(
     job_id: str,
+    user_id: int | None = Depends(get_optional_user_id),
     session: Session = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
 ) -> JDJobStatusOut:
@@ -393,6 +387,20 @@ def get_job_status(
     job_record = session.get(JDGenerationJob, job_id)
     if not job_record:
         raise HTTPException(status_code=404, detail="Không tìm thấy thông tin tiến trình JD này")
+
+    # Private job privacy protection: enforce owner or admin access
+    if not bool(getattr(job_record, "is_public", False)):
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Vui lòng đăng nhập để xem tiến trình JD này")
+        if job_record.user_id != user_id:
+            try:
+                user = container.auth_service.get_user(session, user_id)
+                if getattr(user, "role", None) != "admin":
+                    raise HTTPException(status_code=403, detail="Forbidden: You do not own this JD interview job")
+            except HTTPException:
+                raise
+            except Exception:
+                raise HTTPException(status_code=403, detail="Forbidden: You do not own this JD interview job")
 
     result = None
     if job_record.status == JDJobStatus.COMPLETED.value:
@@ -440,13 +448,23 @@ def get_job_status(
 def start_interview_from_jd_job(
     job_id: str,
     payload: JDStartSessionIn,
-    user_id: int | None = Depends(get_optional_user_id),
+    user_id: int = Depends(get_current_user_id),
     session: Session = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
 ) -> dict[str, Any]:
     job_record = session.get(JDGenerationJob, job_id)
     if not job_record:
         raise HTTPException(status_code=404, detail="Không tìm thấy tiến trình tạo phỏng vấn")
+
+    if not bool(getattr(job_record, "is_public", False)) and job_record.user_id != user_id:
+        try:
+            user = container.auth_service.get_user(session, user_id)
+            if getattr(user, "role", None) != "admin":
+                raise HTTPException(status_code=403, detail="Forbidden: You do not own this JD interview job")
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=403, detail="Forbidden: You do not own this JD interview job")
 
     if job_record.status != JDJobStatus.COMPLETED.value:
         raise HTTPException(status_code=400, detail="Kịch bản phỏng vấn chưa hoàn tất, vui lòng chờ trong giây lát")
@@ -456,7 +474,7 @@ def start_interview_from_jd_job(
     if not script_rec or not bp_rec or not script_rec.items:
         raise HTTPException(status_code=400, detail="Dữ liệu kịch bản không hợp lệ")
 
-    effective_user_id = user_id if user_id and user_id > 0 else job_record.user_id
+    effective_user_id = user_id
 
     from ....infrastructure.persistence.models.session import InterviewSession as OrmInterviewSession, InterviewTurn as OrmInterviewTurn
     from ....infrastructure.persistence.models.enums import ExperienceLevel, Language, SessionMode, SessionStatus, TurnSpeaker
