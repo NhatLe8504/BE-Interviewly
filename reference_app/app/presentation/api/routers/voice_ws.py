@@ -9,7 +9,9 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, WebSock
 from fastapi.responses import FileResponse, StreamingResponse
 from pathlib import Path
 from sqlalchemy.orm import Session
-from ..dependencies import get_container, get_optional_user_id, get_session
+import re
+from fastapi.security import HTTPAuthorizationCredentials
+from ..dependencies import bearer_scheme, get_container, get_optional_user_id, get_session
 from ..schemas.voice import VoiceOptionsOut
 from ....application.voice.voice_catalog import get_voice_catalog_options
 from ....application.voice.entitlement import check_user_voice_entitlement
@@ -445,14 +447,67 @@ async def preview_voice_sample(
     )
 
 
+SAFE_AUDIO_FILENAME_REGEX = re.compile(r"^turn_\d+_(ai\.mp3|user\.(webm|wav|mp3|ogg))$")
+
+
 @router.get("/api/v1/voice/audio/{session_id}/{filename}")
 @router.head("/api/v1/voice/audio/{session_id}/{filename}")
-async def get_turn_audio(session_id: str, filename: str):
+async def get_turn_audio(
+    session_id: str,
+    filename: str,
+    token: str | None = None,
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    session: Session = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+):
+    # 1. Filename format validation (fail closed against path traversal / arbitrary files)
+    if not SAFE_AUDIO_FILENAME_REGEX.match(filename):
+        raise HTTPException(status_code=400, detail="Invalid audio filename format")
+
+    # 2. Session ID validation
+    try:
+        numeric_session_id = int(session_id)
+        if numeric_session_id <= 0:
+            raise ValueError()
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid session ID")
+
+    # 3. Authenticate user from query param or Bearer header
+    auth_token = token
+    if not auth_token and credentials and credentials.credentials:
+        auth_token = credentials.credentials
+
+    if not auth_token or not getattr(container, "auth_service", None):
+        raise HTTPException(status_code=401, detail="Authentication token required")
+
+    try:
+        authenticated_user_id = container.auth_service.tokens.parse(auth_token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    # 4. Authorize session ownership
+    from ....infrastructure.persistence.models.session import InterviewSession as DbInterviewSession
+    session_rec = session.get(DbInterviewSession, numeric_session_id)
+    if not session_rec:
+        raise HTTPException(status_code=404, detail="Interview session not found")
+
+    if session_rec.candidate_id != authenticated_user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    # 5. Path resolution beneath base_dir / session_id with traversal and symlink checks
     from ....config import get_audio_storage_dir
-    base_dir = get_audio_storage_dir()
-    file_path = base_dir / session_id / filename
-    if not file_path.exists():
+    base_dir = get_audio_storage_dir().resolve()
+    session_dir = (base_dir / str(numeric_session_id)).resolve()
+    if not session_dir.is_relative_to(base_dir):
+        raise HTTPException(status_code=400, detail="Invalid audio storage path")
+
+    file_path = (session_dir / filename).resolve()
+    if not file_path.is_relative_to(session_dir) or file_path.is_symlink():
+        raise HTTPException(status_code=400, detail="Invalid audio file path")
+
+    if not file_path.is_file():
         raise HTTPException(status_code=404, detail="Audio file not found")
+
     media_type = "audio/mpeg" if filename.endswith(".mp3") else "audio/webm"
     return FileResponse(file_path, media_type=media_type, headers={"Accept-Ranges": "bytes"})
 
@@ -463,28 +518,83 @@ async def upload_user_turn_audio(
     turn_id: int,
     file: UploadFile = File(...),
     session: Session = Depends(get_session),
-    user_id: int | None = Depends(get_optional_user_id),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    container: ServiceContainer = Depends(get_container),
 ):
-    content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Empty audio payload")
+    # 1. Require authenticated user
+    if not credentials or not credentials.credentials or not getattr(container, "auth_service", None):
+        raise HTTPException(status_code=401, detail="Missing bearer token")
 
-    from ....config import get_audio_storage_dir
-    base_dir = get_audio_storage_dir()
-    session_dir = base_dir / str(session_id)
-    session_dir.mkdir(parents=True, exist_ok=True)
-    filename = f"turn_{turn_id}_user.webm"
-    (session_dir / filename).write_bytes(content)
-    audio_url = f"/api/v1/voice/audio/{session_id}/{filename}"
+    try:
+        authenticated_user_id = container.auth_service.tokens.parse(credentials.credentials)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
 
-    from ....infrastructure.persistence.models.session import InterviewTurn as OrmInterviewTurn
+    # 2. Verify session ownership and active status
+    from ....infrastructure.persistence.models.session import (
+        InterviewSession as DbInterviewSession,
+        InterviewTurn as OrmInterviewTurn,
+    )
+    from ....infrastructure.persistence.models.enums import SessionStatus
+
+    session_rec = session.get(DbInterviewSession, session_id)
+    if not session_rec:
+        raise HTTPException(status_code=404, detail="Interview session not found")
+
+    if session_rec.candidate_id != authenticated_user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    if session_rec.status in (SessionStatus.COMPLETED, SessionStatus.CANCELLED) or str(session_rec.status).lower() in ("completed", "cancelled"):
+        raise HTTPException(status_code=409, detail="Cannot upload audio to a completed or cancelled session")
+
+    # 3. Verify turn ownership/existence before writing files
     turn_rec = (
         session.query(OrmInterviewTurn)
         .filter_by(session_id=session_id, turn_number=turn_id)
         .first()
     )
-    if turn_rec:
-        turn_rec.user_audio_url = audio_url
-        session.commit()
+    if not turn_rec:
+        raise HTTPException(status_code=404, detail="Interview turn not found")
+
+    # 4. Validate audio file size and media type
+    MAX_AUDIO_SIZE = 25 * 1024 * 1024  # 25 MB limit
+    content = await file.read(MAX_AUDIO_SIZE + 1)
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty audio payload")
+
+    if len(content) > MAX_AUDIO_SIZE:
+        raise HTTPException(status_code=413, detail="Audio file exceeds maximum size limit of 25MB")
+
+    content_type = (file.content_type or "").lower()
+    allowed_types = {
+        "audio/webm",
+        "audio/ogg",
+        "audio/wav",
+        "audio/mpeg",
+        "audio/mp3",
+        "video/webm",
+        "application/octet-stream",
+    }
+    if content_type and content_type not in allowed_types:
+        raise HTTPException(status_code=415, detail=f"Unsupported audio media type: {content_type}")
+
+    # 5. Restrict to server-issued filename & resolve beneath session directory
+    filename = f"turn_{turn_id}_user.webm"
+    from ....config import get_audio_storage_dir
+    base_dir = get_audio_storage_dir().resolve()
+    session_dir = (base_dir / str(session_id)).resolve()
+    if not session_dir.is_relative_to(base_dir):
+        raise HTTPException(status_code=400, detail="Invalid audio storage path")
+
+    session_dir.mkdir(parents=True, exist_ok=True)
+    file_path = (session_dir / filename).resolve()
+    if not file_path.is_relative_to(session_dir) or file_path.is_symlink():
+        raise HTTPException(status_code=400, detail="Invalid audio file path")
+
+    file_path.write_bytes(content)
+    audio_url = f"/api/v1/voice/audio/{session_id}/{filename}"
+
+    turn_rec.user_audio_url = audio_url
+    session.commit()
 
     return {"status": "ok", "audio_url": audio_url}
