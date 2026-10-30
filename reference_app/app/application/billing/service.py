@@ -5,7 +5,7 @@ from decimal import Decimal
 import uuid
 from typing import Any
 
-from ...domain.errors import DomainValidationError, NotFoundError
+from ...domain.errors import DomainValidationError, ForbiddenError, NotFoundError
 from ..common import ClockPort
 from .commands import CheckQuotaCommand, CreateCheckoutCommand, VerifyPaymentCommand
 from .ports import (
@@ -185,6 +185,12 @@ class PaymentService:
         tx = self.transaction_repo.get_by_gateway_ref(session, "xgate", cmd.transaction_ref)
         if tx is None:
             raise NotFoundError(f"Không tìm thấy giao dịch: {cmd.transaction_ref}")
+
+        if tx.user_subscription_id:
+            from ...infrastructure.persistence.models.billing import UserSubscription
+            sub_row = session.get(UserSubscription, tx.user_subscription_id)
+            if sub_row is not None and sub_row.user_id != cmd.user_id:
+                raise ForbiddenError("Forbidden")
 
         # Idempotency check: already verified
         if tx.status == "success":

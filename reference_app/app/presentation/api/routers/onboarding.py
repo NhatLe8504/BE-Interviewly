@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import desc, func, select
 
 from ....application.container import ServiceContainer
-from ..dependencies import get_container, get_session, bearer_scheme
+from ..dependencies import get_container, get_session, bearer_scheme, require_admin
 from ..schemas.admin import AuditLogOut
 from ....infrastructure.persistence.models.onboarding import OnboardingResponse
 from ....infrastructure.persistence.models.user import User, CandidateProfile
@@ -186,6 +186,7 @@ def reset_onboarding_status(
 
 @admin_router.get("/stats")
 def get_admin_onboarding_stats(
+    admin_id: int = Depends(require_admin),
     session: Any = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
 ) -> dict[str, Any]:

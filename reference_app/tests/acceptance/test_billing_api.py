@@ -163,3 +163,35 @@ def test_xgate_webhook_flow(client) -> None:
     sub_resp = client.get("/api/v1/billing/subscriptions/me", headers=headers)
     assert sub_resp.status_code == 200
     assert sub_resp.json()["status"] == "active"
+
+
+
+def test_billing_ownership_boundaries(client) -> None:
+    headers_a = auth_headers(client, "user_bill_a@example.com")
+    headers_b = auth_headers(client, "user_bill_b@example.com")
+
+    # 1. Anonymous rejected from user billing endpoints
+    assert client.post("/api/v1/billing/checkout", json={"plan_id": 1}).status_code == 401
+    assert client.post("/api/v1/billing/verify-payment", json={"transaction_ref": "IC123"}).status_code == 401
+    assert client.get("/api/v1/billing/subscriptions/me").status_code == 401
+    assert client.get("/api/v1/billing/payments/history").status_code == 401
+    assert client.get("/api/v1/billing/quota").status_code == 401
+
+    # 2. User A creates checkout
+    plans = client.get("/api/v1/billing/plans").json()
+    pro_plan = next(p for p in plans if p["plan_name"] == "Pro Monthly")
+    chk = client.post(
+        "/api/v1/billing/checkout",
+        headers=headers_a,
+        json={"plan_id": pro_plan["plan_id"], "payment_gateway": "xgate"},
+    )
+    assert chk.status_code == 200
+    txn_ref_a = chk.json()["transaction_ref"]
+
+    # 3. User B cannot verify User A's transaction (403 Forbidden)
+    verify_b = client.post(
+        "/api/v1/billing/verify-payment",
+        headers=headers_b,
+        json={"transaction_ref": txn_ref_a},
+    )
+    assert verify_b.status_code == 403
