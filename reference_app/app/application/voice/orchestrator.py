@@ -106,6 +106,18 @@ class VoiceInterviewOrchestrator:
         self.turns_in_current_stage: int = 0
 
         self.state: VoiceSessionState = VoiceSessionState.IDLE
+        if self.session_factory:
+            db_chk = self.session_factory()
+            try:
+                from ...infrastructure.persistence.models.session import InterviewSession as DbInterviewSession
+                from ...infrastructure.persistence.models.enums import SessionStatus
+                s_row = db_chk.get(DbInterviewSession, self.session_id)
+                if s_row and (s_row.status == SessionStatus.COMPLETED or str(s_row.status).lower() == "completed"):
+                    self.state = VoiceSessionState.COMPLETED
+            except Exception:
+                pass
+            finally:
+                db_chk.close()
         self.current_turn_id: int = 1
         self.current_generation_id: str | None = None
         self._active_task: asyncio.Task | None = None
@@ -517,6 +529,19 @@ class VoiceInterviewOrchestrator:
         mock_mode: str | None = None,
         total_duration_minutes: int | None = None,
     ) -> None:
+        if self.state == VoiceSessionState.COMPLETED:
+            if self.connection.is_open():
+                await self.connection.send_event({
+                    "type": VoiceEventType.STATE.value,
+                    "state": VoiceSessionState.COMPLETED.value,
+                    "is_completed": True,
+                })
+                await self.connection.send_event({
+                    "type": VoiceEventType.DONE.value,
+                    "turn_id": self.current_turn_id,
+                    "is_completed": True,
+                })
+            return
         if role_name:
             self.role_name = role_name
         if level:
@@ -653,6 +678,14 @@ class VoiceInterviewOrchestrator:
     async def handle_final_transcript(
         self, text: str, duration_seconds: float = 0.0,
     ) -> None:
+        if self.state == VoiceSessionState.COMPLETED:
+            if self.connection.is_open():
+                await self.connection.send_event({
+                    "type": "error",
+                    "message": "Phiên phỏng vấn đã kết thúc, không thể gửi câu trả lời mới.",
+                    "is_completed": True,
+                })
+            return
         clean_text = text.strip()
         if not clean_text:
             return
@@ -1144,18 +1177,26 @@ class VoiceInterviewOrchestrator:
                     self._persist_ai_turn(turn_id, final_text, turn_intent, audio_url=ai_audio_url)
 
                 if is_session_finishing:
-                    await self.set_state(VoiceSessionState.COMPLETED)
-                    self._schedule_session_tracking_sync()
-                    self._schedule_audio_cleanup(delay_seconds=120)
-                    if self.connection.is_open():
-                        await self.connection.send_event({
-                            "type": VoiceEventType.DONE.value,
-                            "turn_id": turn_id,
-                            "generation_id": gen_id,
-                            "full_text": final_text,
-                            "audio_url": ai_audio_url,
-                            "is_completed": True,
-                        })
+                    persisted = await asyncio.to_thread(self._persist_session_completion)
+                    if persisted:
+                        await self.set_state(VoiceSessionState.COMPLETED)
+                        self._schedule_session_tracking_sync()
+                        self._schedule_audio_cleanup(delay_seconds=120)
+                        if self.connection.is_open():
+                            await self.connection.send_event({
+                                "type": VoiceEventType.DONE.value,
+                                "turn_id": turn_id,
+                                "generation_id": gen_id,
+                                "full_text": final_text,
+                                "audio_url": ai_audio_url,
+                                "is_completed": True,
+                            })
+                    else:
+                        if self.connection.is_open():
+                            await self.connection.send_event({
+                                "type": "error",
+                                "message": "Lỗi lưu trạng thái hoàn thành phiên phỏng vấn vào cơ sở dữ liệu.",
+                            })
                 else:
                     if self.connection.is_open():
                         await self.connection.send_event({
@@ -1556,8 +1597,45 @@ class VoiceInterviewOrchestrator:
         self._background_tasks.add(task)
         task.add_done_callback(self._background_tasks.discard)
 
+    def _persist_session_completion(self) -> bool:
+        if not self.session_factory:
+            return True
+        from datetime import datetime, timezone
+        from ...infrastructure.persistence.models.session import InterviewSession as DbInterviewSession
+        from ...infrastructure.persistence.models.enums import SessionStatus
+        db = self.session_factory()
+        try:
+            row = db.get(DbInterviewSession, self.session_id)
+            if row is not None:
+                if row.status != SessionStatus.COMPLETED:
+                    row.status = SessionStatus.COMPLETED
+                    if not row.completed_at:
+                        row.completed_at = datetime.now(timezone.utc)
+                elif not row.completed_at:
+                    row.completed_at = datetime.now(timezone.utc)
+                db.commit()
+                return True
+            return False
+        except Exception as exc:
+            db.rollback()
+            logging.getLogger("VoiceOrchestrator").exception(
+                "Failed to persist completion for session #%s: %s", self.session_id, exc
+            )
+            return False
+        finally:
+            db.close()
+
     async def handle_stop_session(self) -> None:
         await self.cancel_current_generation()
+        persisted = await asyncio.to_thread(self._persist_session_completion)
+        if not persisted:
+            if self.connection.is_open():
+                await self.connection.send_event({
+                    "type": "error",
+                    "message": "Không thể lưu trạng thái kết thúc phỏng vấn vào cơ sở dữ liệu. Vui lòng thử lại.",
+                })
+            return
+
         self._schedule_session_tracking_sync()
         self._schedule_audio_cleanup(delay_seconds=120)
         await self.set_state(VoiceSessionState.COMPLETED)

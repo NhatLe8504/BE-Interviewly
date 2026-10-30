@@ -360,3 +360,49 @@ async def test_orchestrator_voice_pitch_configuration() -> None:
 
     orch.set_pitch(-25)  # Should clamp to -15Hz
     assert orch.pitch == "-15Hz"
+
+@pytest.mark.anyio
+async def test_orchestrator_stop_session_flow() -> None:
+    conn = FakeVoiceConnection()
+    tts = FakeTTS()
+    llm = FakeLLM("Xin chào.")
+
+    orch = VoiceInterviewOrchestrator(
+        session_id=107,
+        connection=conn,
+        tts=tts,
+        llm=llm,
+    )
+    await orch.handle_stop_session()
+
+    assert orch.state == VoiceSessionState.COMPLETED
+    done_events = [e for e in conn.events if e.get("type") == VoiceEventType.DONE.value]
+    assert len(done_events) == 1
+    assert done_events[0]["is_completed"] is True
+
+
+@pytest.mark.anyio
+async def test_orchestrator_refuses_turns_when_completed() -> None:
+    conn = FakeVoiceConnection()
+    tts = FakeTTS()
+    llm = FakeLLM("Xin chào.")
+
+    orch = VoiceInterviewOrchestrator(
+        session_id=108,
+        connection=conn,
+        tts=tts,
+        llm=llm,
+    )
+    orch.state = VoiceSessionState.COMPLETED
+
+    # Client ready on completed session receives completed state
+    await orch.handle_client_ready()
+    states = [e for e in conn.events if e.get("type") == VoiceEventType.STATE.value]
+    assert any(s.get("state") == VoiceSessionState.COMPLETED.value for s in states)
+
+    # Submitting transcript when completed returns error
+    conn.events.clear()
+    await orch.handle_final_transcript("Câu trả lời muộn.")
+    error_events = [e for e in conn.events if e.get("type") == "error"]
+    assert len(error_events) == 1
+    assert error_events[0]["is_completed"] is True
