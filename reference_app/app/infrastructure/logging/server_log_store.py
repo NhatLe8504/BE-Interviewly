@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import threading
 import time
 from dataclasses import dataclass
@@ -108,6 +109,8 @@ class ServerLogStore:
         else:
             level = "INFO"
 
+        if query:
+            query = re.sub(r"(?i)(token=)[^&]+", r"\1[REDACTED]", query)
         summary = f"{method} {path} {status_code} ({duration_ms:.1f}ms)"
 
         entry = RouteLogEntry(

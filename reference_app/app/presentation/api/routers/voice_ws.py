@@ -11,7 +11,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 import re
 from fastapi.security import HTTPAuthorizationCredentials
-from ..dependencies import bearer_scheme, get_container, get_optional_user_id, get_session
+from ..dependencies import bearer_scheme, get_container, get_optional_user_id, get_session, require_admin
 from ..schemas.voice import VoiceOptionsOut
 from ....application.voice.voice_catalog import get_voice_catalog_options
 from ....application.voice.entitlement import check_user_voice_entitlement
@@ -345,7 +345,7 @@ async def interview_voice_websocket_endpoint(websocket: WebSocket, session_id: s
 
 
 @router.get("/api/v1/admin/presence", tags=["admin"])
-def get_presence_stats():
+def get_presence_stats(admin_id: int = Depends(require_admin)):
     return {
         "online_count": presence_manager.get_online_count(),
         "online_user_ids": presence_manager.get_online_user_ids(),
@@ -354,10 +354,48 @@ def get_presence_stats():
 
 @router.websocket("/api/v1/ws/presence")
 async def presence_websocket_endpoint(websocket: WebSocket):
+    # Require admin authentication before accept
+    token = websocket.query_params.get("token")
+    if not token:
+        auth_header = websocket.headers.get("authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header[7:].strip()
+
+    container: ServiceContainer = websocket.app.state.services
+    if not token or not getattr(container, "auth_service", None):
+        await websocket.close(code=1008, reason="Authentication token required")
+        return
+
+    try:
+        user_id = container.auth_service.tokens.parse(token)
+    except Exception:
+        await websocket.close(code=1008, reason="Invalid or expired token")
+        return
+
+    session_factory = getattr(container, "session_factory", None)
+    if not session_factory:
+        await websocket.close(code=1008, reason="Service unavailable")
+        return
+
+    db_sess = session_factory()
+    is_admin = False
+    try:
+        user = container.auth_service.get_user(db_sess, user_id)
+        role_val = getattr(user.role, "value", str(user.role)) if getattr(user, "role", None) else ""
+        if str(role_val).lower() == "admin":
+            is_admin = True
+    except Exception:
+        pass
+    finally:
+        db_sess.close()
+
+    if not is_admin:
+        await websocket.close(code=1008, reason="Admin access required")
+        return
     await websocket.accept()
     token = websocket.query_params.get("token")
     container: ServiceContainer = websocket.app.state.services
-    user_id = None
+
     if token and container.auth_service:
         try:
             user_id = container.auth_service.tokens.parse(token)

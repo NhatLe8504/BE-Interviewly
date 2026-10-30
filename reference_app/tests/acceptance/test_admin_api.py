@@ -317,3 +317,57 @@ def test_admin_question_skill_tagging_endpoints(client) -> None:
     # Mọi gợi ý phải là id hợp lệ trong taxonomy (kể cả khi không có key -> rỗng).
     assert all(sid in skill_ids for sid in body["suggested_skill_ids"])
 
+
+
+def test_operations_and_presence_admin_boundaries(client) -> None:
+    _, candidate_headers = create_candidate_and_token(client)
+    _, admin_headers = create_admin_and_token(client)
+
+    # 1. GET /api/v1/jobs/sync/status
+    assert client.get("/api/v1/jobs/sync/status").status_code == 401
+    assert client.get("/api/v1/jobs/sync/status", headers=candidate_headers).status_code == 403
+    res_admin_status = client.get("/api/v1/jobs/sync/status", headers=admin_headers)
+    assert res_admin_status.status_code == 200
+
+    # 2. POST /api/v1/jobs/sync
+    assert client.post("/api/v1/jobs/sync").status_code == 401
+    assert client.post("/api/v1/jobs/sync", headers=candidate_headers).status_code == 403
+
+    # 3. POST /api/v1/jobs/backfill-branding
+    assert client.post("/api/v1/jobs/backfill-branding").status_code == 401
+    assert client.post("/api/v1/jobs/backfill-branding", headers=candidate_headers).status_code == 403
+    res_admin_backfill = client.post("/api/v1/jobs/backfill-branding", headers=admin_headers)
+    assert res_admin_backfill.status_code == 200
+
+    # 4. GET /api/v1/admin/presence
+    assert client.get("/api/v1/admin/presence").status_code == 401
+    assert client.get("/api/v1/admin/presence", headers=candidate_headers).status_code == 403
+    res_admin_presence = client.get("/api/v1/admin/presence", headers=admin_headers)
+    assert res_admin_presence.status_code == 200
+    presence_data = res_admin_presence.json()
+    assert "online_count" in presence_data
+    assert "online_user_ids" in presence_data
+
+    # 5. WS /api/v1/ws/presence
+    import pytest
+    from starlette.websockets import WebSocketDisconnect
+
+    # 5a. Anonymous connection must be closed with 1008
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with client.websocket_connect("/api/v1/ws/presence") as ws:
+            ws.receive_json()
+    assert exc_info.value.code == 1008
+
+    # 5b. Candidate connection must be closed with 1008
+    cand_token = candidate_headers["Authorization"].split(" ")[1]
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with client.websocket_connect(f"/api/v1/ws/presence?token={cand_token}") as ws:
+            ws.receive_json()
+    assert exc_info.value.code == 1008
+
+    # 5c. Admin connection must succeed and receive presence_state
+    adm_token = admin_headers["Authorization"].split(" ")[1]
+    with client.websocket_connect(f"/api/v1/ws/presence?token={adm_token}") as ws:
+        msg = ws.receive_json()
+        assert msg.get("type") == "presence_state"
+        assert "online_count" in msg

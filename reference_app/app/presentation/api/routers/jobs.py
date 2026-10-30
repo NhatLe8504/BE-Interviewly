@@ -14,7 +14,7 @@ from ....application.job_aggregator.service import JobAggregatorService
 from ....application.skills.service import UserSkillService
 from ....application.skills.readiness import JobReadinessEvaluator
 from ....domain.jd_interview import JDSourceType, NormalizedJD
-from ..dependencies import get_container, get_optional_user_id, get_session
+from ..dependencies import get_container, get_optional_user_id, get_session, require_admin
 from ..schemas.jobs import (
     JobCompanyOut,
     JobDetailOut,
@@ -221,6 +221,7 @@ def get_filter_metadata(
 
 @router.get("/sync/status")
 def get_sync_status(
+    admin_id: int = Depends(require_admin),
     container: ServiceContainer = Depends(get_container),
 ) -> dict[str, Any]:
     if getattr(container, "job_worker", None):
@@ -230,6 +231,7 @@ def get_sync_status(
 
 @router.post("/sync", status_code=status.HTTP_200_OK)
 async def sync_jobs_now(
+    admin_id: int = Depends(require_admin),
     query: str = Query("java developer", description="Search query for live ingestion"),
     session: Session = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
@@ -252,6 +254,7 @@ async def sync_jobs_now(
 
 @router.post("/backfill-branding", status_code=status.HTTP_200_OK)
 async def backfill_branding(
+    admin_id: int = Depends(require_admin),
     session: Session = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
 ) -> dict[str, Any]:
