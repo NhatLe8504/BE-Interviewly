@@ -1436,6 +1436,11 @@
         "summary": "Pull Evaluation Result",
         "description": "Client pulls evaluation result with minimal polling backoff.",
         "operationId": "pull_evaluation_result_api_v1_catalog_evaluations_pull__task_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "task_id",
@@ -1750,7 +1755,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/v1/admin/users": {
@@ -5418,7 +5428,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/v1/admin/ats-rules": {
@@ -6039,48 +6054,6 @@
         }
       }
     },
-    "/api/v1/interviews/sessions/{session_id}": {
-      "get": {
-        "tags": [
-          "interviews"
-        ],
-        "summary": "Get Session Details",
-        "operationId": "get_session_details_api_v1_interviews_sessions__session_id__get",
-        "parameters": [
-          {
-            "name": "session_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Session Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SessionOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/analytics/sessions/{session_id}": {
       "get": {
         "tags": [
@@ -6111,48 +6084,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SessionDetailOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/interviews/sessions/{session_id}/result": {
-      "get": {
-        "tags": [
-          "evaluations"
-        ],
-        "summary": "Get Session Result",
-        "operationId": "get_session_result_api_v1_interviews_sessions__session_id__result_get",
-        "parameters": [
-          {
-            "name": "session_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Session Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/app__presentation__api__schemas__evaluation__SessionResultOut"
                 }
               }
             }
@@ -6263,6 +6194,53 @@
         ]
       }
     },
+    "/api/v1/interviews/sessions/{session_id}": {
+      "get": {
+        "tags": [
+          "interviews"
+        ],
+        "summary": "Get Session Details",
+        "operationId": "get_session_details_api_v1_interviews_sessions__session_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/interviews/sessions/{session_id}/turns": {
       "post": {
         "tags": [
@@ -6338,6 +6316,11 @@
         ],
         "summary": "Stream Question",
         "operationId": "stream_question_api_v1_interviews_sessions__session_id__stream_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "session_id",
@@ -6346,6 +6329,22 @@
             "schema": {
               "type": "integer",
               "title": "Session Id"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
             }
           }
         ],
@@ -6378,6 +6377,11 @@
         ],
         "summary": "Get Turn Evaluation",
         "operationId": "get_turn_evaluation_api_v1_interviews_sessions__session_id__turns__turn_id__evaluation_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "session_id",
@@ -6405,6 +6409,53 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RubricEvaluationOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/interviews/sessions/{session_id}/result": {
+      "get": {
+        "tags": [
+          "evaluations"
+        ],
+        "summary": "Get Session Result",
+        "operationId": "get_session_result_api_v1_interviews_sessions__session_id__result_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/app__presentation__api__schemas__evaluation__SessionResultOut"
                 }
               }
             }
@@ -7033,6 +7084,22 @@
               "type": "integer",
               "title": "Id"
             }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
           }
         ],
         "responses": {
@@ -7077,6 +7144,22 @@
             "schema": {
               "type": "integer",
               "title": "Id"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
             }
           }
         ],
@@ -7350,7 +7433,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/v1/voice/options": {
@@ -8046,6 +8134,11 @@
         ],
         "summary": "Get Job Status",
         "operationId": "get_job_status_api_v1_interviews_from_jd_jobs__job_id__status_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "job_id",
@@ -8380,7 +8473,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/v1/jobs/sync": {
@@ -8390,6 +8488,11 @@
         ],
         "summary": "Sync Jobs Now",
         "operationId": "sync_jobs_now_api_v1_jobs_sync_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "query",
@@ -8450,7 +8553,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/v1/jobs/{job_id}": {
@@ -20774,27 +20882,54 @@
           },
           "avg_clarity": {
             "type": "number",
-            "title": "Avg Clarity"
+            "title": "Avg Clarity",
+            "default": 0.0
           },
           "avg_structure": {
             "type": "number",
-            "title": "Avg Structure"
+            "title": "Avg Structure",
+            "default": 0.0
           },
           "avg_evidence": {
             "type": "number",
-            "title": "Avg Evidence"
+            "title": "Avg Evidence",
+            "default": 0.0
           },
           "avg_overall": {
             "type": "number",
-            "title": "Avg Overall"
+            "title": "Avg Overall",
+            "default": 0.0
+          },
+          "total_score": {
+            "type": "number",
+            "title": "Total Score",
+            "default": 0.0
+          },
+          "readiness_badge": {
+            "type": "string",
+            "title": "Readiness Badge",
+            "default": ""
+          },
+          "pace_rating": {
+            "type": "string",
+            "title": "Pace Rating",
+            "default": "Lý tưởng (Ideal)"
+          },
+          "star_analysis": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Star Analysis",
+            "default": {}
           },
           "total_turns": {
             "type": "integer",
-            "title": "Total Turns"
+            "title": "Total Turns",
+            "default": 0
           },
           "performance_rating": {
             "type": "string",
-            "title": "Performance Rating"
+            "title": "Performance Rating",
+            "default": ""
           },
           "evaluations": {
             "items": {
@@ -20808,13 +20943,7 @@
         "type": "object",
         "required": [
           "session_id",
-          "candidate_id",
-          "avg_clarity",
-          "avg_structure",
-          "avg_evidence",
-          "avg_overall",
-          "total_turns",
-          "performance_rating"
+          "candidate_id"
         ],
         "title": "SessionResultOut"
       }

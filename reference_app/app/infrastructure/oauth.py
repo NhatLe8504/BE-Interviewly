@@ -25,8 +25,10 @@ class GoogleOAuthAdapter(GoogleTokenVerifierPort):
 
         data = resp.json()
         aud = data.get("aud")
-        if self.client_id and aud != self.client_id:
-            raise AuthError("Google token audience mismatch")
+        if self.client_id:
+            allowed_ids = {cid.strip() for cid in self.client_id.replace(";", ",").split(",") if cid.strip()}
+            if allowed_ids and aud not in allowed_ids:
+                raise AuthError(f"Google token audience mismatch: token aud={aud}")
 
         email = data.get("email")
         if not email:

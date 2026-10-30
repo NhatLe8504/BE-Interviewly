@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any
 from pydantic import BaseModel, Field
 
 
@@ -35,10 +36,14 @@ class RubricEvaluationOut(BaseModel):
 class SessionResultOut(BaseModel):
     session_id: int
     candidate_id: int
-    avg_clarity: float
-    avg_structure: float
-    avg_evidence: float
-    avg_overall: float
-    total_turns: int
-    performance_rating: str
+    avg_clarity: float = 0.0
+    avg_structure: float = 0.0
+    avg_evidence: float = 0.0
+    avg_overall: float = 0.0
+    total_score: float = 0.0
+    readiness_badge: str = ""
+    pace_rating: str = "Lý tưởng (Ideal)"
+    star_analysis: dict[str, Any] = {}
+    total_turns: int = 0
+    performance_rating: str = ""
     evaluations: list[RubricEvaluationOut] = []

@@ -144,14 +144,36 @@ def get_session_result(
         turn_evaluations=evaluations_domain,
     )
 
-    return SessionResultOut(
-        session_id=summary.session_id,
-        candidate_id=summary.candidate_id,
-        avg_clarity=summary.avg_clarity,
-        avg_structure=summary.avg_structure,
-        avg_evidence=summary.avg_evidence,
-        avg_overall=summary.avg_overall,
-        total_turns=summary.total_turns,
-        performance_rating=summary.performance_rating,
-        evaluations=eval_list,
-    )
+    try:
+        analytics_result = container.analytics_service.get_session_result(session, user_id, session_id)
+        star_dict = analytics_result.star_analysis
+        if hasattr(star_dict, 'model_dump'):
+            star_dict = star_dict.model_dump()
+        return SessionResultOut(
+            session_id=session_id,
+            candidate_id=interview_session.user_id,
+            avg_clarity=float(analytics_result.clarity_score or 0.0),
+            avg_structure=float(analytics_result.structure_score or 0.0),
+            avg_evidence=float(analytics_result.evidence_score or 0.0),
+            avg_overall=float(analytics_result.total_score or 0.0),
+            total_score=float(analytics_result.total_score or 0.0),
+            readiness_badge=analytics_result.readiness_badge or "",
+            pace_rating=analytics_result.pace_rating or "Lý tưởng (Ideal)",
+            star_analysis=star_dict or {},
+            total_turns=len(eval_list) or len(analytics_result.turns),
+            performance_rating=summary.performance_rating if summary else "Needs Improvement",
+            evaluations=eval_list,
+        )
+    except Exception as exc:
+        return SessionResultOut(
+            session_id=summary.session_id,
+            candidate_id=summary.candidate_id,
+            avg_clarity=summary.avg_clarity,
+            avg_structure=summary.avg_structure,
+            avg_evidence=summary.avg_evidence,
+            avg_overall=summary.avg_overall,
+            total_score=summary.avg_overall,
+            total_turns=summary.total_turns,
+            performance_rating=summary.performance_rating,
+            evaluations=eval_list,
+        )
