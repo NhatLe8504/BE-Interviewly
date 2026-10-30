@@ -1,10 +1,114 @@
 from __future__ import annotations
 
 import json
+import uuid
+import pytest
+from starlette.websockets import WebSocketDisconnect
+
+
+def _create_user_and_token(client, email_prefix: str = "ws_user") -> tuple[str, int]:
+    email = f"{email_prefix}_{uuid.uuid4().hex[:8]}@example.com"
+    client.post(
+        "/api/v1/auth/register",
+        json={"full_name": "Voice Candidate", "email": email, "password": "Password123!"},
+    )
+    login_resp = client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": "Password123!"},
+    )
+    data = login_resp.json()
+    token = data["access_token"]
+    user_id = data["user"]["user_id"]
+    return token, user_id
+
+
+def _create_session(client, token: str) -> int:
+    resp = client.post(
+        "/api/v1/interviews/sessions",
+        json={
+            "role_name": "DevOps Engineer",
+            "level": "junior",
+            "language": "vi",
+            "mode": "voice",
+            "barge_in_enabled": True,
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()["session_id"]
+
+
+def test_voice_websocket_absent_token_fails_closed(client) -> None:
+    token, _ = _create_user_and_token(client, "ws_notok")
+    session_id = _create_session(client, token)
+
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with client.websocket_connect(f"/api/v1/voice/ws/{session_id}"):
+            pass
+    assert exc_info.value.code == 1008
+
+
+def test_voice_websocket_bad_token_fails_closed(client) -> None:
+    token, _ = _create_user_and_token(client, "ws_badtok")
+    session_id = _create_session(client, token)
+
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with client.websocket_connect(f"/api/v1/voice/ws/{session_id}?token=invalid.jwt.token"):
+            pass
+    assert exc_info.value.code == 1008
+
+
+def test_voice_websocket_wrong_owner_fails_closed(client) -> None:
+    token_owner, _ = _create_user_and_token(client, "ws_owner")
+    token_other, _ = _create_user_and_token(client, "ws_other")
+    session_id = _create_session(client, token_owner)
+
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with client.websocket_connect(f"/api/v1/voice/ws/{session_id}?token={token_other}"):
+            pass
+    assert exc_info.value.code == 1008
+
+
+def test_voice_websocket_missing_session_fails_closed(client) -> None:
+    token, _ = _create_user_and_token(client, "ws_nosess")
+
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with client.websocket_connect(f"/api/v1/voice/ws/999999?token={token}"):
+            pass
+    assert exc_info.value.code == 1008
+
+
+def test_voice_websocket_missing_jd_session_fails_closed(client) -> None:
+    token, _ = _create_user_and_token(client, "ws_nojdsess")
+
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with client.websocket_connect(f"/api/v1/voice/ws/jd_nonexistent_job_123?token={token}"):
+            pass
+    assert exc_info.value.code == 1008
+
+
+def test_voice_websocket_valid_owner_both_paths(client) -> None:
+    token, _ = _create_user_and_token(client, "ws_paths")
+    session_id = _create_session(client, token)
+
+    # Path 1: /api/v1/voice/ws/{session_id}
+    with client.websocket_connect(f"/api/v1/voice/ws/{session_id}?token={token}") as ws1:
+        ws1.send_text(json.dumps({"type": "ping"}))
+        resp = json.loads(ws1.receive_text())
+        assert resp["type"] == "pong"
+
+    # Path 2: /api/v1/interviews/{session_id}/ws
+    with client.websocket_connect(f"/api/v1/interviews/{session_id}/ws?token={token}") as ws2:
+        ws2.send_text(json.dumps({"type": "ping"}))
+        resp = json.loads(ws2.receive_text())
+        assert resp["type"] == "pong"
 
 
 def test_voice_websocket_ping_pong_and_ready(client) -> None:
-    with client.websocket_connect("/api/v1/voice/ws/99") as websocket:
+    token, _ = _create_user_and_token(client, "ws_ready")
+    session_id = _create_session(client, token)
+
+    with client.websocket_connect(f"/api/v1/voice/ws/{session_id}?token={token}") as websocket:
         # Ping
         websocket.send_text(json.dumps({"type": "ping"}))
         resp = json.loads(websocket.receive_text())
@@ -29,7 +133,10 @@ def test_voice_websocket_ping_pong_and_ready(client) -> None:
 
 
 def test_voice_websocket_interim_and_final_transcript_flow(client) -> None:
-    with client.websocket_connect("/api/v1/voice/ws/100") as websocket:
+    token, _ = _create_user_and_token(client, "ws_flow")
+    session_id = _create_session(client, token)
+
+    with client.websocket_connect(f"/api/v1/voice/ws/{session_id}?token={token}") as websocket:
         # Send interim transcript
         websocket.send_text(json.dumps({
             "type": "interim_transcript",
@@ -59,7 +166,10 @@ def test_voice_websocket_interim_and_final_transcript_flow(client) -> None:
 
 
 def test_voice_websocket_barge_in_stops_audio(client) -> None:
-    with client.websocket_connect("/api/v1/voice/ws/101") as websocket:
+    token, _ = _create_user_and_token(client, "ws_barge")
+    session_id = _create_session(client, token)
+
+    with client.websocket_connect(f"/api/v1/voice/ws/{session_id}?token={token}") as websocket:
         # Final transcript starts thinking/generation
         websocket.send_text(json.dumps({
             "type": "final_transcript",
@@ -88,7 +198,10 @@ def test_voice_websocket_barge_in_stops_audio(client) -> None:
 
 
 def test_voice_websocket_barge_in_can_be_disabled(client) -> None:
-    with client.websocket_connect("/api/v1/voice/ws/102") as websocket:
+    token, _ = _create_user_and_token(client, "ws_disbarge")
+    session_id = _create_session(client, token)
+
+    with client.websocket_connect(f"/api/v1/voice/ws/{session_id}?token={token}") as websocket:
         # Disable barge-in via config message
         websocket.send_text(json.dumps({
             "type": "client_ready",

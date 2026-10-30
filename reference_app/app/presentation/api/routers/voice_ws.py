@@ -103,66 +103,108 @@ async def handle_voice_websocket_session(
     websocket: WebSocket,
     session_id_raw: str | int,
 ) -> None:
-    await websocket.accept()
-
     container: ServiceContainer = websocket.app.state.services
-    session_factory = getattr(container, "session_factory", None)
 
-    # Safely resolve session_id to integer
-    session_id: int = 1
+    # 1. Authenticate token before websocket.accept() (fail closed with 1008)
+    token = websocket.query_params.get("token")
+    if not token:
+        auth_header = websocket.headers.get("authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header[7:].strip()
+
+    if not token or not getattr(container, "auth_service", None):
+        await websocket.close(code=1008, reason="Missing authentication token")
+        return
+
+    try:
+        authenticated_user_id = container.auth_service.tokens.parse(token)
+    except Exception:
+        # Do not log credential or token details
+        await websocket.close(code=1008, reason="Invalid or expired token")
+        return
+
+    session_factory = getattr(container, "session_factory", None)
+    if not session_factory:
+        await websocket.close(code=1008, reason="Service unavailable")
+        return
+
+    # 2. Safely resolve session_id to integer (fail closed for missing/unresolvable IDs)
+    session_id: int | None = None
     try:
         session_id = int(session_id_raw)
     except (ValueError, TypeError):
-        resolved = False
-        if session_factory and str(session_id_raw).startswith("jd_"):
+        if str(session_id_raw).startswith("jd_"):
             db_temp = session_factory()
             try:
                 from ....infrastructure.persistence.models.jd_interview import JDGenerationJob
                 job = db_temp.get(JDGenerationJob, str(session_id_raw))
                 if job and job.session_id:
                     session_id = int(job.session_id)
-                    resolved = True
             except Exception:
                 pass
             finally:
                 db_temp.close()
 
-        if not resolved:
-            session_id = (abs(hash(str(session_id_raw))) % 1_000_000) + 1000
+    if session_id is None:
+        await websocket.close(code=1008, reason="Invalid session ID")
+        return
 
-    container: ServiceContainer = websocket.app.state.services
-    connection = WebSocketVoiceConnection(websocket)
-
-    # Optional auth token from query params: ?token=...
-    token = websocket.query_params.get("token")
-    user_id = 1
-    if token and container.auth_service:
-        try:
-            user_id = container.auth_service.tokens.parse(token)
-        except Exception:
-            pass
-
-    # Retrieve existing session details if available
+    # 3. Verify session existence and owner authorization
+    db_session = session_factory()
+    session_obj = None
     role_name = "Software Engineer"
     level = "fresher"
     language = "vi"
 
-    session_factory = getattr(container, "session_factory", None)
-    if container.interview_service and session_factory:
-        db_session = session_factory()
-        try:
-            s = container.interview_service.get_session(db_session, session_id)
-            if s:
-                level = s.level
-                language = s.language
-        except Exception:
-            pass
-        finally:
-            db_session.close()
+    try:
+        if container.interview_service:
+            try:
+                session_obj = container.interview_service.get_session(db_session, session_id)
+            except Exception:
+                session_obj = None
+
+        if not session_obj:
+            from ....infrastructure.persistence.models.session import InterviewSession as DbInterviewSession
+            session_obj = db_session.get(DbInterviewSession, session_id)
+
+        if not session_obj:
+            await websocket.close(code=1008, reason="Session not found")
+            return
+
+        session_owner_id = getattr(session_obj, "user_id", None) or getattr(session_obj, "candidate_id", None)
+        if session_owner_id != authenticated_user_id:
+            await websocket.close(code=1008, reason="Forbidden")
+            return
+
+        if hasattr(session_obj, "level") and session_obj.level:
+            level = session_obj.level.value if hasattr(session_obj.level, "value") else str(session_obj.level)
+        elif hasattr(session_obj, "experience_level") and session_obj.experience_level:
+            level = session_obj.experience_level.value if hasattr(session_obj.experience_level, "value") else str(session_obj.experience_level)
+
+        if hasattr(session_obj, "language") and session_obj.language:
+            language = session_obj.language.value if hasattr(session_obj.language, "value") else str(session_obj.language)
+
+        role_id = getattr(session_obj, "role_id", None)
+        if role_id:
+            try:
+                from ....infrastructure.persistence.models.catalog import JobRole
+                role_rec = db_session.get(JobRole, role_id)
+                if role_rec and role_rec.role_name:
+                    role_name = role_rec.role_name
+            except Exception:
+                pass
+    finally:
+        db_session.close()
+
+    # 4. Accept connection only after successful authentication and authorization
+    await websocket.accept()
+    connection = WebSocketVoiceConnection(websocket)
 
     # Use registered TTS & LLM voice stream adapters
     tts_adapter = getattr(container, "tts_adapter", None)
-    llm_adapter = getattr(container, "llm_voice_adapter", None) or container.interview_service.llm
+    llm_adapter = getattr(container, "llm_voice_adapter", None) or (
+        container.interview_service.llm if container.interview_service else None
+    )
 
     orchestrator = VoiceInterviewOrchestrator(
         session_id=session_id,
@@ -176,7 +218,7 @@ async def handle_voice_websocket_session(
         system_prompt=None,
         session_factory=session_factory,
         evaluation_service=getattr(container, "evaluation_service", None),
-        user_id=user_id,
+        user_id=authenticated_user_id,
     )
 
     try:
@@ -198,9 +240,9 @@ async def handle_voice_websocket_session(
 
                 elif msg_type == "client_ready":
                     await orchestrator.handle_client_ready(
-                        role_name=data.get("role_name"),
-                        level=data.get("level"),
-                        language=data.get("language"),
+                        role_name=role_name,
+                        level=level,
+                        language=language,
                         voice=data.get("voice"),
                         pitch=data.get("pitch", "+0Hz"),
                         barge_in_enabled=data.get("barge_in_enabled"),

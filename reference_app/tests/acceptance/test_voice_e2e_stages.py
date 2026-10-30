@@ -1,6 +1,33 @@
 from __future__ import annotations
 
 import json
+import uuid
+
+
+def _create_user_and_session(client, role_name: str = "Backend Engineer", level: str = "senior", language: str = "vi") -> tuple[str, int]:
+    email = f"voice_e2e_{uuid.uuid4().hex[:8]}@example.com"
+    client.post(
+        "/api/v1/auth/register",
+        json={"full_name": "E2E Candidate", "email": email, "password": "Password123!"},
+    )
+    login_resp = client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": "Password123!"},
+    )
+    token = login_resp.json()["access_token"]
+    session_resp = client.post(
+        "/api/v1/interviews/sessions",
+        json={
+            "role_name": role_name,
+            "level": level,
+            "language": language,
+            "mode": "voice",
+            "barge_in_enabled": True,
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    session_id = session_resp.json()["session_id"]
+    return token, session_id
 
 
 def _drain_until(websocket, event_type, max_events=80):
@@ -29,7 +56,8 @@ def _recv_n(websocket, n=10):
 
 
 def test_e2e_full_3_stage_interview(client) -> None:
-    with client.websocket_connect("/api/v1/voice/ws/200") as ws:
+    token, session_id = _create_user_and_session(client, "Backend Engineer", "senior", "vi")
+    with client.websocket_connect(f"/api/v1/voice/ws/{session_id}?token={token}") as ws:
         ws.send_text(json.dumps({
             "type": "client_ready",
             "role_name": "Backend Engineer",
@@ -110,7 +138,8 @@ def test_e2e_full_3_stage_interview(client) -> None:
 
 
 def test_e2e_single_stage_technical_only(client) -> None:
-    with client.websocket_connect("/api/v1/voice/ws/201") as ws:
+    token, session_id = _create_user_and_session(client, "Fullstack Developer", "junior", "en")
+    with client.websocket_connect(f"/api/v1/voice/ws/{session_id}?token={token}") as ws:
         ws.send_text(json.dumps({
             "type": "client_ready",
             "role_name": "Fullstack Developer",
@@ -144,7 +173,8 @@ def test_e2e_single_stage_technical_only(client) -> None:
 
 
 def test_e2e_two_stage_warmup_closing(client) -> None:
-    with client.websocket_connect("/api/v1/voice/ws/202") as ws:
+    token, session_id = _create_user_and_session(client, "Product Manager", "mid", "vi")
+    with client.websocket_connect(f"/api/v1/voice/ws/{session_id}?token={token}") as ws:
         ws.send_text(json.dumps({
             "type": "client_ready",
             "role_name": "Product Manager",
@@ -170,7 +200,8 @@ def test_e2e_two_stage_warmup_closing(client) -> None:
 
 
 def test_e2e_manual_next_stage(client) -> None:
-    with client.websocket_connect("/api/v1/voice/ws/204") as ws:
+    token, session_id = _create_user_and_session(client, "Frontend Engineer", "junior", "vi")
+    with client.websocket_connect(f"/api/v1/voice/ws/{session_id}?token={token}") as ws:
         ws.send_text(json.dumps({
             "type": "client_ready",
             "role_name": "Frontend Engineer",
@@ -188,7 +219,8 @@ def test_e2e_manual_next_stage(client) -> None:
 
 
 def test_e2e_state_events_include_stage_data(client) -> None:
-    with client.websocket_connect("/api/v1/voice/ws/205") as ws:
+    token, session_id = _create_user_and_session(client, "ML Engineer", "senior", "vi")
+    with client.websocket_connect(f"/api/v1/voice/ws/{session_id}?token={token}") as ws:
         ws.send_text(json.dumps({
             "type": "client_ready",
             "role_name": "ML Engineer",
