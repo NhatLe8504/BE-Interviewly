@@ -46,7 +46,19 @@ def _format_salary(salary_min: float | None, salary_max: float | None, currency:
 def _build_jd_text_and_checksums(job: Any) -> tuple[str, list[str]]:
     comp_name = job.company.company_name if job.company else "Doanh nghiệp"
     body = (getattr(job, "cleaned_jd_text", None) or getattr(job, "raw_description", None) or "").strip()
-    jd_text = f"Vị trí: {job.title} tại {comp_name}\n\n{body}"
+
+    parts = [f"Vị trí: {job.title} tại {comp_name}"]
+    if getattr(job, "location", None):
+        parts.append(f"Địa điểm: {job.location}")
+    if getattr(job, "seniority", None) and job.seniority != "unknown":
+        parts.append(f"Cấp bậc: {job.seniority}")
+    skills = getattr(job, "skills_required", None) or getattr(job, "technologies", None) or []
+    if skills:
+        parts.append(f"Kỹ năng / Công nghệ yêu cầu: {', '.join(skills)}")
+    if body:
+        parts.append(f"Mô tả công việc:\n{body}")
+
+    jd_text = "\n\n".join(parts)
     c1 = NormalizedJD.calculate_checksum(jd_text)
     checksums = [c1]
     if body:
@@ -174,7 +186,7 @@ async def list_jobs(
 
     total_pages = math.ceil(total / limit) if total > 0 else 1
 
-    from ....infrastructure.persistence.models.jd_interview import JDGenerationJob
+    from ....infrastructure.persistence.models.jd_interview import JDGenerationJob, NormalizedJDRecord
     from ....domain.jd_interview import JDJobStatus
 
     completed_checksum_rows = (
@@ -184,10 +196,18 @@ async def list_jobs(
     )
     checksum_map = {row[0]: row[1] for row in completed_checksum_rows}
 
+    completed_url_rows = (
+        session.query(NormalizedJDRecord.original_url, NormalizedJDRecord.job_id)
+        .join(JDGenerationJob, JDGenerationJob.job_id == NormalizedJDRecord.job_id)
+        .filter(JDGenerationJob.status == JDJobStatus.COMPLETED.value)
+        .all()
+    )
+    url_map = {row[0]: row[1] for row in completed_url_rows if row[0]}
+
     job_items: list[JobItemOut] = []
     for j in items:
         _, checksums = _build_jd_text_and_checksums(j)
-        found_job_id = next((checksum_map[c] for c in checksums if c in checksum_map), None)
+        found_job_id = next((checksum_map[c] for c in checksums if c in checksum_map), None) or url_map.get(f"job:{j.job_id}")
         job_items.append(_to_job_item_out(j, existing_interview_id=found_job_id))
 
     return JobListResponse(
@@ -448,11 +468,26 @@ async def start_practice_from_job(
         )
 
     # 3. User is Pro -> Initialize and start generation
-    from .jd_interview import _init_job, _get_or_create_orchestrator
+    from .jd_interview import _init_job, _get_or_create_orchestrator, schedule_jd_job
 
     jd_text, checksums = _build_jd_text_and_checksums(job)
     primary_checksum = checksums[0]
-    generation_job_id = _init_job(session, effective_user_id, JDSourceType.text.value, primary_checksum, is_public=True)
+    request_payload = {
+        "input_data": {"text": jd_text, "url": f"job:{job.job_id}"},
+        "options": {
+            "duration_minutes": 30,
+            "difficulty": 3,
+            "language": "vi",
+        },
+    }
+    generation_job_id = _init_job(
+        session=session,
+        user_id=effective_user_id,
+        source_type=JDSourceType.text.value,
+        checksum=primary_checksum,
+        request_payload=request_payload,
+        is_public=True,
+    )
 
     orchestrator = _get_or_create_orchestrator(container)
     orchestrator.queue_manager.enqueue(
@@ -465,19 +500,7 @@ async def start_practice_from_job(
         },
     )
 
-    asyncio.create_task(
-        orchestrator.execute_pipeline(
-            job_id=generation_job_id,
-            user_id=effective_user_id,
-            source_type=JDSourceType.text.value,
-            input_data={"text": jd_text, "url": f"job:{job.job_id}"},
-            options={
-                "duration_minutes": 30,
-                "difficulty": 3,
-                "language": "vi",
-            },
-        )
-    )
+    schedule_jd_job(container, generation_job_id)
 
     return StartJobPracticeOut(
         interview_id=generation_job_id,
