@@ -524,7 +524,7 @@ async def preview_voice_sample(
     )
 
 
-SAFE_AUDIO_FILENAME_REGEX = re.compile(r"^turn_\d+_(ai\.mp3|user\.(webm|wav|mp3|ogg))$")
+SAFE_AUDIO_FILENAME_REGEX = re.compile(r"^turn_\d+_(ai\.mp3|user\.(webm|wav|mp3|ogg|m4a|mp4))$")
 
 
 @router.get("/api/v1/voice/audio/{session_id}/{filename}")
@@ -585,7 +585,16 @@ async def get_turn_audio(
     if not file_path.is_file():
         raise HTTPException(status_code=404, detail="Audio file not found")
 
-    media_type = "audio/mpeg" if filename.endswith(".mp3") else "audio/webm"
+    if filename.endswith(".mp3"):
+        media_type = "audio/mpeg"
+    elif filename.endswith(".ogg"):
+        media_type = "audio/ogg"
+    elif filename.endswith(".wav"):
+        media_type = "audio/wav"
+    elif filename.endswith(".m4a") or filename.endswith(".mp4"):
+        media_type = "audio/mp4"
+    else:
+        media_type = "audio/webm"
     return FileResponse(file_path, media_type=media_type, headers={"Accept-Ranges": "bytes"})
 
 
@@ -642,21 +651,43 @@ async def upload_user_turn_audio(
     if len(content) > MAX_AUDIO_SIZE:
         raise HTTPException(status_code=413, detail="Audio file exceeds maximum size limit of 25MB")
 
-    content_type = (file.content_type or "").lower()
+    raw_content_type = (file.content_type or "").lower().strip()
+    base_content_type = raw_content_type.split(";")[0].strip()
     allowed_types = {
         "audio/webm",
         "audio/ogg",
         "audio/wav",
+        "audio/x-wav",
+        "audio/wave",
         "audio/mpeg",
         "audio/mp3",
+        "audio/mp4",
+        "audio/m4a",
+        "audio/x-m4a",
+        "audio/aac",
         "video/webm",
+        "video/mp4",
         "application/octet-stream",
     }
-    if content_type and content_type not in allowed_types:
-        raise HTTPException(status_code=415, detail=f"Unsupported audio media type: {content_type}")
+    if base_content_type and base_content_type not in allowed_types:
+        raise HTTPException(status_code=415, detail=f"Unsupported audio media type: {file.content_type}")
 
     # 5. Restrict to server-issued filename & resolve beneath session directory
-    filename = f"turn_{turn_id}_user.webm"
+    ext = "webm"
+    if base_content_type == "audio/ogg":
+        ext = "ogg"
+    elif base_content_type in ("audio/mpeg", "audio/mp3"):
+        ext = "mp3"
+    elif base_content_type in ("audio/wav", "audio/x-wav", "audio/wave"):
+        ext = "wav"
+    elif base_content_type in ("audio/mp4", "audio/m4a", "audio/x-m4a", "audio/aac", "video/mp4"):
+        ext = "mp4"
+    elif file.filename and "." in file.filename:
+        file_ext = file.filename.rsplit(".", 1)[-1].lower()
+        if file_ext in {"webm", "ogg", "wav", "mp3", "m4a", "mp4"}:
+            ext = file_ext
+
+    filename = f"turn_{turn_id}_user.{ext}"
     from ....config import get_audio_storage_dir
     base_dir = get_audio_storage_dir().resolve()
     session_dir = (base_dir / str(session_id)).resolve()

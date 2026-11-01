@@ -11,6 +11,8 @@ def test_safe_audio_filename_regex_valid_names():
         "turn_10_user.wav",
         "turn_99_user.ogg",
         "turn_100_user.mp3",
+        "turn_101_user.m4a",
+        "turn_102_user.mp4",
     ]
     for name in valid_names:
         assert SAFE_AUDIO_FILENAME_REGEX.match(name) is not None, f"Expected {name} to be valid"
@@ -33,3 +35,16 @@ def test_safe_audio_filename_regex_rejects_path_traversal_and_malicious_names():
     ]
     for name in invalid_names:
         assert SAFE_AUDIO_FILENAME_REGEX.match(name) is None, f"Expected {name} to be rejected"
+
+
+def test_mime_type_stripping_with_parameters():
+    raw_content_types = [
+        ("audio/webm;codecs=opus", "audio/webm"),
+        ("audio/webm; codecs=opus", "audio/webm"),
+        ("audio/ogg; codecs=opus", "audio/ogg"),
+        ("audio/mp4; codecs=mp4a.40.2", "audio/mp4"),
+        ("audio/webm", "audio/webm"),
+    ]
+    for raw, expected in raw_content_types:
+        base = raw.lower().strip().split(";")[0].strip()
+        assert base == expected
