@@ -8,7 +8,7 @@ from datetime import datetime
 class CandidateKpiStats:
     total_interviews: int
     completed_interviews: int
-    avg_score: float
+    avg_score: float | None
     total_practice_minutes: int
     streak_days: int
 
@@ -17,7 +17,7 @@ class CandidateKpiStats:
             raise ValueError("total_interviews cannot be negative")
         if self.completed_interviews < 0:
             raise ValueError("completed_interviews cannot be negative")
-        if self.avg_score < 0 or self.avg_score > 100:
+        if self.avg_score is not None and (self.avg_score < 0 or self.avg_score > 100):
             raise ValueError("avg_score must be between 0 and 100")
         if self.total_practice_minutes < 0:
             raise ValueError("total_practice_minutes cannot be negative")
@@ -27,11 +27,11 @@ class CandidateKpiStats:
 
 @dataclass(frozen=True)
 class SkillRadarScore:
-    clarity: float
-    logic: float
-    evidence: float
-    delivery: float
-    star_method: float
+    clarity: float | None
+    logic: float | None
+    evidence: float | None
+    delivery: float | None
+    star_method: float | None
 
     def __post_init__(self) -> None:
         for name, val in (
@@ -41,7 +41,7 @@ class SkillRadarScore:
             ("delivery", self.delivery),
             ("star_method", self.star_method),
         ):
-            if val < 0 or val > 100:
+            if val is not None and (val < 0 or val > 100):
                 raise ValueError(f"{name} must be between 0 and 100")
 
 
@@ -77,22 +77,22 @@ class CandidateDashboard:
 class ProgressTrendPoint:
     session_id: int
     date: str
-    overall_score: float
-    clarity_score: float
-    logic_score: float
-    example_score: float
+    overall_score: float | None
+    clarity_score: float | None
+    logic_score: float | None
+    example_score: float | None
     speaking_pace_wpm: float | None
-    filler_words_count: int
-    star_completion_rate: float
+    filler_words_count: int | None
+    star_completion_rate: float | None
 
 
 @dataclass(frozen=True)
 class ProgressTrends:
     candidate_id: int
     trends: list[ProgressTrendPoint]
-    avg_wpm: float
-    avg_filler_count: float
-    star_mastery_rate: float
+    avg_wpm: float | None
+    avg_filler_count: float | None
+    star_mastery_rate: float | None
 
 
 @dataclass(frozen=True)
@@ -121,12 +121,16 @@ class TurnDetailItem:
     question_id: int | None
     message_text: str | None
     audio_url: str | None
+    user_audio_url: str | None
     transcribed_text: str | None
     clarity_score: float | None
     logic_score: float | None
     example_score: float | None
     overall_score: float | None
     feedback_text: str | None
+    ideal_answer: str | None
+    question_type: str | None
+    star_analysis: dict[str, bool] | None
     speaking_pace: float | None
     hesitation_count: int
     filler_word_count: int
@@ -158,17 +162,20 @@ class SessionResultReport:
     session_id: int
     candidate_id: int
     status: str
-    total_score: float
+    total_score: float | None
     readiness_badge: str
-    clarity_score: float
-    structure_score: float
-    evidence_score: float
-    speaking_pace_wpm: float
-    pace_rating: str
-    filler_count: int
+    clarity_score: float | None
+    structure_score: float | None
+    evidence_score: float | None
+    speaking_pace_wpm: float | None
+    pace_rating: str | None
+    filler_count: int | None
     filler_words: list[str]
-    pause_duration: float
-    star_analysis: dict[str, bool]
+    pause_duration: float | None
+    star_analysis: dict[str, bool] | None
+    evaluation_status: str
+    evaluated_turns: int
+    eligible_turns: int
     turns: list[TurnDetailItem]
     total_turns: int = 0
     performance_rating: str = ""

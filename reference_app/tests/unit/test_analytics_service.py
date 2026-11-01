@@ -216,6 +216,9 @@ def test_analytics_service_get_session_result_found_and_not_found() -> None:
         filler_words=["à"],
         pause_duration=1.5,
         star_analysis={"situation": True, "task": True, "action": True, "result": True},
+        evaluation_status="ready",
+        evaluated_turns=1,
+        eligible_turns=1,
         turns=[],
     )
     res = svc.get_session_result(None, candidate_id=1, session_id=101)

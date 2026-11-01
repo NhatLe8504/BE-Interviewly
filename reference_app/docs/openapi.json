@@ -10507,9 +10507,16 @@
             "description": "Số phiên hoàn thành"
           },
           "avg_score": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Avg Score",
-            "description": "Điểm trung bình (thang 100)"
+            "description": "Điểm trung bình (thang 100), nếu đã chấm"
           },
           "total_practice_minutes": {
             "type": "integer",
@@ -16723,19 +16730,47 @@
             "title": "Date"
           },
           "overall_score": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Overall Score"
           },
           "clarity_score": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Clarity Score"
           },
           "logic_score": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Logic Score"
           },
           "example_score": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Example Score"
           },
           "speaking_pace_wpm": {
@@ -16750,11 +16785,25 @@
             "title": "Speaking Pace Wpm"
           },
           "filler_words_count": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Filler Words Count"
           },
           "star_completion_rate": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Star Completion Rate"
           }
         },
@@ -16786,15 +16835,36 @@
             "title": "Trends"
           },
           "avg_wpm": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Avg Wpm"
           },
           "avg_filler_count": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Avg Filler Count"
           },
           "star_mastery_rate": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Star Mastery Rate"
           }
         },
@@ -19344,27 +19414,62 @@
       "SkillRadarOut": {
         "properties": {
           "clarity": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Clarity",
             "description": "Độ rõ ràng & Mạch lạc (0-100)"
           },
           "logic": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Logic",
             "description": "Cấu trúc logic (0-100)"
           },
           "evidence": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Evidence",
             "description": "Dẫn chứng thực tế (0-100)"
           },
           "delivery": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Delivery",
             "description": "Phong thái & Giọng điệu (0-100)"
           },
           "star_method": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Star Method",
             "description": "Phương pháp STAR (0-100)"
           }
@@ -20662,6 +20767,17 @@
             ],
             "title": "Audio Url"
           },
+          "user_audio_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Audio Url"
+          },
           "transcribed_text": {
             "anyOf": [
               {
@@ -20728,6 +20844,42 @@
             ],
             "title": "Feedback Text"
           },
+          "ideal_answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ideal Answer"
+          },
+          "question_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Type"
+          },
+          "star_analysis": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "boolean"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Star Analysis"
+          },
           "speaking_pace": {
             "anyOf": [
               {
@@ -20772,12 +20924,16 @@
           "question_id",
           "message_text",
           "audio_url",
+          "user_audio_url",
           "transcribed_text",
           "clarity_score",
           "logic_score",
           "example_score",
           "overall_score",
           "feedback_text",
+          "ideal_answer",
+          "question_type",
+          "star_analysis",
           "speaking_pace",
           "hesitation_count",
           "filler_word_count",
@@ -21876,7 +22032,14 @@
             "title": "Status"
           },
           "total_score": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Total Score"
           },
           "readiness_badge": {
@@ -21884,27 +22047,69 @@
             "title": "Readiness Badge"
           },
           "clarity_score": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Clarity Score"
           },
           "structure_score": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Structure Score"
           },
           "evidence_score": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Evidence Score"
           },
           "speaking_pace_wpm": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Speaking Pace Wpm"
           },
           "pace_rating": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Pace Rating"
           },
           "filler_count": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Filler Count"
           },
           "filler_words": {
@@ -21915,15 +22120,41 @@
             "title": "Filler Words"
           },
           "pause_duration": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Pause Duration"
           },
           "star_analysis": {
-            "additionalProperties": {
-              "type": "boolean"
-            },
-            "type": "object",
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "boolean"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Star Analysis"
+          },
+          "evaluation_status": {
+            "type": "string",
+            "title": "Evaluation Status"
+          },
+          "evaluated_turns": {
+            "type": "integer",
+            "title": "Evaluated Turns"
+          },
+          "eligible_turns": {
+            "type": "integer",
+            "title": "Eligible Turns"
           },
           "turns": {
             "items": {
@@ -21959,6 +22190,9 @@
           "filler_words",
           "pause_duration",
           "star_analysis",
+          "evaluation_status",
+          "evaluated_turns",
+          "eligible_turns",
           "turns"
         ],
         "title": "SessionResultOut"
@@ -21974,29 +22208,59 @@
             "title": "Candidate Id"
           },
           "avg_clarity": {
-            "type": "number",
-            "title": "Avg Clarity",
-            "default": 0.0
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Clarity"
           },
           "avg_structure": {
-            "type": "number",
-            "title": "Avg Structure",
-            "default": 0.0
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Structure"
           },
           "avg_evidence": {
-            "type": "number",
-            "title": "Avg Evidence",
-            "default": 0.0
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Evidence"
           },
           "avg_overall": {
-            "type": "number",
-            "title": "Avg Overall",
-            "default": 0.0
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Overall"
           },
           "total_score": {
-            "type": "number",
-            "title": "Total Score",
-            "default": 0.0
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Score"
           },
           "readiness_badge": {
             "type": "string",
@@ -22004,15 +22268,42 @@
             "default": ""
           },
           "pace_rating": {
-            "type": "string",
-            "title": "Pace Rating",
-            "default": "Lý tưởng (Ideal)"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pace Rating"
           },
           "star_analysis": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Star Analysis",
-            "default": {}
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Star Analysis"
+          },
+          "evaluation_status": {
+            "type": "string",
+            "title": "Evaluation Status",
+            "default": "unavailable"
+          },
+          "evaluated_turns": {
+            "type": "integer",
+            "title": "Evaluated Turns",
+            "default": 0
+          },
+          "eligible_turns": {
+            "type": "integer",
+            "title": "Eligible Turns",
+            "default": 0
           },
           "total_turns": {
             "type": "integer",

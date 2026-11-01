@@ -75,7 +75,7 @@ def start_session(
         mode=interview_session.mode,
         barge_in_enabled=interview_session.barge_in_enabled,
         status=interview_session.status,
-        total_score=float(interview_session.total_score) if interview_session.total_score else None,
+        total_score=float(interview_session.total_score) if interview_session.total_score is not None else None,
         current_turn=TurnOut(
             turn_id=first_turn.turn_id,
             session_id=first_turn.session_id,
@@ -106,7 +106,7 @@ def get_session_details(
         mode=interview_session.mode,
         barge_in_enabled=interview_session.barge_in_enabled,
         status=interview_session.status,
-        total_score=float(interview_session.total_score) if interview_session.total_score else None,
+        total_score=float(interview_session.total_score) if interview_session.total_score is not None else None,
         current_turn=TurnOut(
             turn_id=last_turn.turn_id,
             session_id=last_turn.session_id,
@@ -173,9 +173,13 @@ def submit_turn(
             role_name=role_name,
             level=interview_session.level,
             language=interview_session.language,
-            question_type=question_row.question_type if question_row else None,
+            question_type=getattr(question_row.question_type, "value", question_row.question_type) if question_row else None,
         )
-        container.evaluation_service.evaluate_turn(session, eval_cmd)
+        try:
+            container.evaluation_service.evaluate_turn(session, eval_cmd)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Rubric evaluation unavailable for turn %s", saved_turn.turn_id)
 
     if is_completed:
         try:

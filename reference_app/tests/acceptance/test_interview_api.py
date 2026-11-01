@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import uuid
 
+from app.application.evaluation.ports import RubricEvaluationData
+
 
 def unique_email(prefix: str = "interview") -> str:
     return f"{prefix}-{uuid.uuid4().hex[:10]}@example.com"
@@ -19,6 +21,15 @@ def get_authenticated_headers(client) -> dict[str, str]:
 
 
 def test_interview_session_and_turn_flow(client) -> None:
+    class RubricEvaluator:
+        def evaluate(self, **kwargs) -> RubricEvaluationData:
+            return RubricEvaluationData(
+                clarity_score=80, structure_score=75, evidence_score=70,
+                star_analysis={"situation": False, "task": False, "action": False, "result": False},
+                feedback="Nêu rõ hơn lý do lựa chọn giải pháp.", sample_better_answer="",
+            )
+
+    client.app.state.services.evaluation_service.evaluator = RubricEvaluator()
     headers = get_authenticated_headers(client)
 
     # 1. Start interview session
@@ -80,7 +91,8 @@ def test_interview_session_and_turn_flow(client) -> None:
     summary = result_resp.json()
     assert summary["session_id"] == session_id
     assert summary["total_turns"] >= 1
-    assert summary["performance_rating"] != ""
+    assert summary["evaluation_status"] == "pending"
+    assert summary["total_score"] is None
 
     # 5. Test SSE question streaming
     stream_resp = client.get(

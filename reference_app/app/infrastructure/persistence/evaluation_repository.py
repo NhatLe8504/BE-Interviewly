@@ -4,6 +4,7 @@ from decimal import Decimal
 import json
 from typing import Any
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from ...application.evaluation.ports import EvaluationRepoPort
 from ...domain.evaluation import (
@@ -15,11 +16,39 @@ from ...domain.evaluation import (
 )
 from .models.session import (
     AnswerEvaluation as DbEvaluation,
+    InterviewSession as DbSession,
+    InterviewTurn as DbTurn,
     SessionProgressSummary as DbSummary,
 )
+from .models.session_plan import InterviewFlowState
+from .models.enums import SessionStatus
+from .score_rollup import answer_groups
 
 
 class SqlAlchemyEvaluationRepository(EvaluationRepoPort):
+    def refresh_session_score(self, session: Any, session_id: int) -> None:
+        interview = session.get(DbSession, session_id)
+        if interview is None:
+            return
+        flow = session.get(InterviewFlowState, session_id)
+        turns = list(session.scalars(
+            select(DbTurn).where(DbTurn.session_id == session_id)
+            .options(selectinload(DbTurn.evaluation))
+        ))
+        groups = answer_groups(turns, flow.snapshot if flow else None)
+        eligible = [turn for group in groups for turn in group]
+        complete = interview.status == SessionStatus.completed and bool(eligible) and all(
+            turn.evaluation is not None and all(value is not None for value in (
+                turn.evaluation.overall_score, turn.evaluation.clarity_score,
+                turn.evaluation.logic_score, turn.evaluation.example_score,
+            )) for turn in eligible
+        )
+        interview.total_score = Decimal(str(round(
+            sum(sum(float(turn.evaluation.overall_score) for turn in group) / len(group)
+                for group in groups) / len(groups), 2,
+        ))) if complete else None
+        session.flush()
+
     def save_turn_evaluation(
         self, session: Any, turn_id: int, evaluation: TurnEvaluation,
     ) -> TurnEvaluation:
@@ -66,6 +95,10 @@ class SqlAlchemyEvaluationRepository(EvaluationRepoPort):
             row.question_type = evaluation.question_type
             row.rubric_version = evaluation.rubric_version
 
+        session.flush()
+        turn = session.get(DbTurn, turn_id)
+        if turn is not None:
+            self.refresh_session_score(session, turn.session_id)
         session.commit()
         session.refresh(row)
         return evaluation

@@ -1020,7 +1020,7 @@ class VoiceInterviewOrchestrator:
                 return
             await self.set_state(VoiceSessionState.THINK)
             if self.get_current_stage().id == StageId.TECHNICAL.value:
-                self._schedule_answer_evaluation(self.current_turn_id, clean_text)
+                self._schedule_answer_evaluation(self.current_turn_id)
             self._judgment_task = asyncio.create_task(
                 self._process_adaptive_answer(self.current_turn_id, clean_text, self.flow["stage_version"])
             )
@@ -1559,8 +1559,8 @@ class VoiceInterviewOrchestrator:
                     "Ở chặng khởi động, chỉ trò chuyện thân thiện về kinh nghiệm và định hướng tổng quan. "
                     "Mỗi lượt chỉ hỏi một ý nhẹ nhàng, không kiểm tra kiến thức kỹ thuật, "
                     "không yêu cầu chi tiết kiến trúc, số liệu hay giải pháp. "
-                    "CẤM TUYỆT ĐỐI mở đầu bằng 'Cảm ơn bạn đã chia sẻ' hoặc các câu cảm ơn máy móc. "
-                    "Hãy mở lời tự nhiên như người thật ('Tôi hiểu rồi...', 'À ra vậy...', 'Được rồi...', hoặc đi thẳng vào ý tiếp theo). "
+                    "Đáp lại ý ứng viên vừa chia sẻ, tránh lặp cùng một lời cảm ơn hoặc câu đệm ở mọi lượt. "
+                    "Có thể cảm ơn khi phù hợp; nếu chưa rõ ý thì hỏi nhẹ nhàng để làm rõ. "
                     "Chỉ nói văn bản thuần túy."
                 )})
             elif self.system_prompt:
@@ -1582,11 +1582,11 @@ class VoiceInterviewOrchestrator:
             )
             convo_rules = (
                 "Nói năng tự nhiên, hòa nhã, có ngữ điệu đàm thoại thực tế như một người phỏng vấn công nghệ cao cấp. "
-                "CẤM TUYỆT ĐỐI mở đầu câu bằng 'Cảm ơn bạn đã chia sẻ' hoặc các câu cảm ơn lặp đi lặp lại. "
-                "Thay vào đó hãy tiếp nối tự nhiên bằng các câu đệm như 'Tôi hiểu rồi', 'À ra vậy', 'Thú vị đấy', 'Được rồi', hoặc hỏi thẳng vào vấn đề."
+                "Đáp lời theo nội dung vừa nghe, tránh lặp một câu mở đầu ở nhiều lượt. "
+                "Có thể cảm ơn chân thành khi thích hợp; nếu cần làm rõ thì hỏi thẳng vào ý còn thiếu."
                 if self.language == "vi" else
-                "Converse naturally and professionally. NEVER start turns with repetitive robotic fillers like 'Thank you for sharing'. "
-                "Use natural transitions like 'I see', 'Got it', 'Alright', or ask directly."
+                "Converse naturally and professionally, varying transitions according to what the candidate actually said. "
+                "Thank them when appropriate; clarify vague answers rather than using a stock acknowledgment."
             )
             messages.append({
                 "role": "system",
@@ -1606,9 +1606,9 @@ class VoiceInterviewOrchestrator:
             if next_question_item:
                 bridge = (
                     "Mở đầu chặng mới thật ngắn rồi hỏi một ý." if is_stage_opening else
-                    "Ứng viên chưa trả lời được ý vừa rồi; ghi nhận nhẹ nhàng rồi chuyển chủ đề, không cảm ơn khách sáo." if disposition == "cannot_answer" else
+                    "Ứng viên chưa trả lời được ý vừa rồi; ghi nhận nhẹ nhàng rồi chuyển chủ đề." if disposition == "cannot_answer" else
                     "Đáp lời ứng viên thân thiện không rập khuôn, rồi hỏi tiếp." if disposition == "greeting" else
-                    "Nối tiếp tự nhiên từ ý của ứng viên (CẤM dùng 'Cảm ơn bạn đã chia sẻ') rồi chuyển chủ đề." if previous_item else
+                    "Nối tiếp tự nhiên từ ý của ứng viên rồi chuyển chủ đề." if previous_item else
                     "Bắt đầu trao đổi tự nhiên."
                 )
                 if cur_stage.id == StageId.WARMUP.value:
@@ -1648,7 +1648,7 @@ class VoiceInterviewOrchestrator:
                 if cur_stage.id == StageId.WARMUP.value:
                     messages.append({"role": "system", "content": (
                         "Ứng viên vừa trả lời, nhưng nội dung sau vẫn chưa rõ: "
-                        f"{instruction}. Tiếp lời tự nhiên dựa trên điều họ thực sự vừa nói (CẤM dùng 'Cảm ơn bạn đã chia sẻ'), "
+                        f"{instruction}. Tiếp lời tự nhiên dựa trên điều họ thực sự vừa nói, "
                         "rồi hỏi MỘT câu ngắn để họ giải thích thêm ở mức tổng quan. Nếu họ chỉ nói 'không' hoặc trả lời ngắn, "
                         "hỏi lại nhẹ nhàng, không cảm ơn như thể đã trả lời xong. Không đòi ví dụ dự án, cách triển khai, số liệu "
                         "hay kiến thức kỹ thuật; không tự chuyển sang nội dung hoặc chặng khác."
@@ -1660,7 +1660,7 @@ class VoiceInterviewOrchestrator:
                             "Ứng viên vừa trả lời ý hiện tại của câu hỏi.\n"
                             f"Khía cạnh kỹ thuật cần đào sâu/làm rõ: {instruction}.\n"
                             f"Chỉ dẫn:\n"
-                            f"1. Phản hồi tự nhiên hoặc ghi nhận nhanh điểm đáng chú ý trong câu trả lời (1 mệnh đề ngắn, CẤM mở đầu bằng 'Cảm ơn bạn đã chia sẻ').\n"
+                            f"1. Phản hồi tự nhiên hoặc ghi nhận nhanh điểm đáng chú ý trong câu trả lời (1 mệnh đề ngắn, tránh lặp lời mở đầu).\n"
                             f"2. Đặt đúng một câu hỏi đào sâu tự nhiên, xoáy thẳng vào khía cạnh còn thiếu ({instruction}) để kiểm tra chiều sâu hiểu biết của ứng viên. Không hỏi sang các ý khác.\n"
                             "3. Giữ phong thái thân thiện, sắc sảo, không lặp lại nguyên văn câu hỏi gốc."
                         ),
@@ -2228,26 +2228,41 @@ class VoiceInterviewOrchestrator:
         finally:
             db.close()
 
-    def _schedule_answer_evaluation(self, turn_number: int, answer_text: str) -> None:
+    def _schedule_answer_evaluation(self, turn_number: int) -> None:
         if not self.session_factory or not self.evaluation_service:
             return
+        intent = self.current_intent_ctx
+        item = next((entry for entry in self.flow.get("items", [])
+                     if entry.get("id") == self.flow.get("current_item")), None) if self.flow else None
+        question_context = {
+            "question_type": intent.question_type if intent else "technical",
+            "reference_question": item.get("question") if item else (intent.intent if intent else None),
+            "competency": intent.topic_label if intent else None,
+            "expected_signals": tuple(item.get("signals", [])[:6]) if item else (),
+            "previous_answers": tuple(answer.get("text", "")[:400]
+                                      for answer in item.get("answers", [])[-3:]) if item else (),
+        }
         task = asyncio.create_task(
-            self._evaluate_and_track_answer(turn_number, answer_text),
+            self._evaluate_and_track_answer(turn_number, question_context),
         )
         self._background_tasks.add(task)
         task.add_done_callback(self._background_tasks.discard)
 
-    async def _evaluate_and_track_answer(self, turn_number: int, answer_text: str) -> None:
+    async def _evaluate_and_track_answer(
+        self, turn_number: int, question_context: dict[str, Any],
+    ) -> None:
         try:
             await asyncio.to_thread(
-                self._evaluate_and_track_answer_sync, turn_number, answer_text,
+                self._evaluate_and_track_answer_sync, turn_number, question_context,
             )
         except Exception as exc:
             logging.getLogger("VoiceOrchestrator").warning(
                 "Failed to evaluate answer for turn #%d: %s", turn_number, exc,
             )
 
-    def _evaluate_and_track_answer_sync(self, turn_number: int, answer_text: str) -> None:
+    def _evaluate_and_track_answer_sync(
+        self, turn_number: int, question_context: dict[str, Any],
+    ) -> None:
         if not self.session_factory or not self.evaluation_service:
             return
         if getattr(self.evaluation_service, "evaluator", None) is None:
@@ -2262,7 +2277,7 @@ class VoiceInterviewOrchestrator:
                 .filter_by(session_id=self.session_id, turn_number=turn_number)
                 .first()
             )
-            if turn_rec is None or not (turn_rec.message_text or "").strip():
+            if turn_rec is None or not (turn_rec.message_text or "").strip() or not (turn_rec.transcribed_text or "").strip():
                 return
             from ...infrastructure.persistence.models.catalog import QuestionBank
             question_row = db.get(QuestionBank, turn_rec.question_id) if turn_rec.question_id else None
@@ -2272,11 +2287,16 @@ class VoiceInterviewOrchestrator:
                     session_id=self.session_id,
                     turn_id=turn_rec.turn_id,
                     question_text=turn_rec.message_text.strip(),
-                    answer_text=answer_text,
+                    answer_text=turn_rec.transcribed_text.strip(),
                     role_name=self.role_name,
                     level=self.level,
                     language=self.language,
-                    question_type=question_row.question_type if question_row else None,
+                    question_type=str(getattr(question_context["question_type"], "value", question_context["question_type"]) or
+                                      getattr(getattr(question_row, "question_type", None), "value", "technical")),
+                    reference_question=question_context["reference_question"],
+                    competency=question_context["competency"],
+                    expected_signals=question_context["expected_signals"],
+                    previous_answers=question_context["previous_answers"],
                 ),
             )
             if turn_rec.question_id:
@@ -2350,6 +2370,9 @@ class VoiceInterviewOrchestrator:
                         row.completed_at = datetime.now(timezone.utc)
                 elif not row.completed_at:
                     row.completed_at = datetime.now(timezone.utc)
+                if self.evaluation_service and hasattr(self.evaluation_service, "refresh_session_score"):
+                    db.flush()
+                    self.evaluation_service.refresh_session_score(db, self.session_id)
                 db.commit()
                 return True
             return False

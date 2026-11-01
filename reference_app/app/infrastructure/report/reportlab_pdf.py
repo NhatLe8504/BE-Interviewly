@@ -4,6 +4,7 @@ import io
 import os
 from pathlib import Path
 from typing import Any
+from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -162,7 +163,7 @@ class ReportLabPdfGenerator:
         elements.append(Paragraph("<b>1. TỔNG QUAN ĐIỂM SỐ RUBRIC</b>", section_heading))
 
         def _fmt_score(sc: Any) -> str:
-            return f"{float(sc):.1f}/10" if sc is not None else "N/A"
+            return f"{float(sc):.1f}/10" if sc is not None else "Chưa chấm"
 
         rubric_data = [
             [
@@ -176,19 +177,19 @@ class ReportLabPdfGenerator:
                 Paragraph("Trả lời trôi chảy, đúng trọng tâm", cell_text),
             ],
             [
-                Paragraph("Tư duy logic & Cấu trúc (STAR)", cell_text),
+                Paragraph("Tư duy logic & Cấu trúc", cell_text),
                 Paragraph(_fmt_score(data.avg_logic_score), cell_text),
-                Paragraph("Bố cục Situation-Task-Action-Result chặt chẽ", cell_text),
+                Paragraph("Lập luận và giải thích có cấu trúc", cell_text),
             ],
             [
                 Paragraph("Dẫn chứng & Ví dụ thực tế", cell_text),
                 Paragraph(_fmt_score(data.avg_example_score), cell_text),
-                Paragraph("Minh chứng số liệu thuyết phục", cell_text),
+                Paragraph("Ví dụ cụ thể hoặc cách kiểm chứng phù hợp", cell_text),
             ],
             [
                 Paragraph("<b>Điểm tổng thể toàn phiên</b>", cell_text),
                 Paragraph(f"<b>{_fmt_score(data.total_score)}</b>", cell_text),
-                Paragraph("<b>Đạt yêu cầu phỏng vấn</b>", cell_text),
+                Paragraph("Chỉ tổng hợp khi đã chấm đủ lượt chuyên môn" if data.total_score is None else "Mỗi nội dung chuyên môn có trọng số như nhau", cell_text),
             ],
         ]
         rubric_table = Table(rubric_data, colWidths=[200, 100, 220])
@@ -209,19 +210,20 @@ class ReportLabPdfGenerator:
         if data.turns:
             elements.append(Paragraph("<b>2. CHI TIẾT TỪNG CÂU HỎI & NHẬN XÉT AI</b>", section_heading))
             for t in data.turns:
+                pace_text = f"{float(t.speaking_pace):.0f}" if t.speaking_pace is not None else "Chưa đo"
                 turn_box = [
                     [
-                        Paragraph(f"<b>Lượt {t.turn_number}: {t.question}</b>", cell_text),
+                        Paragraph(f"<b>Lượt {t.turn_number}: {escape(t.question)}</b>", cell_text),
                     ],
                     [
-                        Paragraph(f"<i>Trả lời:</i> {t.answer[:300] + ('...' if len(t.answer) > 300 else '')}", cell_text),
+                        Paragraph(f"<i>Trả lời:</i> {escape(t.answer[:300] + ('...' if len(t.answer) > 300 else '')) if t.answer else 'Chưa có câu trả lời'}", cell_text),
                     ],
                     [
                         Paragraph(
                             f"<b>Điểm:</b> {_fmt_score(t.overall_score)} | "
-                            f"<b>Tốc độ (WPM):</b> {float(t.speaking_pace or 0):.0f} | "
-                            f"<b>Từ đệm:</b> {t.filler_word_count or 0}<br/>"
-                            f"<b>Nhận xét:</b> {t.feedback_text or 'Hoàn thành tốt'}",
+                            f"<b>Tốc độ (WPM):</b> {pace_text} "
+                            f"| <b>Từ đệm:</b> {t.filler_word_count if t.filler_word_count is not None else 'Chưa đo'}<br/>"
+                            f"<b>Nhận xét:</b> {escape(t.feedback_text) if t.feedback_text else 'Chưa có đánh giá'}",
                             cell_text,
                         ),
                     ],
