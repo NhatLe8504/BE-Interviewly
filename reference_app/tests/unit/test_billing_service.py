@@ -78,6 +78,54 @@ class FakeSubscriptionRepo:
         self.subscriptions[user_subscription_id] = new_sub
         return new_sub
 
+    def get_subscription_by_id(self, session: Any, user_subscription_id: int):
+        return self.subscriptions.get(user_subscription_id)
+
+    def get_or_create_usage_balance(self, session: Any, user_id: int, default_voice_minutes=15, default_cv_generations=1):
+        if not hasattr(self, "_balances"):
+            self._balances = {}
+        if user_id not in self._balances:
+            class DummyBalance:
+                def __init__(self):
+                    self.voice_minutes_quota = default_voice_minutes
+                    self.voice_minutes_addon = 0
+                    self.voice_minutes_used = 0
+                    self.cv_generations_quota = default_cv_generations
+                    self.cv_generations_addon = 0
+                    self.cv_generations_used = 0
+            self._balances[user_id] = DummyBalance()
+        return self._balances[user_id]
+
+    def update_plan_balance(self, session: Any, user_id: int, voice_minutes: int, cv_generations: int):
+        b = self.get_or_create_usage_balance(session, user_id)
+        b.voice_minutes_quota = voice_minutes
+        b.voice_minutes_used = 0
+        b.cv_generations_quota = cv_generations
+        b.cv_generations_used = 0
+        return b
+
+    def add_addon_balance(self, session: Any, user_id: int, addon_type: str, amount: int):
+        b = self.get_or_create_usage_balance(session, user_id)
+        if addon_type == "voice":
+            b.voice_minutes_addon += amount
+        elif addon_type == "cv":
+            b.cv_generations_addon += amount
+        return b
+
+    def deduct_voice_minutes(self, session: Any, user_id: int, minutes: int):
+        b = self.get_or_create_usage_balance(session, user_id)
+        b.voice_minutes_used += minutes
+        return True
+
+    def deduct_cv_generation(self, session: Any, user_id: int):
+        b = self.get_or_create_usage_balance(session, user_id)
+        b.cv_generations_used += 1
+        return True
+
+    def refund_cv_generation(self, session: Any, user_id: int):
+        b = self.get_or_create_usage_balance(session, user_id)
+        b.cv_generations_used = max(0, b.cv_generations_used - 1)
+
 
 class FakeTransactionRepo:
     def __init__(self) -> None:
@@ -289,10 +337,15 @@ def test_quota_check(setup_services):
     # User without subscription
     q = sub_svc.check_quota(None, CheckQuotaCommand(user_id=99))
     assert q["has_active_subscription"] is False
-    assert q["remaining_quota"] == 3
+    assert q["remaining_quota"] == 15
+    assert q["voice_minutes"]["remaining"] == 15
+    assert q["cv_generations"]["remaining"] == 1
 
     # User with active Pro subscription
     sub_repo.create_subscription(None, user_id=100, plan_id=2, status="active")
+    sub_repo.update_plan_balance(None, user_id=100, voice_minutes=300, cv_generations=15)
     q_pro = sub_svc.check_quota(None, CheckQuotaCommand(user_id=100))
     assert q_pro["has_active_subscription"] is True
-    assert q_pro["remaining_quota"] == 100
+    assert q_pro["remaining_quota"] == 300
+    assert q_pro["voice_minutes"]["remaining"] == 300
+    assert q_pro["cv_generations"]["remaining"] == 15

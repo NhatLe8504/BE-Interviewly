@@ -68,12 +68,36 @@ class VerifyPaymentOut(BaseModel):
     subscription: SubscriptionOut | None = None
 
 
+class QuotaDetail(BaseModel):
+    total: int
+    used: int
+    remaining: int
+    allowed: bool
+
+
 class QuotaOut(BaseModel):
     has_active_subscription: bool
     plan_name: str
     quota_allowed: bool
     remaining_quota: int
     feature: str
+    voice_minutes: QuotaDetail | None = None
+    cv_generations: QuotaDetail | None = None
+
+
+class DeductVoiceMinutesIn(BaseModel):
+    duration_seconds: int
+    session_id: str | int | None = None
+
+
+class DeductCvQuotaIn(BaseModel):
+    job_id: str | None = None
+
+
+class DeductResultOut(BaseModel):
+    success: bool
+    message: str
+    remaining: int
 
 
 class WebhookResponseOut(BaseModel):

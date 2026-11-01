@@ -111,3 +111,31 @@ class PaymentTransaction(Base):
     )
 
     subscription: Mapped["UserSubscription"] = relationship(back_populates="transactions")
+
+
+class UserUsageBalance(Base):
+    __tablename__ = "user_usage_balances"
+    __table_args__ = (
+        Index("idx_user_usage_balances_user_id", "user_id"),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.user_id", ondelete="CASCADE"), primary_key=True
+    )
+    voice_minutes_quota: Mapped[int] = mapped_column(Integer, default=15, nullable=False)
+    voice_minutes_addon: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    voice_minutes_used: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    cv_generations_quota: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    cv_generations_addon: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    cv_generations_used: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    last_reset_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    user: Mapped["User"] = relationship()
+

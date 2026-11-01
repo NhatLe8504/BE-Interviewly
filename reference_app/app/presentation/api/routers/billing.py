@@ -20,6 +20,9 @@ from ..helpers.cache import cache_response
 from ..schemas.billing import (
     CheckoutIn,
     CheckoutUrlOut,
+    DeductCvQuotaIn,
+    DeductResultOut,
+    DeductVoiceMinutesIn,
     PaymentTransactionOut,
     PlanOut,
     QuotaOut,
@@ -199,3 +202,46 @@ def get_quota(
         session, CheckQuotaCommand(user_id=current_user.user_id, feature_name=feature),
     )
     return QuotaOut(**info)
+
+
+
+@router.post("/deduct-voice-minutes", response_model=DeductResultOut)
+@compat_router.post("/deduct-voice-minutes", response_model=DeductResultOut)
+def deduct_voice_minutes(
+    payload: DeductVoiceMinutesIn,
+    current_user: Any = Depends(get_current_user),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> DeductResultOut:
+    res = container.subscription_service.deduct_voice_minutes(
+        session, current_user.user_id, payload.duration_seconds, payload.session_id
+    )
+    return DeductResultOut(**res)
+
+
+@router.post("/deduct-cv-quota", response_model=DeductResultOut)
+@compat_router.post("/deduct-cv-quota", response_model=DeductResultOut)
+def deduct_cv_quota(
+    payload: DeductCvQuotaIn,
+    current_user: Any = Depends(get_current_user),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> DeductResultOut:
+    res = container.subscription_service.deduct_cv_generation(
+        session, current_user.user_id, payload.job_id
+    )
+    return DeductResultOut(**res)
+
+
+@router.post("/refund-cv-quota", response_model=DeductResultOut)
+@compat_router.post("/refund-cv-quota", response_model=DeductResultOut)
+def refund_cv_quota(
+    payload: DeductCvQuotaIn,
+    current_user: Any = Depends(get_current_user),
+    session: Any = Depends(get_session),
+    container: ServiceContainer = Depends(get_container),
+) -> DeductResultOut:
+    res = container.subscription_service.refund_cv_generation(
+        session, current_user.user_id, payload.job_id
+    )
+    return DeductResultOut(**res)

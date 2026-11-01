@@ -23,7 +23,7 @@ from . import system as system
 from . import user as user
 from . import onboarding as onboarding
 from . import user_skills as user_skills
-from .billing import PaymentTransaction, SubscriptionPlan, UserSubscription
+from .billing import PaymentTransaction, SubscriptionPlan, UserSubscription, UserUsageBalance
 from .catalog import JobDomain, JobRole, QuestionBank, StarGuidanceTemplate, PracticeHistoryRecord, QuestionSetReview, QuestionSet, QuestionSetItem
 from .session import (
     AnswerEvaluation,
@@ -34,10 +34,10 @@ from .session import (
     SpeechQualityAnalysis,
 )
 from .system import AuditLog, ModerationLog, SystemSetting
-from .session_plan import InterviewSessionConfig, SessionQuestionSelection
+from .session_plan import InterviewFlowState, InterviewSessionConfig, SessionQuestionSelection
 from .user import CandidateProfile, User
 from . import cv as cv
-from .cv import CvDocumentRecord
+from .cv import CvDocumentRecord, CvGenerationJob
 from . import course as course
 from .course import Course, CourseChapter, CourseLesson
 from .user_skills import (
@@ -50,6 +50,7 @@ from .user_skills import (
 
 
 __all__ = [
+    "CvGenerationJob",
     "AnswerEvaluation",
     "AuditLog",
     "CandidateProfile",
@@ -68,6 +69,7 @@ __all__ = [
     "PdfReport",
     "QuestionBank",
     "SessionProgressSummary",
+    "InterviewFlowState",
     "InterviewSessionConfig",
     "SessionQuestionSelection",
     "SpeechQualityAnalysis",

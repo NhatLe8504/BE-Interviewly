@@ -68,6 +68,11 @@ class SubscriptionRepoPort(Protocol):
     ) -> StoredUserSubscription | None:
         ...
 
+    def get_subscription_by_id(
+        self, session: Any, user_subscription_id: int
+    ) -> StoredUserSubscription | None:
+        ...
+
     def create_subscription(
         self,
         session: Any,
@@ -91,6 +96,36 @@ class SubscriptionRepoPort(Protocol):
         end_date: datetime | None = None,
         plan_id: int | None = None,
     ) -> StoredUserSubscription:
+        ...
+
+    def get_or_create_usage_balance(
+        self, session: Any, user_id: int, default_voice_minutes: int = 15, default_cv_generations: int = 1
+    ) -> Any:
+        ...
+
+    def update_plan_balance(
+        self, session: Any, user_id: int, voice_minutes: int, cv_generations: int
+    ) -> Any:
+        ...
+
+    def add_addon_balance(
+        self, session: Any, user_id: int, addon_type: str, amount: int
+    ) -> Any:
+        ...
+
+    def deduct_voice_minutes(
+        self, session: Any, user_id: int, minutes: int
+    ) -> bool:
+        ...
+
+    def deduct_cv_generation(
+        self, session: Any, user_id: int
+    ) -> bool:
+        ...
+
+    def refund_cv_generation(
+        self, session: Any, user_id: int
+    ) -> None:
         ...
 
 

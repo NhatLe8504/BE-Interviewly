@@ -15,6 +15,7 @@ from .models.billing import (
     PaymentTransaction as OrmPaymentTransaction,
     SubscriptionPlan as OrmSubscriptionPlan,
     UserSubscription as OrmUserSubscription,
+    UserUsageBalance as OrmUserUsageBalance,
 )
 from .models.enums import BillingCycle, PaymentStatus, SubStatus
 
@@ -76,6 +77,12 @@ class SqlAlchemyBillingRepository:
     def get_plan_by_id(self, session: Any, plan_id: int) -> StoredSubscriptionPlan | None:
         row = session.get(OrmSubscriptionPlan, plan_id)
         return _to_stored_plan(row) if row else None
+
+    def get_subscription_by_id(
+        self, session: Any, user_subscription_id: int,
+    ) -> StoredUserSubscription | None:
+        row = session.get(OrmUserSubscription, user_subscription_id)
+        return _to_stored_subscription(row) if row else None
 
     def get_active_subscription(
         self, session: Any, user_id: int,
@@ -148,6 +155,81 @@ class SqlAlchemyBillingRepository:
             session.refresh(row)
             return _to_stored_subscription(row)
         raise ValueError(f"UserSubscription {user_subscription_id} not found")
+    def get_or_create_usage_balance(
+        self, session: Any, user_id: int, default_voice_minutes: int = 15, default_cv_generations: int = 1
+    ) -> OrmUserUsageBalance:
+        row = session.get(OrmUserUsageBalance, user_id)
+        if not row:
+            row = OrmUserUsageBalance(
+                user_id=user_id,
+                voice_minutes_quota=default_voice_minutes,
+                voice_minutes_addon=0,
+                voice_minutes_used=0,
+                cv_generations_quota=default_cv_generations,
+                cv_generations_addon=0,
+                cv_generations_used=0,
+            )
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+        return row
+
+    def update_plan_balance(
+        self, session: Any, user_id: int, voice_minutes: int, cv_generations: int
+    ) -> OrmUserUsageBalance:
+        balance = self.get_or_create_usage_balance(session, user_id)
+        balance.voice_minutes_quota = voice_minutes
+        balance.voice_minutes_used = 0
+        balance.cv_generations_quota = cv_generations
+        balance.cv_generations_used = 0
+        balance.last_reset_at = datetime.now(timezone.utc)
+        session.commit()
+        session.refresh(balance)
+        return balance
+
+    def add_addon_balance(
+        self, session: Any, user_id: int, addon_type: str, amount: int
+    ) -> OrmUserUsageBalance:
+        balance = self.get_or_create_usage_balance(session, user_id)
+        if addon_type == "voice":
+            balance.voice_minutes_addon += amount
+        elif addon_type == "cv":
+            balance.cv_generations_addon += amount
+        session.commit()
+        session.refresh(balance)
+        return balance
+
+    def deduct_voice_minutes(
+        self, session: Any, user_id: int, minutes: int
+    ) -> bool:
+        balance = self.get_or_create_usage_balance(session, user_id)
+        total = balance.voice_minutes_quota + balance.voice_minutes_addon
+        remaining = max(0, total - balance.voice_minutes_used)
+        if remaining < minutes:
+            return False
+        balance.voice_minutes_used += minutes
+        session.commit()
+        return True
+
+    def deduct_cv_generation(
+        self, session: Any, user_id: int
+    ) -> bool:
+        balance = self.get_or_create_usage_balance(session, user_id)
+        total = balance.cv_generations_quota + balance.cv_generations_addon
+        remaining = max(0, total - balance.cv_generations_used)
+        if remaining < 1:
+            return False
+        balance.cv_generations_used += 1
+        session.commit()
+        return True
+
+    def refund_cv_generation(
+        self, session: Any, user_id: int
+    ) -> None:
+        balance = self.get_or_create_usage_balance(session, user_id)
+        balance.cv_generations_used = max(0, balance.cv_generations_used - 1)
+        session.commit()
+
 
     def create_transaction(
         self,

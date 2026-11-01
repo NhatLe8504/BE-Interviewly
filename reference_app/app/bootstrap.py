@@ -37,6 +37,11 @@ def _auto_migrate_columns(engine: Any) -> None:
             for col_name, col_def in cols:
                 conn.exec_driver_sql(f"ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS {col_name} {col_def};")
             for table_name, col_name, col_def in [
+                ("star_guidance_templates", "is_active", "BOOLEAN DEFAULT TRUE NOT NULL"),
+                ("answer_evaluations", "question_type", "VARCHAR(20)"),
+                ("answer_evaluations", "rubric_version", "INTEGER DEFAULT 1 NOT NULL"),
+                ("jd_generation_jobs", "request_payload", "JSON"),
+                ("jd_generation_jobs", "notification_pending", "BOOLEAN DEFAULT FALSE NOT NULL"),
                 ("job_domains", "is_active", "BOOLEAN DEFAULT TRUE NOT NULL"),
                 ("job_roles", "is_active", "BOOLEAN DEFAULT TRUE NOT NULL"),
                 ("candidate_profiles", "mascot_id", "VARCHAR(32) DEFAULT 'fox-pixel' NOT NULL"),
@@ -64,6 +69,11 @@ def _auto_migrate_columns(engine: Any) -> None:
                 except Exception:
                     pass
             for table_name, col_name, col_def in [
+                ("star_guidance_templates", "is_active", "BOOLEAN DEFAULT 1 NOT NULL"),
+                ("answer_evaluations", "question_type", "VARCHAR(20)"),
+                ("answer_evaluations", "rubric_version", "INTEGER DEFAULT 1 NOT NULL"),
+                ("jd_generation_jobs", "request_payload", "JSON"),
+                ("jd_generation_jobs", "notification_pending", "BOOLEAN DEFAULT 0 NOT NULL"),
                 ("job_domains", "is_active", "BOOLEAN DEFAULT 1 NOT NULL"),
                 ("job_roles", "is_active", "BOOLEAN DEFAULT 1 NOT NULL"),
                 ("candidate_profiles", "mascot_id", "VARCHAR(32) DEFAULT 'fox-pixel' NOT NULL"),
@@ -139,37 +149,161 @@ from .infrastructure.security import JwtTokenService, Pbkdf2PasswordHasher
 from .infrastructure.speech.text_analyzer import RegexSpeechTextAnalyzer
 from .infrastructure.tts.edge_tts_adapter import EdgeTTSAdapter
 from .infrastructure.tts.elevenlabs_adapter import ElevenLabsTTSAdapter
+from .infrastructure.tts.vieneu_adapter import VieNeuTTSAdapter
 from .infrastructure.storage.cloudinary_storage import CloudinaryStorageService
+
+
+DEFAULT_SUBSCRIPTION_PLANS = [
+    {
+        "plan_id": 1,
+        "plan_name": "Free",
+        "price": Decimal("0"),
+        "billing_cycle": BillingCycle.free,
+        "feature_limits": {
+            "type": "subscription",
+            "voice_minutes": 15,
+            "cv_generations": 1,
+            "interview_turns": 15,
+            "ai_feedback": "basic",
+        },
+        "is_active": True,
+    },
+    {
+        "plan_id": 2,
+        "plan_name": "Pro Monthly",
+        "price": Decimal("99000"),
+        "billing_cycle": BillingCycle.monthly,
+        "feature_limits": {
+            "type": "subscription",
+            "voice_minutes": 300,
+            "cv_generations": 15,
+            "interview_turns": 300,
+            "ai_feedback": "detailed",
+            "pdf_reports": True,
+        },
+        "is_active": True,
+    },
+    {
+        "plan_id": 3,
+        "plan_name": "Pro Yearly",
+        "price": Decimal("899000"),
+        "billing_cycle": BillingCycle.yearly,
+        "feature_limits": {
+            "type": "subscription",
+            "voice_minutes": 4000,
+            "cv_generations": 200,
+            "interview_turns": 4000,
+            "ai_feedback": "detailed",
+            "pdf_reports": True,
+        },
+        "is_active": True,
+    },
+    {
+        "plan_id": 4,
+        "plan_name": "Sprint 7 Ngày (Cấp Tốc)",
+        "price": Decimal("49000"),
+        "billing_cycle": BillingCycle.weekly,
+        "feature_limits": {
+            "type": "subscription",
+            "voice_minutes": 60,
+            "cv_generations": 3,
+            "interview_turns": 60,
+            "ai_feedback": "detailed",
+            "pdf_reports": True,
+            "speech_analysis": True,
+        },
+        "is_active": True,
+    },
+    {
+        "plan_id": 101,
+        "plan_name": "Add-on Voice 30m",
+        "price": Decimal("29000"),
+        "billing_cycle": BillingCycle.monthly,
+        "feature_limits": {
+            "type": "addon",
+            "addon_type": "voice",
+            "voice_minutes": 30,
+        },
+        "is_active": True,
+    },
+    {
+        "plan_id": 102,
+        "plan_name": "Add-on Voice 60m",
+        "price": Decimal("49000"),
+        "billing_cycle": BillingCycle.monthly,
+        "feature_limits": {
+            "type": "addon",
+            "addon_type": "voice",
+            "voice_minutes": 60,
+        },
+        "is_active": True,
+    },
+    {
+        "plan_id": 103,
+        "plan_name": "Add-on Voice 120m",
+        "price": Decimal("89000"),
+        "billing_cycle": BillingCycle.monthly,
+        "feature_limits": {
+            "type": "addon",
+            "addon_type": "voice",
+            "voice_minutes": 120,
+        },
+        "is_active": True,
+    },
+    {
+        "plan_id": 104,
+        "plan_name": "Add-on CV 3x",
+        "price": Decimal("19000"),
+        "billing_cycle": BillingCycle.monthly,
+        "feature_limits": {
+            "type": "addon",
+            "addon_type": "cv",
+            "cv_generations": 3,
+        },
+        "is_active": True,
+    },
+    {
+        "plan_id": 105,
+        "plan_name": "Add-on CV 10x",
+        "price": Decimal("49000"),
+        "billing_cycle": BillingCycle.monthly,
+        "feature_limits": {
+            "type": "addon",
+            "addon_type": "cv",
+            "cv_generations": 10,
+        },
+        "is_active": True,
+    },
+]
 
 
 def _seed_subscription_plans(session_factory: Any) -> None:
     session = session_factory()
     try:
-        count = session.execute(select(func.count(OrmSubscriptionPlan.plan_id))).scalar()
-        if count == 0:
-            free = OrmSubscriptionPlan(
-                plan_name="Free",
-                price=Decimal("0"),
-                billing_cycle=BillingCycle.free,
-                feature_limits={"interview_turns": 5, "ai_feedback": "basic"},
-                is_active=True,
-            )
-            monthly = OrmSubscriptionPlan(
-                plan_name="Pro Monthly",
-                price=Decimal("99000"),
-                billing_cycle=BillingCycle.monthly,
-                feature_limits={"interview_turns": 100, "ai_feedback": "detailed", "pdf_reports": True},
-                is_active=True,
-            )
-            yearly = OrmSubscriptionPlan(
-                plan_name="Pro Yearly",
-                price=Decimal("899000"),
-                billing_cycle=BillingCycle.yearly,
-                feature_limits={"interview_turns": 1500, "ai_feedback": "detailed", "pdf_reports": True},
-                is_active=True,
-            )
-            session.add_all([free, monthly, yearly])
-            session.commit()
+        for plan_spec in DEFAULT_SUBSCRIPTION_PLANS:
+            # Check by plan_id first or plan_name
+            existing = session.get(OrmSubscriptionPlan, plan_spec["plan_id"])
+            if not existing:
+                existing = session.execute(
+                    select(OrmSubscriptionPlan).where(OrmSubscriptionPlan.plan_name == plan_spec["plan_name"])
+                ).scalar_one_or_none()
+
+            if existing:
+                existing.price = plan_spec["price"]
+                existing.billing_cycle = plan_spec["billing_cycle"]
+                existing.feature_limits = plan_spec["feature_limits"]
+                existing.is_active = plan_spec["is_active"]
+            else:
+                new_plan = OrmSubscriptionPlan(
+                    plan_id=plan_spec["plan_id"],
+                    plan_name=plan_spec["plan_name"],
+                    price=plan_spec["price"],
+                    billing_cycle=plan_spec["billing_cycle"],
+                    feature_limits=plan_spec["feature_limits"],
+                    is_active=plan_spec["is_active"],
+                )
+                session.add(new_plan)
+        session.commit()
     except Exception:
         session.rollback()
     finally:
@@ -304,11 +438,9 @@ def build_services(
     cache_service = CacheService(cache=cache_adapter)
 
 
-    # Edge & ElevenLabs TTS
     edge_tts = EdgeTTSAdapter()
     eleven_key = getattr(settings, "elevenlabs_api_key", "")
-    # Su dung truc tiep EdgeTTSAdapter mien phi va khong gioi han quota, ho tro chinh pitch (do cao tram)
-    tts_adapter = edge_tts
+    tts_adapter = VieNeuTTSAdapter(api_key=settings.vieneu_api_key, fallback=edge_tts)
 
     # Automated Job Ingestion Worker
     from .application.job_aggregator.worker import JobIngestionWorker
