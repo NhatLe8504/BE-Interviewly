@@ -32,8 +32,4 @@ class PdfReportService:
         return pdf_bytes, filename
 
     def get_pdf(self, session: Any, session_id: int) -> tuple[bytes, str]:
-        filename = f"session_{session_id}_report.pdf"
-        file_path = self.storage_dir / filename
-        if file_path.exists():
-            return file_path.read_bytes(), filename
         return self.generate_and_store(session, session_id)

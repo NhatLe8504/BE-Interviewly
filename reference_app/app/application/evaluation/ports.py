@@ -25,11 +25,18 @@ class RubricEvaluatorPort(Protocol):
         level: str = "fresher",
         language: str = "vi",
         question_type: str | None = None,
+        reference_question: str | None = None,
+        competency: str | None = None,
+        expected_signals: tuple[str, ...] = (),
+        previous_answers: tuple[str, ...] = (),
     ) -> RubricEvaluationData:
         ...
 
 
 class EvaluationRepoPort(Protocol):
+    def refresh_session_score(self, session: Any, session_id: int) -> None:
+        ...
+
     def save_turn_evaluation(
         self, session: Any, turn_id: int, evaluation: TurnEvaluation,
     ) -> TurnEvaluation:

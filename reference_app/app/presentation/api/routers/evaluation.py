@@ -5,7 +5,6 @@ from typing import Any
 from fastapi import APIRouter, Depends
 
 from ....application.container import ServiceContainer
-from ....application.evaluation.commands import GenerateSessionSummaryCommand
 from ....domain.errors import NotFoundError
 from ..dependencies import (
     ensure_session_owner,
@@ -88,92 +87,43 @@ def get_session_result(
     session: Any = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
 ) -> SessionResultOut:
-    interview_session = ensure_session_owner(session_id, user_id, session, container)
-    turns = container.interview_service.get_turns(session, session_id)
-
-    eval_list = []
-    evaluations_domain = []
-    for turn in turns:
-        if not turn.answer_text:
+    ensure_session_owner(session_id, user_id, session, container)
+    result = container.analytics_service.get_session_result(session, user_id, session_id)
+    evaluations = []
+    for turn in result.turns:
+        if any(score is None for score in (
+            turn.overall_score, turn.clarity_score, turn.logic_score, turn.example_score,
+        )):
             continue
-        try:
-            e = container.evaluation_service.get_turn_evaluation(session, turn.turn_id)
-            evaluations_domain.append(e)
-
-            speech_out = None
-            if container.speech_service is not None:
-                m = container.speech_service.analyze_answer(turn.answer_text, turn.duration_seconds)
-                speech_out = SpeechMetricsOut(
-                    wpm=m.wpm_metrics.wpm,
-                    pause_duration=m.wpm_metrics.pause_duration,
-                    filler_count=m.wpm_metrics.filler_count,
-                    filler_words=list(m.wpm_metrics.filler_words),
-                    pace_assessment=m.pace_assessment,
-                    tips=list(m.tips),
-                )
-
-            eval_list.append(
-                RubricEvaluationOut(
-                    turn_id=e.turn_id,
-                    clarity_score=e.rubric.clarity,
-                    structure_score=e.rubric.structure,
-                    evidence_score=e.rubric.evidence,
-                    overall_score=e.rubric.overall,
-                    star_analysis=StarAnalysisOut(
-                        situation=e.star.situation if e.star else False,
-                        task=e.star.task if e.star else False,
-                        action=e.star.action if e.star else False,
-                        result=e.star.result if e.star else False,
-                        completeness_percentage=e.star.completeness_percentage if e.star else 0.0,
-                    ) if e.star else None,
-                    feedback=e.feedback.feedback_summary if e.feedback else "",
-                    sample_better_answer=e.feedback.sample_better_answer if e.feedback else "",
-                    speech_metrics=speech_out,
-                ),
-            )
-        except Exception:
-            continue
-
-    summary_cmd = GenerateSessionSummaryCommand(
+        star = turn.star_analysis
+        evaluations.append(RubricEvaluationOut(
+            turn_id=turn.turn_id,
+            clarity_score=turn.clarity_score,
+            structure_score=turn.logic_score,
+            evidence_score=turn.example_score,
+            overall_score=turn.overall_score,
+            star_analysis=StarAnalysisOut(
+                **star, completeness_percentage=25.0 * sum(star.values()),
+            ) if star is not None else None,
+            feedback=turn.feedback_text or "",
+            sample_better_answer=turn.ideal_answer or "",
+            speech_metrics=None,
+        ))
+    return SessionResultOut(
         session_id=session_id,
-        candidate_id=interview_session.user_id,
+        candidate_id=user_id,
+        avg_clarity=result.clarity_score,
+        avg_structure=result.structure_score,
+        avg_evidence=result.evidence_score,
+        avg_overall=result.total_score,
+        total_score=result.total_score,
+        readiness_badge=result.readiness_badge,
+        pace_rating=result.pace_rating,
+        star_analysis=result.star_analysis,
+        evaluation_status=result.evaluation_status,
+        evaluated_turns=result.evaluated_turns,
+        eligible_turns=result.eligible_turns,
+        total_turns=len(result.turns),
+        performance_rating=result.performance_rating,
+        evaluations=evaluations,
     )
-    summary = container.evaluation_service.generate_session_summary(
-        session=session,
-        command=summary_cmd,
-        turn_evaluations=evaluations_domain,
-    )
-
-    try:
-        analytics_result = container.analytics_service.get_session_result(session, user_id, session_id)
-        star_dict = analytics_result.star_analysis
-        if hasattr(star_dict, 'model_dump'):
-            star_dict = star_dict.model_dump()
-        return SessionResultOut(
-            session_id=session_id,
-            candidate_id=interview_session.user_id,
-            avg_clarity=float(analytics_result.clarity_score or 0.0),
-            avg_structure=float(analytics_result.structure_score or 0.0),
-            avg_evidence=float(analytics_result.evidence_score or 0.0),
-            avg_overall=float(analytics_result.total_score or 0.0),
-            total_score=float(analytics_result.total_score or 0.0),
-            readiness_badge=analytics_result.readiness_badge or "",
-            pace_rating=analytics_result.pace_rating or "Lý tưởng (Ideal)",
-            star_analysis=star_dict or {},
-            total_turns=len(eval_list) or len(analytics_result.turns),
-            performance_rating=summary.performance_rating if summary else "Needs Improvement",
-            evaluations=eval_list,
-        )
-    except Exception as exc:
-        return SessionResultOut(
-            session_id=summary.session_id,
-            candidate_id=summary.candidate_id,
-            avg_clarity=summary.avg_clarity,
-            avg_structure=summary.avg_structure,
-            avg_evidence=summary.avg_evidence,
-            avg_overall=summary.avg_overall,
-            total_score=summary.avg_overall,
-            total_turns=summary.total_turns,
-            performance_rating=summary.performance_rating,
-            evaluations=eval_list,
-        )

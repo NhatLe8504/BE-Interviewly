@@ -23,6 +23,9 @@ class EvaluationService:
     evaluator: RubricEvaluatorPort
     clock: ClockPort
 
+    def refresh_session_score(self, session: Any, session_id: int) -> None:
+        self.evaluations.refresh_session_score(session, session_id)
+
     def evaluate_turn(
         self, session: Any, command: EvaluateTurnCommand,
     ) -> TurnEvaluation:
@@ -34,14 +37,24 @@ class EvaluationService:
             "level": command.level,
             "language": command.language,
         }
-        if command.question_type is not None:
+        optional_context = {
+            "question_type": command.question_type,
+            "reference_question": command.reference_question,
+            "competency": command.competency,
+            "expected_signals": command.expected_signals,
+            "previous_answers": command.previous_answers,
+        }
+        if any(value for value in optional_context.values()):
             import inspect
             try:
                 sig = inspect.signature(self.evaluator.evaluate)
-                if "question_type" in sig.parameters or any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
-                    evaluator_kwargs["question_type"] = command.question_type
+                accepts_kwargs = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
+                evaluator_kwargs.update({
+                    name: value for name, value in optional_context.items()
+                    if value and (accepts_kwargs or name in sig.parameters)
+                })
             except (ValueError, TypeError):
-                evaluator_kwargs["question_type"] = command.question_type
+                evaluator_kwargs.update({name: value for name, value in optional_context.items() if value})
         data = self.evaluator.evaluate(**evaluator_kwargs)
 
         rubric = RubricScores(

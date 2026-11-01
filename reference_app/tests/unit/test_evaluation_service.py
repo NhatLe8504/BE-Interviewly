@@ -16,6 +16,7 @@ from app.domain.evaluation import (
     StarAnalysis,
     TurnEvaluation,
 )
+from app.infrastructure.llm.openai_adapter import OpenAILLMAdapter
 
 
 class FakeClock:
@@ -109,6 +110,16 @@ def test_behavioral_turn_keeps_star_analysis() -> None:
     )
     assert turn_eval.star is not None
     assert turn_eval.star.situation is True
+
+
+def test_rubric_does_not_fabricate_scores_when_provider_unavailable(monkeypatch) -> None:
+    with pytest.raises(RuntimeError, match="not configured"):
+        OpenAILLMAdapter(api_key="").evaluate("Question", "Answer")
+
+    adapter = OpenAILLMAdapter(api_key="test-key")
+    monkeypatch.setattr(adapter, "_chat_completion", lambda **kwargs: '{"feedback":"No numeric scores"}')
+    with pytest.raises(ValueError, match="Invalid rubric"):
+        adapter.evaluate("Question", "Answer")
 
 
 def test_situational_turn_has_no_star_analysis() -> None:

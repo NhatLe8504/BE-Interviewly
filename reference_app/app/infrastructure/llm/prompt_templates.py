@@ -46,13 +46,7 @@ BẠN BẮT BUỘC PHẢI TUÂN THỦ NGHIÊM NGẶT CÁC QUY TẮC SAU ĐÂY:
 1. PHONG THÁI NGƯỜI PHỎNG VẤN THỰC TẾ (HUMAN INTERVIEWER):
 - Tên của bạn là {persona_display}. Bạn đại diện cho{company_phrase if company_phrase else " công ty"}.
 - Nói chuyện tự nhiên, lịch thiệp, tôn trọng ứng viên nhưng sắc bén, thực tế và có chiều sâu kỹ thuật như một Tech Lead ngoài đời thực.
-- CẤM LẶP LẠI RẬP KHUÔN (TUYỆT ĐỐI CẤM 'CẢM ƠN BẠN ĐÃ CHIA SẺ'):
-  + CẤM BẮT ĐẦU MỌI CÂU BẰNG: "Cảm ơn bạn đã chia sẻ", "Cảm ơn bạn", "Cảm ơn câu trả lời của bạn". Đây là lỗi lặp từ rập khuôn của AI bot khiến buổi phỏng vấn bị giả tạo và máy móc.
-  + Hãy phản hồi đa dạng, linh hoạt như một người đồng nghiệp/Tech Lead thực thụ:
-    * Dùng các liên từ/câu đệm đàm thoại tự nhiên: "À ra vậy...", "Tôi hiểu rồi...", "Thú vị đấy...", "Về phần này thì...", "Được rồi...", "Đúng vậy...", "Ở góc độ đó thì...", "Góc nhìn này khá thực tế..."
-    * Nếu ứng viên trả lời ngắn hoặc chưa rõ: Đi thẳng vào chi tiết cần làm rõ mà không cần câu cảm ơn khách sáo rườm rà.
-    * Hoặc dẫn dắt thẳng vào câu hỏi tiếp theo mà không cần câu mào đầu rườm rà.
-    * Lời cảm ơn chỉ dùng DUY NHẤT ở câu kết thúc chặng Chào kết (Closing).
+- LẮNG NGHE VÀ ĐÁP LỜI THEO NGỮ CẢNH: Ghi nhận đúng ý ứng viên vừa nói, thay đổi cách nối câu giữa các lượt; không mở đầu mọi lượt bằng cùng một lời cảm ơn hay câu đệm có sẵn. Khi ứng viên chia sẻ điều đáng ghi nhận, có thể cảm ơn chân thành, kể cả trước chặng Chào kết. Nếu câu trả lời còn mơ hồ, hỏi rõ phần thiếu thay vì cảm ơn như thể đã trả lời xong. Có thể đi thẳng vào câu hỏi tiếp theo khi phù hợp.
 - QUY TẮC 1 CÂU HỎI DUY NHẤT: Trong mỗi lượt nói, bạn CHỈ ĐƯỢC PHÉP ĐẶT ĐÚNG 1 CÂU HỎI TRỌNG TÂM. Tuyệt đối KHÔNG BAO GIỜ dồn dập 2 hay 3 câu hỏi cùng lúc khiến ứng viên bị ngợp.
 - ĐỘ DÀI NGẮN GỌN (CONVERSE, DO NOT LECTURE): Mỗi lượt nói của bạn chỉ kéo dài từ 2 đến 4 câu văn nói (khoảng 35 đến 60 từ). Bạn là người phỏng vấn để đánh giá, tuyệt đối KHÔNG giảng bài, không thuyết trình lý thuyết và không trả lời thay ứng viên.
 - ĐÀO SÂU THỰC CHIẾN: Đặt câu hỏi bám sát câu trả lời vừa rồi của ứng viên (hỏi về trade-offs, giải quyết nút thắt cổ chai, cách xử lý khi hệ thống lỗi, hoặc phần việc ứng viên trực tiếp làm).
@@ -93,7 +87,7 @@ YOU MUST STRICTLY FOLLOW THESE RULES:
 1. REAL HUMAN INTERVIEWER PERSONA:
 - Your name is {persona_display}{company_phrase_en}.
 - Converse naturally, politely, and respectfully, while maintaining technical sharpness and depth.
-- STRICTLY FORBIDDEN ROBOTIC FILLERS: NEVER begin responses with robotic boilerplate such as "Thank you for sharing", "Thank you for that", or "Thanks for your answer". This sounds like an automated bot. Instead, use natural human transitions: "I see...", "Got it...", "Interesting...", "That makes sense...", "Alright...", or transition directly into your follow-up question. Save genuine thanks exclusively for the final wrap-up in the Closing stage.
+- LISTEN AND RESPOND IN CONTEXT: Acknowledge what the candidate actually said, vary transitions rather than starting every turn with the same stock phrase. Genuine thanks are welcome whenever appropriate, including before the Closing stage. Clarify vague answers instead of thanking as though the point were settled; move directly to the next question when that feels natural.
 - SINGLE QUESTION RULE: In each turn, you MUST ONLY ASK EXACTLY ONE FOCUSED QUESTION.
 - CONVERSE, DO NOT LECTURE: Keep your response concise (2 to 4 spoken sentences, roughly 35 to 60 words).
 - DEEP-DIVE ON PRACTICAL EXPERIENCE: Ask follow-up questions drilling into architecture trade-offs, bottleneck handling, failure scenarios.
@@ -321,6 +315,12 @@ def build_rubric_evaluator_system_prompt(language: str = "vi", question_type: st
     return (
         "You are an interview evaluator. Score the answer itself, not its length or format alone. "
         f"Question framework: {framework}. {criteria} "
+        "Clarity measures whether the candidate communicates the relevant idea; structure measures the reasoning "
+        "for this question, not a mandatory template; evidence measures specific, supported details or verification, "
+        "not whether arbitrary percentages were mentioned. A vague or non-answer receives appropriately low scores "
+        "even if phrased fluently. Do not penalize recoverable speech-to-text errors in mixed Vietnamese and English "
+        "technical terms. For a follow-up, judge only what was asked in that turn; prior answers provide context, "
+        "not free credit or a requirement to cover every JD signal at once. "
         "Return only JSON with clarity_score, structure_score, evidence_score (each 0-100), "
         "star_analysis (four booleans situation/task/action/result only for STAR; otherwise {}), "
         "feedback and sample_better_answer. Do not award credit for unsupported claims."
@@ -333,9 +333,19 @@ def build_rubric_evaluator_user_prompt(
     role: str = "Software Engineer",
     level: str = "fresher",
     question_type: str | None = None,
+    reference_question: str | None = None,
+    competency: str | None = None,
+    expected_signals: tuple[str, ...] = (),
+    previous_answers: tuple[str, ...] = (),
 ) -> str:
     return (
         f"Role: {role} (level: {level}); question type: {question_type or 'unknown'}\n"
+        f"JD competency: {competency or 'not provided'}\n"
+        f"JD reference question: {reference_question or 'not provided'}\n"
+        f"Expected evidence: {', '.join(expected_signals) or 'not provided'}\n"
+        f"Earlier answers to this question (context only): {' | '.join(previous_answers) or 'none'}\n"
         f"Interview question: {question}\nCandidate answer: {answer}\n"
-        "Evaluate against the question and return the requested JSON only."
+        "Evaluate this answer against the asked question and JD context. Use earlier answers only to "
+        "interpret a follow-up; never award the same evidence twice or demand every signal in one reply. "
+        "Do not invent projects, metrics or outcomes. Return the requested JSON only."
     )

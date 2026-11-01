@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import re
 from typing import AsyncIterator
 import httpx
@@ -166,79 +167,54 @@ class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPo
         level: str = "fresher",
         language: str = "vi",
         question_type: str | None = None,
+        reference_question: str | None = None,
+        competency: str | None = None,
+        expected_signals: tuple[str, ...] = (),
+        previous_answers: tuple[str, ...] = (),
     ) -> RubricEvaluationData:
         from ...domain.answer_framework import answer_framework
 
         is_behavioral = answer_framework(question_type) == "star"
         if not self.api_key:
-            # Fallback mock rubric calculation based on answer length and keywords
-            word_count = len(answer.split())
-            clarity = min(95.0, max(45.0, 50.0 + word_count * 0.4))
-            structure = min(90.0, max(40.0, 45.0 + word_count * 0.35))
-            evidence = min(88.0, max(35.0, 40.0 + word_count * 0.3))
-            return RubricEvaluationData(
-                clarity_score=round(clarity, 1),
-                structure_score=round(structure, 1),
-                evidence_score=round(evidence, 1),
-                star_analysis={
-                    "situation": True,
-                    "task": True,
-                    "action": word_count > 20,
-                    "result": word_count > 40,
-                } if is_behavioral else {},
-                feedback="Câu trả lời phản ánh tư duy logic tốt. Nên bổ sung thêm các số liệu định lượng về kết quả để câu trả lời thuyết phục hơn.",
-                sample_better_answer=f"Khi đối mặt với vấn đề trong câu hỏi '{question}', tôi đã phân tích nguyên nhân gốc rễ, áp dụng giải pháp tối ưu và cải thiện 30% hiệu năng hệ thống.",
-            )
+            raise RuntimeError("Rubric evaluator is not configured")
 
         system = build_rubric_evaluator_system_prompt(language=language, question_type=question_type)
         user = build_rubric_evaluator_user_prompt(
             question=question, answer=answer, role=role, level=level, question_type=question_type,
+            reference_question=reference_question, competency=competency,
+            expected_signals=expected_signals, previous_answers=previous_answers,
+        )
+        resp_text = self._chat_completion(
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+            response_format={"type": "json_object"},
         )
         try:
-            resp_text = self._chat_completion(
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                response_format={"type": "json_object"},
-            )
-        except Exception:
-            word_count = len(answer.split())
-            clarity = min(95.0, max(45.0, 50.0 + word_count * 0.4))
-            structure = min(90.0, max(40.0, 45.0 + word_count * 0.35))
-            evidence = min(88.0, max(35.0, 40.0 + word_count * 0.3))
-            return RubricEvaluationData(
-                clarity_score=round(clarity, 1),
-                structure_score=round(structure, 1),
-                evidence_score=round(evidence, 1),
-                star_analysis={
-                    "situation": True,
-                    "task": True,
-                    "action": word_count > 20,
-                    "result": word_count > 40,
-                } if is_behavioral else {},
-                feedback="Câu trả lời phản ánh tư duy logic tốt. Nên bổ sung thêm các số liệu định lượng về kết quả để câu trả lời thuyết phục hơn.",
-                sample_better_answer=f"Khi đối mặt với vấn đề trong câu hỏi '{question}', tôi đã phân tích nguyên nhân gốc rễ, áp dụng giải pháp tối ưu và cải thiện 30% hiệu năng hệ thống.",
-            )
-        try:
             data = json.loads(resp_text)
+            if not isinstance(data, dict):
+                raise ValueError("Rubric response must be an object")
+            scores = [data[key] for key in ("clarity_score", "structure_score", "evidence_score")]
+            if any(type(score) not in (int, float) or not math.isfinite(score) or not 0 <= score <= 100 for score in scores):
+                raise ValueError("Rubric scores must be finite numbers between 0 and 100")
+            if not isinstance(data.get("feedback"), str) or not data["feedback"].strip():
+                raise ValueError("Rubric feedback is required")
+            star = data.get("star_analysis", {}) if is_behavioral else {}
+            if not isinstance(star, dict) or (is_behavioral and any(
+                type(star.get(key)) is not bool for key in ("situation", "task", "action", "result")
+            )):
+                raise ValueError("Invalid STAR analysis")
+            sample = data.get("sample_better_answer") or ""
+            if not isinstance(sample, str):
+                raise ValueError("Invalid answer example")
             return RubricEvaluationData(
-                clarity_score=float(data.get("clarity_score", 70.0)),
-                structure_score=float(data.get("structure_score", 70.0)),
-                evidence_score=float(data.get("evidence_score", 70.0)),
-                star_analysis=data.get("star_analysis", {}) if is_behavioral else {},
-                feedback=data.get("feedback", ""),
-                sample_better_answer=data.get("sample_better_answer", ""),
+                clarity_score=float(scores[0]),
+                structure_score=float(scores[1]),
+                evidence_score=float(scores[2]),
+                star_analysis=star,
+                feedback=data["feedback"].strip(),
+                sample_better_answer=sample,
             )
-        except Exception:
-            return RubricEvaluationData(
-                clarity_score=75.0,
-                structure_score=70.0,
-                evidence_score=70.0,
-                star_analysis={"situation": True, "task": True, "action": False, "result": False} if is_behavioral else {},
-                feedback=resp_text,
-                sample_better_answer="",
-            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError("Invalid rubric evaluator response") from exc
 
     def _chat_completion(
         self, messages: list[dict[str, str]], response_format: dict | None = None,

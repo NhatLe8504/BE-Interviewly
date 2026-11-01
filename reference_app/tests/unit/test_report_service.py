@@ -53,7 +53,6 @@ def test_pdf_report_service_generate(tmp_path):
     assert (tmp_path / filename).exists()
     assert repo.meta[1] == "/reports/session_1_report.pdf"
 
-    # Subsequent get_pdf reads cached file
     cached_bytes, cached_name = svc.get_pdf(None, 1)
     assert cached_bytes == pdf_bytes
     assert cached_name == filename

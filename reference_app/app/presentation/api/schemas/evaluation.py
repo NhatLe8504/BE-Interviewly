@@ -36,14 +36,17 @@ class RubricEvaluationOut(BaseModel):
 class SessionResultOut(BaseModel):
     session_id: int
     candidate_id: int
-    avg_clarity: float = 0.0
-    avg_structure: float = 0.0
-    avg_evidence: float = 0.0
-    avg_overall: float = 0.0
-    total_score: float = 0.0
+    avg_clarity: float | None = None
+    avg_structure: float | None = None
+    avg_evidence: float | None = None
+    avg_overall: float | None = None
+    total_score: float | None = None
     readiness_badge: str = ""
-    pace_rating: str = "Lý tưởng (Ideal)"
-    star_analysis: dict[str, Any] = {}
+    pace_rating: str | None = None
+    star_analysis: dict[str, Any] | None = None
+    evaluation_status: str = "unavailable"
+    evaluated_turns: int = 0
+    eligible_turns: int = 0
     total_turns: int = 0
     performance_rating: str = ""
     evaluations: list[RubricEvaluationOut] = []

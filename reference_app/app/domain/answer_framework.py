@@ -1,7 +1,9 @@
 def answer_framework(question_type: str | None) -> str:
-    return {"behavioral": "star", "technical": "technical", "situational": "situational"}.get(
-        (question_type or "").lower(), "generic"
-    )
+    kind = getattr(question_type, "value", question_type)
+    return {
+        "behavioral": "star", "technical": "technical", "system_design": "technical",
+        "role_specific": "technical", "scenario": "situational", "situational": "situational",
+    }.get(str(kind or "").lower(), "generic")
 
 
 def hint_fallback(framework: str, language: str = "vi") -> str:
