@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
 from typing import Any
 import uuid
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ....application.container import ServiceContainer
@@ -62,7 +64,7 @@ def _get_or_create_orchestrator(container: ServiceContainer):
     return orchestrator
 
 
-def _init_job(session: Session, user_id: int, source_type: str, checksum: str, is_public: bool = False) -> str:
+def _init_job(session: Session, user_id: int, source_type: str, checksum: str, request_payload: dict[str, Any], is_public: bool = False) -> str:
     job_id = f"jd_{uuid.uuid4().hex[:12]}"
     job = JDGenerationJob(
         job_id=job_id,
@@ -72,11 +74,73 @@ def _init_job(session: Session, user_id: int, source_type: str, checksum: str, i
         status=JDJobStatus.PENDING.value,
         stage="INITIALIZED",
         progress_pct=5,
+        request_payload=request_payload,
         is_public=is_public,
     )
     session.add(job)
     session.commit()
     return job_id
+
+
+_running_jobs: dict[str, asyncio.Task] = {}
+
+
+def schedule_jd_job(container: ServiceContainer, job_id: str) -> None:
+    if job_id in _running_jobs:
+        return
+
+    async def run() -> None:
+        orchestrator = _get_or_create_orchestrator(container)
+        with container.session_factory() as session:
+            job = session.get(JDGenerationJob, job_id)
+            if job is None or job.status == JDJobStatus.COMPLETED.value:
+                return
+            payload = job.request_payload
+            user_id, source_type = job.user_id, job.source_type
+        if not payload:
+            return
+        lock_connection = None
+        try:
+            engine = container.session_factory.kw["bind"]
+            if engine.dialect.name == "postgresql":
+                lock_connection = engine.connect()
+                locked = lock_connection.execute(
+                    text("SELECT pg_try_advisory_lock(hashtext(:job_id))"), {"job_id": job_id}
+                ).scalar()
+                if not locked:
+                    return
+            with container.session_factory() as session:
+                job = session.get(JDGenerationJob, job_id)
+                if job is None or job.status == JDJobStatus.COMPLETED.value:
+                    return
+                for child in (job.script, job.blueprint, job.analysis, job.normalized_jd):
+                    if child is not None:
+                        session.delete(child)
+                job.status = JDJobStatus.PENDING.value
+                job.stage = "INITIALIZED"
+                job.progress_pct = 5
+                session.commit()
+            input_data = payload["input_data"]
+            if source_type == JDSourceType.file.value:
+                input_data = {**input_data, "content": base64.b64decode(input_data["content_base64"])}
+                del input_data["content_base64"]
+            await orchestrator.execute_pipeline(job_id, user_id, source_type, input_data, payload["options"])
+        except Exception:
+            logger.exception("JD job %s could not start; rolling back", job_id)
+            with container.session_factory() as session:
+                job = session.get(JDGenerationJob, job_id)
+                if job is not None and job.status != JDJobStatus.COMPLETED.value:
+                    session.delete(job)
+                    session.commit()
+            orchestrator.queue_manager.remove_job(job_id)
+        finally:
+            if lock_connection is not None:
+                lock_connection.execute(text("SELECT pg_advisory_unlock(hashtext(:job_id))"), {"job_id": job_id})
+                lock_connection.close()
+
+    task = asyncio.create_task(run())
+    _running_jobs[job_id] = task
+    task.add_done_callback(lambda done: (_running_jobs.pop(job_id, None), done.exception() if not done.cancelled() else None))
 
 
 @router.post("/text", response_model=JDJobStatusOut, status_code=status.HTTP_202_ACCEPTED)
@@ -86,29 +150,10 @@ async def submit_jd_text(
     session: Session = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
 ) -> JDJobStatusOut:
-    effective_user_id = user_id
-    checksum = NormalizedJD.calculate_checksum(payload.text)
-    job_id = _init_job(session, effective_user_id, JDSourceType.text.value, checksum, is_public=payload.is_public)
-
-    orchestrator = _get_or_create_orchestrator(container)
-    orchestrator.queue_manager.enqueue(
-        job_id=job_id,
-        payload={"source_type": "text", "text_length": len(payload.text)},
-    )
-
-    asyncio.create_task(
-        orchestrator.execute_pipeline(
-            job_id=job_id,
-            user_id=effective_user_id,
-            source_type=JDSourceType.text.value,
-            input_data={"text": payload.text},
-            options={
-                "duration_minutes": payload.duration_minutes,
-                "difficulty": payload.difficulty,
-                "language": payload.language,
-            },
-        )
-    )
+    request_payload = {"input_data": {"text": payload.text}, "options": {"duration_minutes": payload.duration_minutes, "difficulty": payload.difficulty, "language": payload.language}}
+    job_id = _init_job(session, user_id, JDSourceType.text.value,
+                       NormalizedJD.calculate_checksum(payload.text), request_payload, is_public=payload.is_public)
+    schedule_jd_job(container, job_id)
 
     return JDJobStatusOut(
         job_id=job_id,
@@ -125,29 +170,10 @@ async def submit_jd_url(
     session: Session = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
 ) -> JDJobStatusOut:
-    effective_user_id = user_id
-    checksum = NormalizedJD.calculate_checksum(payload.url)
-    job_id = _init_job(session, effective_user_id, JDSourceType.url.value, checksum, is_public=payload.is_public)
-
-    orchestrator = _get_or_create_orchestrator(container)
-    orchestrator.queue_manager.enqueue(
-        job_id=job_id,
-        payload={"source_type": "url", "url": payload.url},
-    )
-
-    asyncio.create_task(
-        orchestrator.execute_pipeline(
-            job_id=job_id,
-            user_id=effective_user_id,
-            source_type=JDSourceType.url.value,
-            input_data={"url": payload.url},
-            options={
-                "duration_minutes": payload.duration_minutes,
-                "difficulty": payload.difficulty,
-                "language": payload.language,
-            },
-        )
-    )
+    request_payload = {"input_data": {"url": payload.url}, "options": {"duration_minutes": payload.duration_minutes, "difficulty": payload.difficulty, "language": payload.language}}
+    job_id = _init_job(session, user_id, JDSourceType.url.value,
+                       NormalizedJD.calculate_checksum(payload.url), request_payload, is_public=payload.is_public)
+    schedule_jd_job(container, job_id)
 
     return JDJobStatusOut(
         job_id=job_id,
@@ -168,33 +194,18 @@ async def submit_jd_file(
     session: Session = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
 ) -> JDJobStatusOut:
-    effective_user_id = user_id
-    content = await file.read()
+    content = await file.read(5 * 1024 * 1024 + 1)
     if not content:
         raise HTTPException(status_code=400, detail="Tệp tải lên không có dữ liệu")
-
-    checksum = NormalizedJD.calculate_checksum(file.filename or "file")
-    job_id = _init_job(session, effective_user_id, JDSourceType.file.value, checksum, is_public=is_public)
-
-    orchestrator = _get_or_create_orchestrator(container)
-    orchestrator.queue_manager.enqueue(
-        job_id=job_id,
-        payload={"source_type": "file", "filename": file.filename},
-    )
-
-    asyncio.create_task(
-        orchestrator.execute_pipeline(
-            job_id=job_id,
-            user_id=effective_user_id,
-            source_type=JDSourceType.file.value,
-            input_data={"filename": file.filename, "content": content},
-            options={
-                "duration_minutes": duration_minutes,
-                "difficulty": difficulty,
-                "language": language,
-            },
-        )
-    )
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Tệp JD vượt quá 5 MB")
+    request_payload = {
+        "input_data": {"filename": file.filename, "content_base64": base64.b64encode(content).decode("ascii")},
+        "options": {"duration_minutes": duration_minutes, "difficulty": difficulty, "language": language},
+    }
+    job_id = _init_job(session, user_id, JDSourceType.file.value,
+                       NormalizedJD.calculate_checksum(content.hex()), request_payload, is_public=is_public)
+    schedule_jd_job(container, job_id)
 
     return JDJobStatusOut(
         job_id=job_id,
@@ -341,6 +352,34 @@ def get_community_jd_jobs(
     return [_format_job_summary(job, session=session) for job in jobs]
 
 
+@router.get("/notifications")
+def unread_jd_notifications(
+    user_id: int = Depends(get_current_user_id),
+    session: Session = Depends(get_session),
+) -> list[dict[str, str]]:
+    jobs = session.query(JDGenerationJob).filter(
+        JDGenerationJob.user_id == user_id,
+        JDGenerationJob.status == JDJobStatus.COMPLETED.value,
+        JDGenerationJob.notification_pending.is_(True),
+    ).order_by(JDGenerationJob.created_at.desc()).limit(20).all()
+    return [{"job_id": job.job_id, "message": "Buổi phỏng vấn từ JD đã sẵn sàng"} for job in jobs]
+
+
+@router.post("/jobs/{job_id}/notification-read", status_code=204)
+def acknowledge_jd_notification(
+    job_id: str,
+    user_id: int = Depends(get_current_user_id),
+    session: Session = Depends(get_session),
+) -> None:
+    job = session.get(JDGenerationJob, job_id)
+    if job is None or job.user_id != user_id:
+        raise HTTPException(status_code=404, detail="Không tìm thấy thông báo")
+    if job.status != JDJobStatus.COMPLETED.value:
+        raise HTTPException(status_code=409, detail="Buổi phỏng vấn chưa sẵn sàng")
+    job.notification_pending = False
+    session.commit()
+
+
 @router.get("/my-jobs", response_model=list[JDJobSummaryOut])
 def get_my_jd_jobs(
     limit: int = 30,
@@ -369,21 +408,6 @@ def get_job_status(
     session: Session = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
 ) -> JDJobStatusOut:
-    orchestrator = _get_or_create_orchestrator(container)
-    queue_state = orchestrator.queue_manager.get_job_state(job_id)
-
-    if queue_state:
-        res = queue_state.get("result")
-        return JDJobStatusOut(
-            job_id=job_id,
-            status=queue_state.get("status", "PENDING"),
-            stage=queue_state.get("stage", "Đang xử lý..."),
-            progress_pct=queue_state.get("progress_pct", 0),
-            result=res,
-            error=queue_state.get("error"),
-        )
-
-    # Fallback to DB
     job_record = session.get(JDGenerationJob, job_id)
     if not job_record:
         raise HTTPException(status_code=404, detail="Không tìm thấy thông tin tiến trình JD này")
@@ -401,6 +425,19 @@ def get_job_status(
                 raise
             except Exception:
                 raise HTTPException(status_code=403, detail="Forbidden: You do not own this JD interview job")
+
+    orchestrator = _get_or_create_orchestrator(container)
+    queue_state = orchestrator.queue_manager.get_job_state(job_id)
+    if queue_state and job_record.status != JDJobStatus.COMPLETED.value:
+        res = queue_state.get("result")
+        return JDJobStatusOut(
+            job_id=job_id,
+            status=queue_state.get("status", "PENDING"),
+            stage=queue_state.get("stage", "Đang xử lý..."),
+            progress_pct=queue_state.get("progress_pct", 0),
+            result=res,
+            error=queue_state.get("error"),
+        )
 
     result = None
     if job_record.status == JDJobStatus.COMPLETED.value:

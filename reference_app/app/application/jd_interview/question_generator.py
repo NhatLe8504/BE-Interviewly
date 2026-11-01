@@ -230,7 +230,12 @@ class ParallelQuestionGenerator:
                     difficulty=tpl["diff"],
                     expected_signals=tpl["signals"],
                     red_flags=tpl["red_flags"],
-                    sample_good_answer=f"Ứng viên áp dụng mô hình STAR: Nêu bối cảnh (Situation), nhiệm vụ (Task), các hành động kỹ thuật cụ thể (Action), và kết quả định lượng đạt được (Result).",
+                    sample_good_answer={
+                        JDSectionType.behavioral.value: "Kể trải nghiệm thật: bối cảnh, vai trò, hành động và kết quả.",
+                        JDSectionType.scenario.value: "Xác định ràng buộc, cân nhắc phương án, quyết định và rủi ro.",
+                        JDSectionType.technical.value: "Giải thích giải pháp, lý do lựa chọn, đánh đổi và cách kiểm chứng.",
+                        JDSectionType.system_design.value: "Trình bày kiến trúc, giới hạn, đánh đổi và cách đo lường.",
+                    }.get(section.section_type, "Trả lời đúng trọng tâm và nêu ví dụ phù hợp."),
                     follow_up_probes=tpl["probes"],
                 )
             )

@@ -46,6 +46,8 @@ class JDGenerationJob(Base):
     error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    request_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    notification_pending: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     session_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("interview_sessions.session_id", ondelete="SET NULL"), nullable=True,
     )

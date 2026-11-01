@@ -193,7 +193,7 @@ class JDWorkflowOrchestrator:
             # ----------------------------------------------------
             # STAGE 5: QUESTION GENERATION (Progress 85%)
             # ----------------------------------------------------
-            self._persist_job_state(job_id, JDJobStatus.GENERATING, "Đang sinh câu hỏi, gợi ý STAR và follow-up probes song song...", 85)
+            self._persist_job_state(job_id, JDJobStatus.GENERATING, "Đang sinh câu hỏi, gợi ý theo loại câu và câu hỏi đào sâu...", 85)
             raw_items = await self.question_generator.generate_all_questions_parallel(
                 blueprint=blueprint,
                 analysis=analysis,
@@ -251,6 +251,17 @@ class JDWorkflowOrchestrator:
                 "warnings": warnings,
             }
 
+            with self.session_factory() as session:
+                job_rec = session.get(JDGenerationJob, job_id)
+                if job_rec is None:
+                    raise RuntimeError("JD job disappeared before completion")
+                job_rec.status = JDJobStatus.COMPLETED.value
+                job_rec.stage = "COMPLETED"
+                job_rec.progress_pct = 100
+                job_rec.request_payload = None
+                job_rec.notification_pending = True
+                session.commit()
+
             self.queue_manager.update_job_progress(
                 job_id=job_id,
                 status=JDJobStatus.COMPLETED.value,
@@ -259,38 +270,14 @@ class JDWorkflowOrchestrator:
                 result=result_payload,
             )
 
-            with self.session_factory() as session:
-                job_rec = session.get(JDGenerationJob, job_id)
-                if job_rec:
-                    job_rec.status = JDJobStatus.COMPLETED.value
-                    job_rec.stage = "COMPLETED"
-                    job_rec.progress_pct = 100
-                    session.commit()
-
             return result_payload
 
-        except DomainValidationError as exc:
-            logger.warning("Domain validation error in workflow: %s", exc)
-            self._persist_job_state(
-                job_id,
-                JDJobStatus.FAILED,
-                "Lỗi dữ liệu đầu vào",
-                100,
-                error_code="VALIDATION_ERROR",
-                error_message=str(exc),
-            )
-            self.queue_manager.push_to_dlq(job_id, {"error": str(exc), "stage": "VALIDATION"})
-            raise
-
-        except Exception as exc:
-            logger.exception("Unexpected error during JD workflow: %s", exc)
-            self._persist_job_state(
-                job_id,
-                JDJobStatus.FAILED,
-                "Lỗi xử lý nội bộ",
-                100,
-                error_code="INTERNAL_ERROR",
-                error_message="Có lỗi xảy ra khi tạo kịch bản phỏng vấn. Vui lòng thử lại sau.",
-            )
-            self.queue_manager.push_to_dlq(job_id, {"error": str(exc), "stage": "EXECUTION"})
-            raise
+        except Exception:
+            logger.exception("JD generation rolled back for job %s", job_id)
+            with self.session_factory() as session:
+                job_rec = session.get(JDGenerationJob, job_id)
+                if job_rec and job_rec.status != JDJobStatus.COMPLETED.value:
+                    session.delete(job_rec)
+                    session.commit()
+            self.queue_manager.remove_job(job_id)
+            return {}

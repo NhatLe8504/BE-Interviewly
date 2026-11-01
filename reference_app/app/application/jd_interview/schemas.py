@@ -50,7 +50,7 @@ class CompetencyQuestionSchema(BaseModel):
     difficulty: int = Field(default=3, ge=1, le=5, description="Độ khó từ 1 đến 5")
     expected_signals: list[str] = Field(default_factory=list, description="Những tín hiệu mong đợi trong câu trả lời")
     red_flags: list[str] = Field(default_factory=list, description="Những cảnh báo hoặc lỗi sai nghiêm trọng")
-    sample_good_answer: str | None = Field(default=None, description="Câu trả lời mẫu ngắn gọn chuẩn STAR")
+    sample_good_answer: str | None = Field(default=None, description="Câu trả lời mẫu theo loại câu hỏi")
     follow_up_probes: list[str] = Field(default_factory=list, description="2-3 câu hỏi phụ đào sâu tình huống")
 
 

@@ -95,6 +95,14 @@ class JDQueueManager:
 
         self._memory_store[job_id] = state
 
+    def remove_job(self, job_id: str) -> None:
+        self._memory_store.pop(job_id, None)
+        if self.redis is not None:
+            try:
+                self.redis.delete(f"{self.TASK_KEY_PREFIX}{job_id}")
+            except Exception:
+                logger.exception("Could not clear cached JD job %s", job_id)
+
     def push_to_dlq(self, job_id: str, error_details: dict[str, Any]) -> None:
         dlq_entry = {
             "job_id": job_id,

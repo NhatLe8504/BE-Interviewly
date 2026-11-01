@@ -58,6 +58,13 @@ def build_competency_question_prompt(
 ) -> str:
     lang_instruction = "Viết bằng tiếng Việt tự nhiên, chuẩn ngữ cảnh phỏng vấn kỹ thuật." if language == "vi" else "Write in fluent, professional English suited for technical interviews."
     skills_context = ", ".join(required_skills[:10]) if required_skills else role
+    framework = {
+        "behavioral": "STAR cho kinh nghiệm đã xảy ra",
+        "technical": "giải thích kỹ thuật, đánh đổi và kiểm chứng",
+        "system_design": "kiến trúc, đánh đổi và kiểm chứng",
+        "role_specific": "lập luận chuyên môn và ví dụ",
+        "scenario": "ràng buộc, phương án, quyết định và rủi ro",
+    }.get(section_type, "trả lời ngắn gọn, đúng trọng tâm")
 
     return f"""Bạn là Lead Interviewer đang thiết kế câu hỏi phỏng vấn cho vị trí {role} ({seniority}).
 Nhóm năng lực cần đánh giá: "{competency}" (Phần thi: {section_type}).
@@ -65,6 +72,7 @@ Kỹ năng liên quan từ JD: {skills_context}.
 Độ khó mục tiêu: {difficulty}/5.
 Số lượng câu hỏi cần sinh: {question_count} câu hỏi.
 {lang_instruction}
+Khung trả lời tương ứng phần thi: {framework}. Chỉ dùng STAR khi hỏi kinh nghiệm hành vi đã xảy ra. Không ép STAR cho câu kỹ thuật, tình huống giả định, mở đầu hay kết thúc.
 
 QUY TẮC:
 1. Câu hỏi phải thực tế, đào sâu bản chất vấn đề, tình huống thực tế mà kỹ sư thường gặp, không hỏi lý thuyết sáo rỗng.
@@ -79,7 +87,7 @@ QUY TẮC:
       "difficulty": {difficulty},
       "expected_signals": ["Tín hiệu ứng viên hiểu sâu...", "Tín hiệu đưa ra giải pháp tối ưu..."],
       "red_flags": ["Dấu hiệu nhận biết ứng viên hời hợt hoặc sai kiến thức cơ bản..."],
-      "sample_good_answer": "Gợi ý câu trả lời mẫu chuẩn phương pháp STAR",
+      "sample_good_answer": "Gợi ý câu trả lời mẫu theo khung phù hợp phần thi",
       "follow_up_probes": ["Câu hỏi phụ 1...", "Câu hỏi phụ 2..."]
     }}
   ]
