@@ -23,6 +23,7 @@ class CourseRepository:
         *,
         category: str | None = None,
         level: str | None = None,
+        type: str | None = None,
         role: str | None = None,
         search: str | None = None,
         is_active: bool | None = None,
@@ -36,6 +37,8 @@ class CourseRepository:
             stmt = stmt.where(Course.category.ilike(f"%{category}%"))
         if level and level != "all":
             stmt = stmt.where(Course.level == level)
+        if type and type != "all":
+            stmt = stmt.where(Course.type.ilike(f"%{type}%"))
         if role and role != "all":
             stmt = stmt.where(Course.role.ilike(f"%{role}%"))
         if search and search.strip():
@@ -47,7 +50,7 @@ class CourseRepository:
 
         stmt = stmt.options(
             selectinload(Course.chapters).selectinload(CourseChapter.lessons)
-        ).order_by(Course.created_at.desc()).limit(limit).offset(offset)
+        ).order_by(Course.created_at.desc(), Course.course_id.desc()).limit(limit).offset(offset)
 
         items = list(session.execute(stmt).scalars().all())
         return items, total

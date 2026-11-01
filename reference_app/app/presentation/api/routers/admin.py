@@ -603,8 +603,14 @@ def admin_list_star_templates(
     session: Any = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
 ) -> list[StarTemplateOut]:
-    items = container.catalog_service.get_star_templates(session, language=language)
-    return [StarTemplateOut.model_validate(t) for t in items]
+    from ....infrastructure.persistence.models.catalog import QuestionBank
+    from sqlalchemy import func
+
+    items = container.catalog_service.get_star_templates(session, language=language, is_active=None)
+    counts = dict(session.query(QuestionBank.star_template_id, func.count(QuestionBank.question_id))
+                  .filter(QuestionBank.star_template_id.isnot(None))
+                  .group_by(QuestionBank.star_template_id).all())
+    return [StarTemplateOut.model_validate(t).model_copy(update={"usage_count": counts.get(t.star_template_id, 0)}) for t in items]
 
 
 @router.post("/star-templates", response_model=StarTemplateOut, status_code=201)
@@ -643,6 +649,11 @@ def admin_update_star_template(
     if not tmpl:
         raise HTTPException(status_code=404, detail="Mẫu STAR không tồn tại")
     
+    from ....infrastructure.persistence.models.catalog import QuestionBank
+
+    if data.language is not None and data.language != tmpl.language.value:
+        if session.query(QuestionBank.question_id).filter(QuestionBank.star_template_id == template_id).first():
+            raise HTTPException(status_code=409, detail="Không thể đổi ngôn ngữ mẫu STAR đang được câu hỏi sử dụng")
     old_title = tmpl.title
     if data.title is not None:
         tmpl.title = data.title.strip()
@@ -656,7 +667,19 @@ def admin_update_star_template(
         tmpl.result_guide = data.result_guide
     if data.language is not None:
         tmpl.language = Language(data.language)
+    if data.is_active is not None:
+        tmpl.is_active = data.is_active
 
+    for other in container.catalog_service.get_star_templates(session, language=tmpl.language.value, is_active=None):
+        if other.star_template_id != template_id and (
+            other.title.strip().casefold() == tmpl.title.strip().casefold()
+            and all(
+                (getattr(other, field) or "").strip().casefold()
+                == (getattr(tmpl, field) or "").strip().casefold()
+                for field in ("situation_guide", "task_guide", "action_guide", "result_guide")
+            )
+        ):
+            raise HTTPException(status_code=409, detail=f"Mẫu STAR trùng với #{other.star_template_id}")
     session.commit()
     session.refresh(tmpl)
 
@@ -686,6 +709,10 @@ def admin_delete_star_template(
     if not tmpl:
         raise HTTPException(status_code=404, detail="Mẫu STAR không tồn tại")
     
+    from ....infrastructure.persistence.models.catalog import QuestionBank
+
+    if session.query(QuestionBank.question_id).filter(QuestionBank.star_template_id == template_id).first():
+        raise HTTPException(status_code=409, detail="Mẫu STAR đang được câu hỏi sử dụng; hãy chuyển liên kết trước khi xóa")
     session.delete(tmpl)
     session.commit()
 
@@ -967,6 +994,7 @@ def delete_question_set(
 def admin_list_courses(
     category: str | None = Query(None),
     level: str | None = Query(None),
+    type: str | None = Query(None),
     role: str | None = Query(None),
     search: str | None = Query(None),
     is_active: bool | None = Query(None),
@@ -980,6 +1008,7 @@ def admin_list_courses(
         session,
         category=category,
         level=level,
+        type=type,
         role=role,
         search=search,
         is_active=is_active,
@@ -1010,7 +1039,7 @@ def admin_create_course(
         action="insert",
         new_value={"title": course.title, "slug": course.slug},
     )
-    return _to_course_detail_out(course)
+    return _to_course_detail_out(course, is_authorized=True)
 
 
 @router.get("/courses/{course_id}", response_model=CourseDetailOut)
@@ -1024,7 +1053,7 @@ def admin_get_course(
     if not c:
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Khóa học không tồn tại")
-    return _to_course_detail_out(c)
+    return _to_course_detail_out(c, is_authorized=True)
 
 
 @router.put("/courses/{course_id}", response_model=CourseDetailOut)
@@ -1049,7 +1078,7 @@ def admin_update_course(
         action="update",
         new_value={"course_id": course_id},
     )
-    return _to_course_detail_out(updated)
+    return _to_course_detail_out(updated, is_authorized=True)
 
 
 @router.delete("/courses/{course_id}", status_code=204)
