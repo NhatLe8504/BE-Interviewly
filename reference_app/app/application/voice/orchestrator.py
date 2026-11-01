@@ -1096,14 +1096,14 @@ class VoiceInterviewOrchestrator:
         elif is_last:
             self.current_turn_id += 1
             text = (
-                ("Cảm ơn bạn. Nếu đã sẵn sàng, bạn có thể xác nhận kết thúc buổi phỏng vấn."
+                ("Nếu đã sẵn sàng, bạn có thể xác nhận kết thúc buổi phỏng vấn."
                  if closing_no_more else
-                 "Cảm ơn bạn đã chia sẻ. Bạn còn thắc mắc nào về công việc hoặc phần trao đổi "
+                 "Các nội dung chính đã được trao đổi đầy đủ. Bạn còn thắc mắc nào về công việc hoặc phần trao đổi "
                  "vừa rồi không? Nếu đã đủ, bạn có thể xác nhận kết thúc buổi phỏng vấn.")
                 if self.language == "vi" else
-                ("Thank you. You can confirm the end of the interview whenever you're ready."
+                ("You can confirm the end of the interview whenever you're ready."
                  if closing_no_more else
-                 "Thank you for sharing. Do you have questions about the role or our discussion? "
+                 "We have covered all main topics. Do you have questions about the role or our discussion? "
                  "If not, you can confirm the end of the interview.")
             )
             self._active_task = asyncio.create_task(self._stream_predefined_text(text))
@@ -1189,10 +1189,10 @@ class VoiceInterviewOrchestrator:
             else:
                 self.current_turn_id += 1
                 text = (
-                    "Cảm ơn bạn. Các nội dung của phần này đã được trao đổi. Nếu muốn chia sẻ thêm, "
+                    "Các nội dung của phần này đã được trao đổi đầy đủ. Nếu muốn chia sẻ thêm, "
                     "mình vẫn đang lắng nghe; khi sẵn sàng, bạn có thể đề nghị chuyển phần."
                     if self.language == "vi" else
-                    "Thank you. We have covered the planned topics. You can add anything else, "
+                    "We have covered the planned topics for this section. You can add anything else, "
                     "or ask to move on when you are ready."
                 )
                 self._active_task = asyncio.create_task(self._stream_predefined_text(text))
@@ -1558,7 +1558,10 @@ class VoiceInterviewOrchestrator:
                     f"Bạn là {self.persona_name}, người phỏng vấn vị trí {self.role_name} ({self.level}). "
                     "Ở chặng khởi động, chỉ trò chuyện thân thiện về kinh nghiệm và định hướng tổng quan. "
                     "Mỗi lượt chỉ hỏi một ý nhẹ nhàng, không kiểm tra kiến thức kỹ thuật, "
-                    "không yêu cầu chi tiết kiến trúc, số liệu hay giải pháp. Chỉ nói văn bản thuần túy."
+                    "không yêu cầu chi tiết kiến trúc, số liệu hay giải pháp. "
+                    "CẤM TUYỆT ĐỐI mở đầu bằng 'Cảm ơn bạn đã chia sẻ' hoặc các câu cảm ơn máy móc. "
+                    "Hãy mở lời tự nhiên như người thật ('Tôi hiểu rồi...', 'À ra vậy...', 'Được rồi...', hoặc đi thẳng vào ý tiếp theo). "
+                    "Chỉ nói văn bản thuần túy."
                 )})
             elif self.system_prompt:
                 messages.append({"role": "system", "content": self.system_prompt})
@@ -1577,12 +1580,20 @@ class VoiceInterviewOrchestrator:
                 if cur_stage.id == StageId.WARMUP.value else
                 "Giữ nguyên các thuật ngữ kỹ thuật chuyên ngành phù hợp (ví dụ: Collections, Thread, Stream API, OOP, interface, v.v.). "
             )
+            convo_rules = (
+                "Nói năng tự nhiên, hòa nhã, có ngữ điệu đàm thoại thực tế như một người phỏng vấn công nghệ cao cấp. "
+                "CẤM TUYỆT ĐỐI mở đầu câu bằng 'Cảm ơn bạn đã chia sẻ' hoặc các câu cảm ơn lặp đi lặp lại. "
+                "Thay vào đó hãy tiếp nối tự nhiên bằng các câu đệm như 'Tôi hiểu rồi', 'À ra vậy', 'Thú vị đấy', 'Được rồi', hoặc hỏi thẳng vào vấn đề."
+                if self.language == "vi" else
+                "Converse naturally and professionally. NEVER start turns with repetitive robotic fillers like 'Thank you for sharing'. "
+                "Use natural transitions like 'I see', 'Got it', 'Alright', or ask directly."
+            )
             messages.append({
                 "role": "system",
                 "content": (
                     f"Thực hiện phỏng vấn và trao đổi tự nhiên bằng {language_name}. "
                     f"{terminology_note}"
-                    "Nói năng tự nhiên, hòa nhã, có ngữ điệu đàm thoại thực tế như một người phỏng vấn công nghệ cao cấp."
+                    f"{convo_rules}"
                 ),
             })
 
@@ -1595,9 +1606,9 @@ class VoiceInterviewOrchestrator:
             if next_question_item:
                 bridge = (
                     "Mở đầu chặng mới thật ngắn rồi hỏi một ý." if is_stage_opening else
-                    "Ứng viên chưa trả lời được ý vừa rồi; ghi nhận nhẹ nhàng rồi chuyển chủ đề." if disposition == "cannot_answer" else
-                    "Đáp lời ứng viên thân thiện, rồi hỏi tiếp." if disposition == "greeting" else
-                    "Ghi nhận ngắn câu trả lời trước rồi chuyển chủ đề tự nhiên." if previous_item else
+                    "Ứng viên chưa trả lời được ý vừa rồi; ghi nhận nhẹ nhàng rồi chuyển chủ đề, không cảm ơn khách sáo." if disposition == "cannot_answer" else
+                    "Đáp lời ứng viên thân thiện không rập khuôn, rồi hỏi tiếp." if disposition == "greeting" else
+                    "Nối tiếp tự nhiên từ ý của ứng viên (CẤM dùng 'Cảm ơn bạn đã chia sẻ') rồi chuyển chủ đề." if previous_item else
                     "Bắt đầu trao đổi tự nhiên."
                 )
                 if cur_stage.id == StageId.WARMUP.value:
@@ -1637,9 +1648,9 @@ class VoiceInterviewOrchestrator:
                 if cur_stage.id == StageId.WARMUP.value:
                     messages.append({"role": "system", "content": (
                         "Ứng viên vừa trả lời, nhưng nội dung sau vẫn chưa rõ: "
-                        f"{instruction}. Chỉ ghi nhận chi tiết họ thực sự đã nói, rồi hỏi MỘT câu ngắn "
-                        "để họ giải thích thêm ở mức tổng quan. Nếu họ chỉ nói 'không', hỏi lại nhẹ nhàng, "
-                        "đừng cảm ơn như thể đã trả lời. Không đòi ví dụ dự án, cách triển khai, số liệu "
+                        f"{instruction}. Tiếp lời tự nhiên dựa trên điều họ thực sự vừa nói (CẤM dùng 'Cảm ơn bạn đã chia sẻ'), "
+                        "rồi hỏi MỘT câu ngắn để họ giải thích thêm ở mức tổng quan. Nếu họ chỉ nói 'không' hoặc trả lời ngắn, "
+                        "hỏi lại nhẹ nhàng, không cảm ơn như thể đã trả lời xong. Không đòi ví dụ dự án, cách triển khai, số liệu "
                         "hay kiến thức kỹ thuật; không tự chuyển sang nội dung hoặc chặng khác."
                     )})
                 else:
@@ -1649,9 +1660,9 @@ class VoiceInterviewOrchestrator:
                             "Ứng viên vừa trả lời ý hiện tại của câu hỏi.\n"
                             f"Khía cạnh kỹ thuật cần đào sâu/làm rõ: {instruction}.\n"
                             f"Chỉ dẫn:\n"
-                            f"1. Ghi nhận nhanh ý đúng hoặc điểm đáng chú ý trong câu trả lời của ứng viên (1 mệnh đề ngắn).\n"
+                            f"1. Phản hồi tự nhiên hoặc ghi nhận nhanh điểm đáng chú ý trong câu trả lời (1 mệnh đề ngắn, CẤM mở đầu bằng 'Cảm ơn bạn đã chia sẻ').\n"
                             f"2. Đặt đúng một câu hỏi đào sâu tự nhiên, xoáy thẳng vào khía cạnh còn thiếu ({instruction}) để kiểm tra chiều sâu hiểu biết của ứng viên. Không hỏi sang các ý khác.\n"
-                            "3. Giữ phong thái thân thiện, không lặp lại nguyên văn câu hỏi gốc."
+                            "3. Giữ phong thái thân thiện, sắc sảo, không lặp lại nguyên văn câu hỏi gốc."
                         ),
                     })
             elif is_transitioning:
