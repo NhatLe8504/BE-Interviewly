@@ -39,6 +39,27 @@ def seed_default_data(session_factory: Any, hasher: PasswordHasherPort) -> None:
             session.add(admin_user)
             session.commit()
 
+        # Ensure huybrox.dev@gmail.com is admin
+        huy_user = session.execute(
+            select(User).where(User.email == "huybrox.dev@gmail.com")
+        ).scalar_one_or_none()
+        if huy_user is not None:
+            if huy_user.role != UserRole.admin or huy_user.status != UserStatus.active:
+                huy_user.role = UserRole.admin
+                huy_user.status = UserStatus.active
+                session.commit()
+        else:
+            huy_user = User(
+                full_name="Huy Dev",
+                email="huybrox.dev@gmail.com",
+                password_hash=hasher.hash("Admin@123456"),
+                role=UserRole.admin,
+                status=UserStatus.active,
+                preferred_language=Language.vi,
+            )
+            session.add(huy_user)
+            session.commit()
+
         # 2. Check if domains already exist
         has_domain = session.execute(select(JobDomain)).first()
         if has_domain is not None:
