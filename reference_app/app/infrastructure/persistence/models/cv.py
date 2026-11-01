@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     DateTime,
     ForeignKey,
     Index,
@@ -14,6 +15,7 @@ from sqlalchemy import (
     String,
     Text,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -70,4 +72,45 @@ class CvDocumentRecord(Base):
     user: Mapped[User] = relationship("User", backref="cv_documents")
     target_job: Mapped[JobPostingRecord | None] = relationship(
         "JobPostingRecord", backref="targeted_cvs"
+    )
+
+
+class CvGenerationJob(Base):
+    __tablename__ = "cv_generation_jobs"
+    __table_args__ = (
+        Index("idx_cv_generation_jobs_user_status", "user_id", "status"),
+        Index("idx_cv_generation_jobs_target", "target_job_id"),
+        Index(
+            "uq_cv_generation_jobs_active_user_target", "user_id", "target_job_id", unique=True,
+            postgresql_where=text("status IN ('PREPARING', 'QUESTIONS_READY', 'GENERATING', 'FAILED')"),
+            sqlite_where=text("status IN ('PREPARING', 'QUESTIONS_READY', 'GENERATING', 'FAILED')"),
+        ),
+    )
+
+    job_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False
+    )
+    target_job_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("job_postings.job_id", ondelete="SET NULL"), nullable=True
+    )
+    job_title: Mapped[str] = mapped_column(String(255), nullable=False)
+    company_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    jd_snapshot: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="PREPARING")
+    retry_stage: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    questions: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    answers: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False, default=dict)
+    template_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    color_theme: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    cv_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("cv_documents.id", ondelete="SET NULL"), nullable=True
+    )
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notification_pending: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
