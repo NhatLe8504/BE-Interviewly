@@ -47,6 +47,18 @@ class InterviewSessionConfig(Base):
     )
 
 
+class InterviewFlowState(Base):
+    __tablename__ = "interview_flow_states"
+
+    session_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("interview_sessions.session_id", ondelete="CASCADE"), primary_key=True,
+    )
+    snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now(),
+    )
+
+
 class SessionQuestionSelection(Base):
     __tablename__ = "session_question_selections"
     __table_args__ = (

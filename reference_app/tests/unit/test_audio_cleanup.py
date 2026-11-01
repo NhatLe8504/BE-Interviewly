@@ -4,17 +4,17 @@ from unittest.mock import MagicMock, patch
 from pathlib import Path
 import pytest
 
-from reference_app.app.config import cleanup_stale_audio_files
-from reference_app.app.infrastructure.persistence.models.enums import SessionStatus
-from reference_app.app.infrastructure.persistence.models.session import InterviewSession
-from reference_app.app.infrastructure.persistence.models.jd_interview import JDGenerationJob
+from app.config import cleanup_stale_audio_files
+from app.infrastructure.persistence.models.enums import SessionStatus
+from app.infrastructure.persistence.models.session import InterviewSession
+from app.infrastructure.persistence.models.jd_interview import JDGenerationJob
 
 
 @pytest.fixture
 def temp_audio_dir(tmp_path):
     audio_dir = tmp_path / "audio_storage"
     audio_dir.mkdir(parents=True, exist_ok=True)
-    with patch("reference_app.app.config.get_audio_storage_dir", return_value=audio_dir):
+    with patch("app.config.get_audio_storage_dir", return_value=audio_dir):
         yield audio_dir
 
 
