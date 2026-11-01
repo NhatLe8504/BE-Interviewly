@@ -1269,6 +1269,9 @@ def admin_create_plan(
         new_value={"plan_name": new_plan.plan_name, "price": float(new_plan.price)},
     )
 
+    invalidate_cache(container, "billing:plans")
+    invalidate_cache(container, "billing")
+
     return SubscriptionPlanAdminOut(
         plan_id=new_plan.plan_id,
         plan_name=new_plan.plan_name,
@@ -1319,6 +1322,9 @@ def admin_update_plan(
         new_value={"plan_name": plan.plan_name, "price": float(plan.price), "is_active": plan.is_active},
     )
 
+    invalidate_cache(container, "billing:plans")
+    invalidate_cache(container, "billing")
+
     sub_count = (
         session.query(func.count(UserSubscription.user_subscription_id))
         .filter(UserSubscription.plan_id == plan.plan_id, UserSubscription.status == SubStatus.active)
@@ -1358,6 +1364,9 @@ def admin_delete_plan(
         action="update",
         new_value={"is_active": False},
     )
+
+    invalidate_cache(container, "billing:plans")
+    invalidate_cache(container, "billing")
 
 
 @router.get("/user-subscriptions", response_model=UserSubscriptionPageOut)

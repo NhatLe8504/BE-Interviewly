@@ -40,7 +40,7 @@ def _to_plan_out(plan: StoredSubscriptionPlan) -> PlanOut:
     return PlanOut(
         plan_id=plan.plan_id,
         plan_name=plan.plan_name,
-        price=plan.price,
+        price=float(plan.price),
         billing_cycle=plan.billing_cycle,
         feature_limits=plan.feature_limits,
         is_active=plan.is_active,

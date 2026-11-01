@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 class PlanOut(BaseModel):
     plan_id: int
     plan_name: str
-    price: Decimal
+    price: float
     billing_cycle: str
     feature_limits: dict[str, Any] = Field(default_factory=dict)
     is_active: bool
