@@ -51,10 +51,11 @@ def test_public_catalog_flow(client) -> None:
     role_id = role_res.json()["role_id"]
 
     # 3. Create a STAR Template via Admin
+    unique_title = f"STAR Conflict {uuid.uuid4().hex[:6]}"
     tmpl_res = client.post(
         "/api/v1/admin/star-templates",
         json={
-            "title": "STAR Conflict",
+            "title": unique_title,
             "situation_guide": "Describe a disagreement with coworker",
             "task_guide": "What was your responsibility",
             "action_guide": "What steps did you take",
@@ -102,7 +103,7 @@ def test_public_catalog_flow(client) -> None:
     detail = client.get(f"/api/v1/catalog/questions/{q_id}").json()
     assert detail["question_id"] == q_id
     assert detail["star_template"] is not None
-    assert detail["star_template"]["title"] == "STAR Conflict"
+    assert detail["star_template"]["title"] == unique_title
 
     # 9. Public: Get random question
     rand = client.get(f"/api/v1/catalog/questions/random?domain_id={domain_id}&level=junior").json()
@@ -151,10 +152,24 @@ def test_catalog_write_and_ai_queue_isolation(client) -> None:
     assert client.get("/api/v1/catalog/questions").status_code == 200
     assert client.get("/api/v1/catalog/question-sets").status_code == 200
 
+    # Fetch or create valid active question for evaluation queue test
+    q_items = client.get("/api/v1/catalog/questions").json().get("items", [])
+    if q_items:
+        target_qid = q_items[0]["question_id"]
+    else:
+        dom_r = client.post("/api/v1/admin/domains", json={"domain_name": f"QDom {uuid.uuid4().hex[:6]}", "description": "D"}, headers=admin_headers)
+        r_r = client.post("/api/v1/admin/roles", json={"domain_id": dom_r.json()["domain_id"], "role_name": "R"}, headers=admin_headers)
+        q_r = client.post("/api/v1/admin/questions", json={
+            "domain_id": dom_r.json()["domain_id"], "role_id": r_r.json()["role_id"],
+            "experience_level": "junior", "language": "vi", "question_type": "behavioral",
+            "question_text": "Sample queue question?",
+        }, headers=admin_headers)
+        target_qid = q_r.json()["question_id"]
+
     # 3. Size limits on AI evaluation queues
     oversized_res = client.post(
         "/api/v1/catalog/evaluations/text-queue",
-        json={"question_id": 1, "answer_text": "A" * 26000},
+        json={"question_id": target_qid, "answer_text": "A" * 26000},
         headers=user_a_headers,
     )
     assert oversized_res.status_code == 400
@@ -163,7 +178,7 @@ def test_catalog_write_and_ai_queue_isolation(client) -> None:
     # 4. User A enqueues evaluation task
     enqueue_res = client.post(
         "/api/v1/catalog/evaluations/text-queue",
-        json={"question_id": 1, "answer_text": "Valid candidate answer following STAR framework."},
+        json={"question_id": target_qid, "answer_text": "Valid candidate answer following STAR framework."},
         headers=user_a_headers,
     )
     assert enqueue_res.status_code == 200

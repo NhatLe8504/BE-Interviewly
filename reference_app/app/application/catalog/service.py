@@ -14,6 +14,7 @@ from ...domain.catalog import (
     validate_question_type,
 )
 from ...domain.errors import ConflictError, DomainValidationError, NotFoundError
+from ...domain.answer_framework import answer_framework
 from .commands import (
     CreateDomainCommand,
     CreateQuestionCommand,
@@ -154,11 +155,11 @@ class CatalogService:
         self.repo.delete_role(session, role_id)
 
     def get_star_templates(
-        self, session: Any, language: str | None = None,
+        self, session: Any, language: str | None = None, is_active: bool | None = True,
     ) -> list[StarGuidanceTemplate]:
         if language is not None:
             validate_catalog_language(language)
-        return self.repo.list_star_templates(session, language=language)
+        return self.repo.list_star_templates(session, language=language, is_active=is_active)
 
     def get_star_template(
         self, session: Any, star_template_id: int,
@@ -173,6 +174,16 @@ class CatalogService:
     ) -> StarGuidanceTemplate:
         validate_not_blank(cmd.title, "title")
         validate_catalog_language(cmd.language)
+        for template in self.repo.list_star_templates(session, language=cmd.language, is_active=None):
+            if (
+                template.title.strip().casefold() == cmd.title.strip().casefold()
+                and all(
+                    (getattr(template, field) or "").strip().casefold()
+                    == (getattr(cmd, field) or "").strip().casefold()
+                    for field in ("situation_guide", "task_guide", "action_guide", "result_guide")
+                )
+            ):
+                raise ConflictError(f"STAR template already exists: {template.star_template_id}")
         return self.repo.add_star_template(
             session,
             title=cmd.title.strip(),
@@ -277,8 +288,16 @@ class CatalogService:
                 raise ConflictError("role does not belong to the selected domain")
             if not role.is_active:
                 raise ConflictError(f"role {cmd.role_id} is archived")
-        if cmd.star_template_id is not None and not self.repo.get_star_template_by_id(session, cmd.star_template_id):
-            raise NotFoundError(f"star template {cmd.star_template_id} not found")
+        if cmd.star_template_id is not None:
+            if answer_framework(cmd.question_type) != "star":
+                raise DomainValidationError("STAR template is only valid for behavioral questions")
+            template = self.repo.get_star_template_by_id(session, cmd.star_template_id)
+            if template is None:
+                raise NotFoundError(f"star template {cmd.star_template_id} not found")
+            if not template.is_active:
+                raise ConflictError("STAR template is archived")
+            if template.language != cmd.language:
+                raise DomainValidationError("STAR template language must match question language")
 
         validate_not_blank(cmd.question_text, "question_text")
         validate_question_type(cmd.question_type)
@@ -362,8 +381,19 @@ class CatalogService:
                 raise ConflictError("role does not belong to the selected domain")
             if not role.is_active:
                 raise ConflictError(f"role {cmd.role_id} is archived")
-        if cmd.star_template_id is not None and not self.repo.get_star_template_by_id(session, cmd.star_template_id):
-            raise NotFoundError(f"star template {cmd.star_template_id} not found")
+        effective_type = cmd.question_type or existing.question_type
+        effective_language = cmd.language or existing.language
+        effective_template_id = cmd.star_template_id if "star_template_id" in cmd.fields_set else existing.star_template_id
+        if effective_template_id is not None:
+            if answer_framework(effective_type) != "star":
+                raise DomainValidationError("Remove STAR template before changing question type")
+            template = self.repo.get_star_template_by_id(session, effective_template_id)
+            if template is None:
+                raise NotFoundError(f"star template {effective_template_id} not found")
+            if not template.is_active and effective_template_id != existing.star_template_id:
+                raise ConflictError("STAR template is archived")
+            if template.language != effective_language:
+                raise DomainValidationError("STAR template language must match question language")
 
         # Admin có thể thay nhãn kỹ năng (kể cả xóa hết bằng []); không gửi thì giữ nguyên.
         skill_ids = self._validate_skill_ids(cmd.skill_ids) if cmd.skill_ids is not None else None

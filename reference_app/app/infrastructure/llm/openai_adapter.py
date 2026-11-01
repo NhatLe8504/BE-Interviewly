@@ -165,7 +165,11 @@ class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPo
         role: str = "Software Engineer",
         level: str = "fresher",
         language: str = "vi",
+        question_type: str | None = None,
     ) -> RubricEvaluationData:
+        from ...domain.answer_framework import answer_framework
+
+        is_behavioral = answer_framework(question_type) == "star"
         if not self.api_key:
             # Fallback mock rubric calculation based on answer length and keywords
             word_count = len(answer.split())
@@ -181,14 +185,14 @@ class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPo
                     "task": True,
                     "action": word_count > 20,
                     "result": word_count > 40,
-                },
+                } if is_behavioral else {},
                 feedback="Câu trả lời phản ánh tư duy logic tốt. Nên bổ sung thêm các số liệu định lượng về kết quả để câu trả lời thuyết phục hơn.",
                 sample_better_answer=f"Khi đối mặt với vấn đề trong câu hỏi '{question}', tôi đã phân tích nguyên nhân gốc rễ, áp dụng giải pháp tối ưu và cải thiện 30% hiệu năng hệ thống.",
             )
 
-        system = build_rubric_evaluator_system_prompt(language=language)
+        system = build_rubric_evaluator_system_prompt(language=language, question_type=question_type)
         user = build_rubric_evaluator_user_prompt(
-            question=question, answer=answer, role=role, level=level,
+            question=question, answer=answer, role=role, level=level, question_type=question_type,
         )
         try:
             resp_text = self._chat_completion(
@@ -212,7 +216,7 @@ class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPo
                     "task": True,
                     "action": word_count > 20,
                     "result": word_count > 40,
-                },
+                } if is_behavioral else {},
                 feedback="Câu trả lời phản ánh tư duy logic tốt. Nên bổ sung thêm các số liệu định lượng về kết quả để câu trả lời thuyết phục hơn.",
                 sample_better_answer=f"Khi đối mặt với vấn đề trong câu hỏi '{question}', tôi đã phân tích nguyên nhân gốc rễ, áp dụng giải pháp tối ưu và cải thiện 30% hiệu năng hệ thống.",
             )
@@ -222,7 +226,7 @@ class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPo
                 clarity_score=float(data.get("clarity_score", 70.0)),
                 structure_score=float(data.get("structure_score", 70.0)),
                 evidence_score=float(data.get("evidence_score", 70.0)),
-                star_analysis=data.get("star_analysis", {}),
+                star_analysis=data.get("star_analysis", {}) if is_behavioral else {},
                 feedback=data.get("feedback", ""),
                 sample_better_answer=data.get("sample_better_answer", ""),
             )
@@ -231,13 +235,14 @@ class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPo
                 clarity_score=75.0,
                 structure_score=70.0,
                 evidence_score=70.0,
-                star_analysis={"situation": True, "task": True, "action": False, "result": False},
+                star_analysis={"situation": True, "task": True, "action": False, "result": False} if is_behavioral else {},
                 feedback=resp_text,
                 sample_better_answer="",
             )
 
     def _chat_completion(
         self, messages: list[dict[str, str]], response_format: dict | None = None,
+        max_tokens: int = 1200,
     ) -> str:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -248,7 +253,7 @@ class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPo
             "model": "openai/gpt-oss-120b" if self.api_key.startswith("gsk_") else self.model,
             "messages": messages,
             "temperature": 0.1,
-            "max_tokens": 1200,
+            "max_tokens": max_tokens,
         }
         if response_format:
             payload["response_format"] = response_format
@@ -325,11 +330,51 @@ class OpenAILLMAdapter(LLMInterviewerPort, RubricEvaluatorPort, LLMVoiceStreamPo
         role_name: str = "Software Engineer",
         level: str = "junior",
         language: str = "vi",
+        question_type: str | None = None,
     ) -> dict[str, Any]:
         """
         Pure Text Essay Evaluation (35% max) via OpenRouter DeepSeek:
         Compares candidate written answer against benchmark sample_answer using STAR framework.
         """
+        from ...domain.answer_framework import answer_framework
+
+        framework = answer_framework(question_type)
+        if framework != "star":
+            criteria = {
+                "technical": "technical correctness, reasoning, trade-offs and verification",
+                "situational": "constraints, alternatives, decision and risk management",
+                "generic": "relevance, clarity and sound reasoning",
+            }[framework]
+            fallback = {
+                "text_score": 0.0,
+                "text_feedback": "Chưa thể đánh giá nội dung trả lời; vui lòng thử lại sau.",
+                "text_improvements": [],
+                "text_strengths": [],
+                "star_breakdown": None,
+                "sample_better_answer": "",
+                "answer_framework": framework,
+            }
+            if not answer_text.strip():
+                return {**fallback, "text_feedback": "Bạn chưa nhập câu trả lời."}
+            if not self.api_key:
+                return fallback
+            prompt = (
+                f"Evaluate this {framework} interview answer for {role_name} ({level}). "
+                f"Question: {question_text}\nReference: {sample_answer}\nAnswer: {answer_text}\n"
+                f"Criteria: {criteria}. Do not require STAR or a past experience. "
+                "Return only JSON: text_score (0-35), text_feedback, text_improvements (list), "
+                "text_strengths (list), sample_better_answer."
+            )
+            try:
+                response = self._chat_completion([{"role": "user", "content": prompt}])
+                result = _extract_json_data(response)
+                if "text_score" in result:
+                    return {**fallback, **result, "star_breakdown": None, "answer_framework": framework,
+                            "text_score": max(0.0, min(35.0, float(result["text_score"])))}
+            except Exception:
+                pass
+            return fallback
+
         clean_text = re.sub(
             r"•?\s*(Tình huống|Nhiệm vụ|Hành động|Kết quả|Situation|Task|Action|Result)\s*(\([^)]*\))?:?",
             "",
@@ -435,7 +480,37 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT CHUỖI JSON HỢP LỆ (KHÔNG KÈM TE
         sample_answer: str = "",
         role_name: str = "Software Engineer",
         language: str = "vi",
+        question_type: str | None = None,
     ) -> dict[str, Any]:
+        from ...domain.answer_framework import answer_framework
+
+        framework = answer_framework(question_type)
+        if framework != "star":
+            if not transcript.strip() or not self.api_key:
+                return {"voice_score": 0.0, "voice_max": 50.0,
+                        "feedback": "Chưa thể đánh giá câu trả lời nói; vui lòng thử lại sau.",
+                        "strengths": [], "improvements": [], "answer_framework": framework}
+            criteria = {
+                "technical": "correct technical explanation, trade-offs and verification",
+                "situational": "constraints, options, decision and risks",
+                "generic": "relevance, reasoning and clarity",
+            }[framework]
+            prompt = (
+                f"Evaluate this spoken interview answer: question={question}; answer={transcript}; "
+                f"reference={sample_answer}; criteria={criteria}. Do not require STAR or a past experience. "
+                "Return JSON with voice_score (0-50), feedback, strengths (list), improvements (list)."
+            )
+            try:
+                data = _extract_json_data(self._chat_completion([{"role": "user", "content": prompt}]))
+                if "voice_score" in data:
+                    return {**data, "voice_score": max(0.0, min(50.0, float(data["voice_score"]))),
+                            "voice_max": 50.0, "answer_framework": framework}
+            except Exception:
+                pass
+            return {"voice_score": 0.0, "voice_max": 50.0,
+                    "feedback": "Chưa thể đánh giá câu trả lời nói; vui lòng thử lại sau.",
+                    "strengths": [], "improvements": [], "answer_framework": framework}
+
         duration_sec = delivery_metrics.get("durationMs", 0) / 1000.0
         wpm = delivery_metrics.get("activeSpeechWpm", 0) or delivery_metrics.get("elapsedWpm", 0)
         filler_count = delivery_metrics.get("fillerCount", 0)
@@ -461,7 +536,7 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT MỘT CHUỖI JSON HỢP LỆ (KHÔNG KÈM TE
             wpm_desc = "Tốc độ phát biểu chưa được xác định rõ ràng."
 
         if pauses > 0:
-            pause_desc = f"Có {pauses} lần dừng lâu trên 3 giây giữa các câu, làm gián đoạn mạch diễn đạt. Hãy rèn luyện thói quen phác thảo nhanh khung STAR trong đầu trước khi nói để các ý được liên kết liền mạch hơn."
+            pause_desc = f"Có {pauses} lần dừng lâu trên 3 giây giữa các câu, làm gián đoạn mạch diễn đạt. Hãy phác thảo các ý chính trước khi nói để mạch diễn đạt liền mạch hơn."
         else:
             pause_desc = "Mạch nói được duy trì liên tục và liền mạch, không bị ngắt quãng bất thường."
 
@@ -575,7 +650,7 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT 1 JSON HỢP LỆ THEO CẤU TRÚC (KHÔNG B�
                 pass
 
         # Fallback Calculation
-        calc_score = round(min(40.0, max(15.0, 18.0 + min(duration_sec, 30) * 0.4 + (5.0 if 110 <= wpm <= 165 else 0.0) - min(4.0, pauses * 1.0))), 1)
+        calc_score = 0.0
         fallback_content = (
             "Ứng viên đã phản xạ trả lời câu hỏi và nêu được những bước xử lý ban đầu. "
             "Để câu trả lời thuyết phục hơn, bạn nên xây dựng format rõ ràng theo khung STAR: "
@@ -589,7 +664,7 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT 1 JSON HỢP LỆ THEO CẤU TRÚC (KHÔNG B�
             "feedback": f"{fallback_content}\n\nĐánh giá chỉ số phát biểu & nhịp điệu:\n{metrics_verbal_review}",
             "strengths": [
                 f"Tốc độ phát biểu {int(wpm)} WPM rõ ràng.",
-                "Có ý thức phản xạ giải quyết vấn đề."
+                "Chưa thể xác minh chất lượng câu trả lời nói."
             ],
             "improvements": [
                 "Chuẩn bị format câu trả lời theo đúng khung STAR (Tình huống -> Nhiệm vụ -> Hành động -> Kết quả).",

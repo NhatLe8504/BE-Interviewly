@@ -92,110 +92,47 @@ class EvaluationPullQueueManager:
 
 
     async def process_task_async(self, task_id: str, container: Any) -> None:
-        """
-        Unified Multi-Modal Evaluation Worker:
-        Evaluates Written STAR Essay and Voice Delivery in 1 single LLM call,
-        incorporating benchmark sample_answer and real speech delivery metrics.
-        """
+        """Keep the legacy combined endpoint aligned with the separate evaluation workers."""
         task = self.get_task(task_id)
         if not task:
             return
-
-        self.update_task_status(task_id, "processing")
         payload = task.get("payload", {})
-        qid = payload.get("question_id")
-        q_text = payload.get("question_text") or f"Câu hỏi #{qid}"
-        sample_answer = payload.get("sample_answer") or ""
-        text_answer = (payload.get("text_answer") or "").strip()
-        transcript = (payload.get("transcript") or "").strip()
-        delivery = payload.get("delivery_metrics") or {}
-        role = payload.get("role_name") or "Software Engineer"
-        language = payload.get("language") or "vi"
-        is_quiz_correct = payload.get("is_quiz_correct")
-        quiz_score = 15.0 if is_quiz_correct is True else 0.0
-
-        evaluator = getattr(container, "evaluation_service", None) and getattr(container.evaluation_service, "evaluator", None)
-
-        llm_res = None
-        if evaluator and hasattr(evaluator, "evaluate_multi_modal_question"):
-            try:
-                llm_res = evaluator.evaluate_multi_modal_question(
-                    question_text=q_text,
-                    sample_answer=sample_answer,
-                    text_answer=text_answer,
-                    transcript=transcript,
-                    delivery_metrics=delivery,
-                    role_name=role,
-                    level="junior",
-                    language=language,
-                )
-            except Exception as err:
-                print("Multi-modal evaluation worker error:", err)
-
-        if not llm_res:
-            llm_res = {}
-
-        text_score = float(llm_res.get("text_score", 0.0))
-        voice_score = float(llm_res.get("voice_score", 0.0))
-        total_score = min(100, int(round(quiz_score + text_score + voice_score)))
-        passed = total_score >= 70
-
+        self.update_task_status(task_id, "processing")
+        text_task_id = self.enqueue({
+            **payload,
+            "answer_text": payload.get("text_answer") or "",
+        })
+        voice_task_id = self.enqueue(payload)
+        await asyncio.gather(
+            self.process_text_task_async(text_task_id, container),
+            self.process_voice_task_async(voice_task_id, container),
+        )
+        text_result = (self.get_task(text_task_id) or {}).get("result") or {}
+        voice_result = (self.get_task(voice_task_id) or {}).get("result") or {}
+        quiz_score = 15.0 if payload.get("is_quiz_correct") is True else 0.0
+        text_score = max(0.0, min(35.0, float(text_result.get("text_score") or 0)))
+        voice_score = max(0.0, min(50.0, float(voice_result.get("voice_score") or 0)))
+        total_score = min(100, round(quiz_score + text_score + voice_score))
         result = {
+            **text_result,
+            **voice_result,
             "score": total_score,
-            "passed": passed,
-            "general_feedback": llm_res.get("text_feedback", ""),
+            "passed": total_score >= 70,
+            "score_provisional": bool(voice_result.get("score_provisional")),
+            "answer_framework": text_result.get("answer_framework", "generic"),
+            "star_breakdown": text_result.get("star_breakdown"),
             "text_score": text_score,
-            "text_max": 35.0,
-            "text_feedback": llm_res.get("text_feedback", ""),
-            "text_improvements": llm_res.get("text_improvements", []),
-            "text_strengths": llm_res.get("text_strengths", []),
-            "star_breakdown": llm_res.get("star_breakdown", {}),
             "voice_score": voice_score,
-            "voice_max": 50.0,
-            "voice_feedback": llm_res.get("voice_feedback", ""),
-            "voice_improvements": llm_res.get("voice_improvements", []),
-            "voice_strengths": llm_res.get("voice_strengths", []),
-            "sample_better_answer": llm_res.get("sample_better_answer", ""),
             "modal_breakdown": {
-                "quiz_score": quiz_score,
-                "quiz_max": 15.0,
-                "text_score": text_score,
-                "text_max": 35.0,
-                "voice_score": voice_score,
-                "voice_max": 50.0,
-                "total_score": float(total_score),
+                "quiz_score": quiz_score, "quiz_max": 15.0,
+                "text_score": text_score, "text_max": 35.0,
+                "voice_score": voice_score, "voice_max": 50.0,
+                "total_score": total_score,
             },
-            "transcript": transcript,
-            "delivery_metrics": delivery,
+            "evaluation_ids": [evaluation_id for evaluation_id in (
+                text_result.get("evaluation_id"), voice_result.get("evaluation_id")
+            ) if evaluation_id is not None],
         }
-
-        evaluation_ids: list[int] = []
-        if llm_res:
-            content_id = persist_llm_evaluation(
-                container,
-                user_id=payload.get("user_id"),
-                question_id=qid,
-                part=PART_CONTENT,
-                part_score=text_score,
-                part_max=35.0,
-                answer_text=text_answer or None,
-            )
-            if content_id:
-                evaluation_ids.append(content_id)
-            voice_id = persist_llm_evaluation(
-                container,
-                user_id=payload.get("user_id"),
-                question_id=qid,
-                part=PART_VOICE,
-                part_score=voice_score,
-                part_max=50.0,
-                answer_text=transcript or None,
-            )
-            if voice_id:
-                evaluation_ids.append(voice_id)
-        if evaluation_ids:
-            result["evaluation_ids"] = evaluation_ids
-
         self.update_task_status(task_id, "completed", result=result)
 
     async def process_text_task_async(self, task_id: str, container: Any) -> None:
@@ -215,6 +152,36 @@ class EvaluationPullQueueManager:
         q_text = payload.get("question_text") or f"Câu hỏi #{qid}"
         role = payload.get("role_name") or "Software Engineer"
         language = payload.get("language") or "vi"
+        from ...domain.answer_framework import answer_framework
+
+        framework = answer_framework(payload.get("question_type"))
+        if framework != "star":
+            evaluator = getattr(getattr(container, "evaluation_service", None), "evaluator", None)
+            if not evaluator or not hasattr(evaluator, "evaluate_text_essay"):
+                self.update_task_status(task_id, "completed", result={"text_score": 0.0, "text_max": 35.0, "star_breakdown": None, "answer_framework": framework, "feedback": "Chưa thể đánh giá nội dung; vui lòng thử lại sau."})
+                return
+            try:
+                result = evaluator.evaluate_text_essay(
+                    question_text=q_text,
+                    sample_answer=payload.get("sample_answer") or "",
+                    answer_text=text,
+                    role_name=role,
+                    language=language,
+                    question_type=payload.get("question_type"),
+                )
+            except Exception:
+                result = {"text_score": 0.0, "text_feedback": "Chưa thể đánh giá nội dung; vui lòng thử lại sau."}
+            evaluation_id = None
+            if result.get("text_score", 0) > 0:
+                evaluation_id = persist_llm_evaluation(
+                    container, user_id=payload.get("user_id"), question_id=qid,
+                    part=PART_CONTENT, part_score=float(result["text_score"]),
+                    part_max=35.0, answer_text=text,
+                )
+            self.update_task_status(task_id, "completed", result={**result, "text_max": 35.0,
+                "star_breakdown": None, "answer_framework": framework,
+                "feedback": result.get("text_feedback", ""), "evaluation_id": evaluation_id})
+            return
 
         # Clean prompt template headers to get actual candidate words
         clean_text = re.sub(
@@ -388,7 +355,7 @@ class EvaluationPullQueueManager:
         if not transcript:
             dur_sec = max(1.0, duration_ms / 1000.0)
             wpm = float(delivery.get("activeSpeechWpm") or 0.0)
-            base_score = round(min(12.0, max(5.0, 5.0 + min(dur_sec, 15.0) * 0.3)), 1)
+            base_score = 0.0
             sparse_voice_result = {
                 "voice_score": base_score,
                 "voice_max": 50.0,
@@ -411,37 +378,22 @@ class EvaluationPullQueueManager:
                     sample_answer=sample_answer,
                     role_name=role,
                     language=language,
+                    question_type=payload.get("question_type"),
                 )
                 if isinstance(res, dict):
-                    evaluation_id = persist_llm_evaluation(
-                        container,
-                        user_id=payload.get("user_id"),
-                        question_id=qid,
-                        part=PART_VOICE,
-                        part_score=float(res.get("voice_score") or 0.0),
-                        part_max=50.0,
-                        answer_text=transcript,
-                    )
-                    if evaluation_id:
-                        res = {**res, "evaluation_id": evaluation_id}
+                    res = {**res, "score_provisional": True}
                 self.update_task_status(task_id, "completed", result=res)
                 return
             except Exception as err:
                 print("evaluate_voice_delivery error:", err)
 
-        # Fallback calculation based on WPM, fillers, and duration
-        wpm = float(delivery.get("activeSpeechWpm") or 0.0)
-        dur_sec = float(duration_ms / 1000.0)
-        fillers = int(delivery.get("fillerCount", 0))
-        base_v = min(50.0, max(15.0, 35.0 + (5.0 if 110 <= wpm <= 165 else 0.0) - min(6.0, fillers * 1.0)))
-
         fallback_result = {
-            "voice_score": round(base_v, 1),
+            "voice_score": 0.0,
             "voice_max": 50.0,
-            "pace_label": f"{int(wpm)} WPM",
-            "feedback": f"Phát biểu {int(dur_sec)}s với tốc độ {int(wpm)} WPM. Phát hiện {fillers} từ đệm.",
-            "strengths": [f"Tốc độ phát âm {int(wpm)} WPM tự nhiên."],
-            "improvements": ["Hạn chế từ đệm khi chuyển ý."] if fillers > 2 else ["Duy trì phong thái tự tin."],
+            "score_provisional": True,
+            "feedback": "Chưa thể đánh giá giọng nói; vui lòng thử lại sau.",
+            "strengths": [],
+            "improvements": [],
         }
         self.update_task_status(task_id, "completed", result=fallback_result)
 
@@ -477,9 +429,9 @@ class EvaluationPullQueueManager:
         fallback = {
             "session_title": title,
             "average_score": avg,
-            "overall_feedback": f"Bạn đã hoàn thành tốt bài luyện tập '{title}' với điểm trung bình {avg}/100đ. Phong thái trả lời tự tin, nắm chắc kiến thức chuyên môn.",
-            "strengths": ["Cấu trúc trả lời mạch lạc theo khung STAR.", "Thực hiện đầy đủ các hình thức kiểm tra."],
-            "improvements": ["Bổ sung số liệu định lượng về tác động thực tế của dự án."],
+            "overall_feedback": f"Điểm luyện tập trung bình: {avg}/100. Chưa có tổng hợp nhận xét chuyên môn từ AI.",
+            "strengths": [],
+            "improvements": [],
             "career_readiness_verdict": "Sẵn sàng nhận việc (Job Ready)" if avg >= 70 else "Cần rèn luyện thêm",
         }
         self.update_task_status(task_id, "completed", result=fallback)

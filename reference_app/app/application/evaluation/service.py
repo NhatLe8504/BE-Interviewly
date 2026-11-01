@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ...domain.errors import NotFoundError
+from ...domain.answer_framework import answer_framework
 from ...domain.evaluation import (
     ActionableFeedback,
     RubricScores,
@@ -26,25 +27,36 @@ class EvaluationService:
         self, session: Any, command: EvaluateTurnCommand,
     ) -> TurnEvaluation:
         # Call LLM / Rubric evaluator adapter
-        data = self.evaluator.evaluate(
-            question=command.question_text,
-            answer=command.answer_text,
-            role=command.role_name,
-            level=command.level,
-            language=command.language,
-        )
+        evaluator_kwargs = {
+            "question": command.question_text,
+            "answer": command.answer_text,
+            "role": command.role_name,
+            "level": command.level,
+            "language": command.language,
+        }
+        if command.question_type is not None:
+            import inspect
+            try:
+                sig = inspect.signature(self.evaluator.evaluate)
+                if "question_type" in sig.parameters or any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
+                    evaluator_kwargs["question_type"] = command.question_type
+            except (ValueError, TypeError):
+                evaluator_kwargs["question_type"] = command.question_type
+        data = self.evaluator.evaluate(**evaluator_kwargs)
 
         rubric = RubricScores(
             clarity=data.clarity_score,
             structure=data.structure_score,
             evidence=data.evidence_score,
         )
-        star = StarAnalysis(
-            situation=bool(data.star_analysis.get("situation", False)),
-            task=bool(data.star_analysis.get("task", False)),
-            action=bool(data.star_analysis.get("action", False)),
-            result=bool(data.star_analysis.get("result", False)),
-        )
+        star = None
+        if answer_framework(command.question_type) == "star":
+            star = StarAnalysis(
+                situation=bool(data.star_analysis.get("situation", False)),
+                task=bool(data.star_analysis.get("task", False)),
+                action=bool(data.star_analysis.get("action", False)),
+                result=bool(data.star_analysis.get("result", False)),
+            )
         feedback = ActionableFeedback(
             sample_better_answer=data.sample_better_answer,
             feedback_summary=data.feedback,
@@ -56,6 +68,8 @@ class EvaluationService:
             rubric=rubric,
             star=star,
             feedback=feedback,
+            question_type=command.question_type,
+            rubric_version=2,
             evaluated_at=self.clock.now(),
         )
         return self.evaluations.save_turn_evaluation(session, command.turn_id, turn_eval)

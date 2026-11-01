@@ -16,9 +16,15 @@ def _create_user_and_token(client, email_prefix: str = "ws_user") -> tuple[str, 
         "/api/v1/auth/login",
         json={"email": email, "password": "Password123!"},
     )
+    assert login_resp.status_code == 200, login_resp.text
     data = login_resp.json()
     token = data["access_token"]
-    user_id = data["user"]["user_id"]
+    me_resp = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert me_resp.status_code == 200, me_resp.text
+    user_id = me_resp.json()["user_id"]
     return token, user_id
 
 

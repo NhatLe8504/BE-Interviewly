@@ -53,6 +53,8 @@ class SqlAlchemyEvaluationRepository(EvaluationRepoPort):
                 example_score=e_10,
                 overall_score=o_10,
                 feedback_text=full_feedback,
+                question_type=evaluation.question_type,
+                rubric_version=evaluation.rubric_version,
             )
             session.add(row)
         else:
@@ -61,6 +63,8 @@ class SqlAlchemyEvaluationRepository(EvaluationRepoPort):
             row.example_score = e_10
             row.overall_score = o_10
             row.feedback_text = full_feedback
+            row.question_type = evaluation.question_type
+            row.rubric_version = evaluation.rubric_version
 
         session.commit()
         session.refresh(row)
@@ -102,14 +106,6 @@ class SqlAlchemyEvaluationRepository(EvaluationRepoPort):
                 except Exception:
                     pass
 
-        if star is None:
-            star = StarAnalysis(
-                situation=True,
-                task=True,
-                action=bool(overall >= 60.0),
-                result=bool(overall >= 75.0),
-            )
-
         feedback = ActionableFeedback(
             feedback_summary=raw_feedback,
         )
@@ -119,6 +115,8 @@ class SqlAlchemyEvaluationRepository(EvaluationRepoPort):
             rubric=rubric,
             star=star,
             feedback=feedback,
+            question_type=row.question_type,
+            rubric_version=row.rubric_version,
             evaluated_at=row.created_at,
         )
 

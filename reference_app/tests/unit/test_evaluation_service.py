@@ -39,6 +39,8 @@ class FakeEvaluationRepo:
             star=evaluation.star,
             feedback=evaluation.feedback,
             evaluated_at=evaluation.evaluated_at,
+            question_type=evaluation.question_type,
+            rubric_version=evaluation.rubric_version,
         )
         self.evaluations[turn_id] = saved
         return saved
@@ -55,7 +57,7 @@ class FakeEvaluationRepo:
 
 
 class FakeRubricEvaluator:
-    def evaluate(self, question: str, answer: str, role="Software Engineer", level="fresher", language="vi") -> RubricEvaluationData:
+    def evaluate(self, question: str, answer: str, role="Software Engineer", level="fresher", language="vi", question_type: str | None = None) -> RubricEvaluationData:
         return RubricEvaluationData(
             clarity_score=85.0,
             structure_score=75.0,
@@ -88,9 +90,40 @@ def test_evaluate_turn_flow() -> None:
     assert turn_eval.turn_id == 10
     assert turn_eval.rubric.clarity == 85.0
     assert turn_eval.rubric.overall == 80.0
-    assert turn_eval.star.situation is True
-    assert turn_eval.star.result is False
+    assert turn_eval.star is None
+    assert turn_eval.rubric_version == 2
     assert "indexing" not in turn_eval.feedback.feedback_summary or len(turn_eval.feedback.feedback_summary) > 0
+
+
+def test_behavioral_turn_keeps_star_analysis() -> None:
+    service = make_eval_service()
+    turn_eval = service.evaluate_turn(
+        None,
+        EvaluateTurnCommand(
+            session_id=1,
+            turn_id=11,
+            question_text="Tell me about a challenge you solved.",
+            answer_text="I led the incident response and restored the service.",
+            question_type="behavioral",
+        ),
+    )
+    assert turn_eval.star is not None
+    assert turn_eval.star.situation is True
+
+
+def test_situational_turn_has_no_star_analysis() -> None:
+    service = make_eval_service()
+    turn_eval = service.evaluate_turn(
+        None,
+        EvaluateTurnCommand(
+            session_id=1,
+            turn_id=12,
+            question_text="What would you do if the service went down?",
+            answer_text="I would check impact and choose a rollback if necessary.",
+            question_type="situational",
+        ),
+    )
+    assert turn_eval.star is None
 
 
 def test_generate_session_summary_averages() -> None:

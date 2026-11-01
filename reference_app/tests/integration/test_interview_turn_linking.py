@@ -298,7 +298,7 @@ class _FakeVoiceLLM:
 class _StubEvaluator:
     def evaluate(
         self, question: str, answer: str, role: str = "Software Engineer",
-        level: str = "fresher", language: str = "vi",
+        level: str = "fresher", language: str = "vi", question_type: str | None = None,
     ) -> RubricEvaluationData:
         return RubricEvaluationData(
             clarity_score=80.0,

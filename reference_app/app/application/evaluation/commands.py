@@ -12,6 +12,7 @@ class EvaluateTurnCommand:
     role_name: str = "Software Engineer"
     level: str = "fresher"
     language: str = "vi"
+    question_type: str | None = None
 
 
 @dataclass(frozen=True)

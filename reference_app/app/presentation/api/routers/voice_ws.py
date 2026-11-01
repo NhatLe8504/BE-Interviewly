@@ -18,6 +18,7 @@ from ....application.voice.entitlement import check_user_voice_entitlement
 
 from ....application.container import ServiceContainer
 from ....application.voice.orchestrator import VoiceInterviewOrchestrator
+from ....infrastructure.llm.jev_turn_adapter import JevInterviewTurnJudge
 from ....application.voice.ports import VoiceConnectionPort
 
 router = APIRouter(tags=["voice"])
@@ -221,6 +222,11 @@ async def handle_voice_websocket_session(
         session_factory=session_factory,
         evaluation_service=getattr(container, "evaluation_service", None),
         user_id=authenticated_user_id,
+        turn_judge=JevInterviewTurnJudge(
+            api_key=container.settings.jev_api_key,
+            api_url=container.settings.jev_api_url,
+            model=container.settings.jev_model,
+        ),
     )
 
     try:
@@ -253,10 +259,17 @@ async def handle_voice_websocket_session(
                         persona_name=data.get("persona_name"),
                         company_name=data.get("company_name"),
                         mock_mode=data.get("mock_mode"),
+                        response_mode=data.get("response_mode"),
                         total_duration_minutes=data.get("total_duration_minutes"),
+                        browser_tts_fallback=bool(data.get("browser_tts_fallback")),
+                        tts_fallback_lock=data.get("tts_fallback_lock"),
                     )
 
                 elif msg_type in ("config", "set_barge_in"):
+                    if data.get("response_mode") in ("voice", "text"):
+                        orchestrator.response_mode = data["response_mode"]
+                    if "browser_tts_fallback" in data:
+                        orchestrator.set_browser_tts_preference(bool(data["browser_tts_fallback"]))
                     if "language" in data:
                         orchestrator.set_interview_language(data["language"])
                         await connection.send_event({
@@ -266,7 +279,7 @@ async def handle_voice_websocket_session(
                     if "barge_in_enabled" in data:
                         orchestrator.set_barge_in_enabled(bool(data["barge_in_enabled"]))
                     if "voice" in data and data["voice"]:
-                        orchestrator.voice = str(data["voice"])
+                        orchestrator.set_voice(str(data["voice"]))
                         await connection.send_event({
                             "type": "voice_configured",
                             "voice": orchestrator.voice,
@@ -293,16 +306,30 @@ async def handle_voice_websocket_session(
                     await orchestrator.handle_final_transcript(
                         text=data.get("text", ""),
                         duration_seconds=float(data.get("duration_seconds", 0.0)),
+                        turn_id=data.get("turn_id"),
+                    )
+
+                elif msg_type == "playback_completed":
+                    await orchestrator.handle_playback_completed(data.get("generation_id"))
+
+                elif msg_type == "tts_fallback_consent" and isinstance(data.get("accepted"), bool):
+                    await orchestrator.handle_tts_fallback_consent(
+                        data.get("generation_id"), data["accepted"],
                     )
 
                 elif msg_type == "stage_transition_confirm":
-                    await orchestrator.handle_stage_transition_confirm()
+                    await orchestrator.handle_stage_transition_confirm(data.get("proposal_id"), data.get("stage_version"))
 
                 elif msg_type == "stage_transition_defer":
-                    await orchestrator.handle_stage_transition_defer(data.get("continue_message"))
+                    await orchestrator.handle_stage_transition_defer(
+                        data.get("continue_message"), data.get("proposal_id"), data.get("stage_version"),
+                    )
 
                 elif msg_type == "request_hint":
                     await orchestrator.handle_request_hint(data.get("question_id"))
+
+                elif msg_type == "request_stage_transition":
+                    await orchestrator.request_stage_transition()
 
                 elif msg_type == "next_stage":
                     await orchestrator.handle_next_stage()
@@ -328,8 +355,11 @@ async def handle_voice_websocket_session(
             "message": str(exc),
         })
     finally:
+        orchestrator.pause_flow()
         await orchestrator.cancel_current_generation()
-        from ....application.voice.ports import VoiceSessionState
+        if orchestrator._judgment_task and not orchestrator._judgment_task.done():
+            orchestrator._judgment_task.cancel()
+        from ....domain.voice import VoiceSessionState
         if getattr(orchestrator, "state", None) == VoiceSessionState.COMPLETED:
             orchestrator._schedule_audio_cleanup(delay_seconds=60)
 
@@ -437,7 +467,10 @@ def get_voice_options(
     effective_user_id = user_id if user_id and user_id > 0 else None
     is_premium = check_user_voice_entitlement(session, effective_user_id) if effective_user_id else False
     api_key = getattr(container.settings, "elevenlabs_api_key", "")
-    data = get_voice_catalog_options(is_premium, language=language, api_key=api_key)
+    data = get_voice_catalog_options(
+        is_premium, language=language, api_key=api_key,
+        vieneu_available=bool(container.settings.vieneu_api_key),
+    )
     return VoiceOptionsOut(**data)
 
 
@@ -446,8 +479,14 @@ async def preview_voice_sample(
     voice: str = "vi-VN-HoaiMyNeural",
     pitch: str = "+0Hz",
     text: str | None = None,
+    user_id: int | None = Depends(get_optional_user_id),
     container: ServiceContainer = Depends(get_container),
 ):
+    if voice.startswith("vieneu:"):
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Authentication required for VieNeu preview")
+        if text:
+            raise HTTPException(status_code=400, detail="Custom VieNeu preview text is not supported")
     sample_text = (text or "").strip()
     if not sample_text:
         if voice.startswith("en-"):
@@ -582,7 +621,7 @@ async def upload_user_turn_audio(
     if session_rec.candidate_id != authenticated_user_id:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    if session_rec.status in (SessionStatus.COMPLETED, SessionStatus.CANCELLED) or str(session_rec.status).lower() in ("completed", "cancelled"):
+    if session_rec.status in (SessionStatus.completed, SessionStatus.abandoned) or str(session_rec.status).lower() in ("completed", "abandoned", "cancelled"):
         raise HTTPException(status_code=409, detail="Cannot upload audio to a completed or cancelled session")
 
     # 3. Verify turn ownership/existence before writing files

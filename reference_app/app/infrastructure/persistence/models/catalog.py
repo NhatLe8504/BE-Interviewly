@@ -73,6 +73,7 @@ class StarGuidanceTemplate(Base):
     __tablename__ = "star_guidance_templates"
 
     star_template_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     title: Mapped[str] = mapped_column(String(150), nullable=False)
     situation_guide: Mapped[str | None] = mapped_column(Text)
     task_guide: Mapped[str | None] = mapped_column(Text)

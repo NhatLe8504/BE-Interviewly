@@ -51,10 +51,10 @@ Mỗi phần tử trong mảng là một object có cấu trúc chính xác như
     "question_type": "technical", // một trong ba giá trị: "technical", "situational", "behavioral"
     "difficulty": 3, // số nguyên từ 1 (rất dễ) đến 5 (chuyên gia/lead)
     "intent": "Mục tiêu cụ thể nhà tuyển dụng muốn kiểm tra qua câu hỏi này",
-    "situation_guide": "Gợi ý bối cảnh (S - Situation) ứng viên nên đưa ra theo mô hình STAR",
+    "situation_guide": "Chỉ điền nếu question_type là behavioral; còn lại để chuỗi rỗng",
     "task_guide": "Gợi ý nhiệm vụ và trách nhiệm cốt lõi (T - Task) cần giải quyết",
     "action_guide": "Gợi ý các bước hành động chuyên môn cụ thể (A - Action) mang lại hiệu quả cao",
-    "result_guide": "Gợi ý kết quả đo lường định lượng và bài học rút ra (R - Result)",
+    "result_guide": "Chỉ điền nếu question_type là behavioral; còn lại để chuỗi rỗng",
     "sample_answer": "Câu trả lời mẫu xuất sắc, súc tích và chuẩn mực (từ 2 đến 4 đoạn)",
     "follow_up_questions": [
       "Câu hỏi đào sâu thứ 1 nếu ứng viên trả lời tốt",
@@ -69,6 +69,7 @@ Mỗi phần tử trong mảng là một object có cấu trúc chính xác như
     "status": "approved"
   }}
 ]
+Phân loại đúng: behavioral hỏi trải nghiệm đã xảy ra, technical hỏi kiến thức/thiết kế, situational hỏi tình huống giả định. Chỉ behavioral dùng STAR; technical cần lập luận/đánh đổi/kiểm chứng, situational cần ràng buộc/phương án/quyết định/rủi ro. Với câu không phải behavioral, để trống cả bốn trường *_guide và không ép STAR trong sample_answer hoặc tips.
 Hãy viết toàn bộ bằng tiếng Việt chuẩn mực ngành CNTT/Tuyển dụng chuyên nghiệp. Trả về đúng JSON.
 """
 
@@ -200,10 +201,10 @@ def generate_fallback_questions(
             "question_type": "technical",
             "difficulty": level_num,
             "intent": f"Đánh giá năng lực làm chủ kỹ thuật {first_stack}, tư duy cấu trúc mã nguồn và kiểm soát rò rỉ bộ nhớ/tắc nghẽn mạng.",
-            "situation_guide": f"Mô tả một dự án hoặc module chịu tải lớn viết bằng {first_stack}.",
-            "task_guide": "Xác định các chỉ số SLA cần đáp ứng (Response Time < 200ms, CPU < 70%).",
-            "action_guide": f"Áp dụng profiling tools, tối ưu câu lệnh, caching và connection pooling trong {first_stack}.",
-            "result_guide": "Tốc độ xử lý tăng gấp 2 lần, hạn chế triệt để lỗi out-of-memory.",
+            "situation_guide": "",
+            "task_guide": "",
+            "action_guide": "",
+            "result_guide": "",
             "sample_answer": f"Khi phát triển hệ thống với {first_stack}, tôi luôn chú trọng việc tối ưu vòng đời đối tượng, sử dụng Connection Pool hợp lý và giám sát bằng APM metrics. Khi phát hiện điểm nghẽn, tôi phân tích thread dump và query plan để xử lý tận gốc.",
             "follow_up_questions": [
                 f"Những công cụ profiling nào bạn thường dùng nhất cho {first_stack}?",
@@ -219,14 +220,14 @@ def generate_fallback_questions(
         },
         {
             "id": f"fb-{uuid.uuid4().hex[:6]}",
-            "question_text": f"Hãy kể về một lần xảy ra lỗi nghiêm trọng (Critical Bug) trên môi trường Production liên quan đến {role_name}. Bạn và đội ngũ đã khắc phục sự cố ra sao?",
+            "question_text": f"Giả sử hệ thống Production liên quan đến {role_name} gặp lỗi nghiêm trọng ngay sau khi triển khai, bạn sẽ ưu tiên xử lý thế nào?",
             "question_type": "situational",
             "difficulty": max(2, level_num),
             "intent": "Khảo sát tư duy giải quyết sự cố dưới áp lực, kỹ năng làm việc nhóm và quy trình Post-Mortem.",
-            "situation_guide": "Một đợt release vào cuối tuần gặp lỗi dẫn đến dữ liệu không đồng bộ.",
-            "task_guide": "Phục hồi dịch vụ trong thời gian ngắn nhất (dưới 30 phút) và bảo vệ an toàn dữ liệu khách hàng.",
-            "action_guide": "Kích hoạt Rollback tức thì, rà soát log ELK/Datadog, tái hiện lỗi trên Staging và viết hotfix kèm test cases bổ sung.",
-            "result_guide": "Hệ thống phục hồi hoàn toàn sau 20 phút, tài liệu hóa nguyên nhân gốc rễ và bổ sung CI/CD integration tests.",
+            "situation_guide": "",
+            "task_guide": "",
+            "action_guide": "",
+            "result_guide": "",
             "sample_answer": "Khi sự cố xảy ra, ưu tiên số một của tôi là cô lập rủi ro và khôi phục trạng thái ổn định cho người dùng bằng phương án Rollback hoặc Feature Flag. Sau đó, tôi phân tích root-cause qua log, viết hotfix và tổ chức buổi họp rút kinh nghiệm không đổ lỗi.",
             "follow_up_questions": [
                 "Làm sao để hạn chế tối đa việc lặp lại sự cố tương tự trong tương lai?",

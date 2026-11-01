@@ -35,7 +35,7 @@ def build_interviewer_system_prompt(
             else
             "3. CHẾ ĐỘ HUẤN LUYỆN & HƯỚNG DẪN (GUIDED COACHING):\n"
             "- Bạn là người phỏng vấn cởi mở, đóng vai trò huấn luyện viên giúp ứng viên tiến bộ.\n"
-            "- Hỗ trợ ứng viên định hình câu trả lời theo phương pháp STAR (Bối cảnh, Nhiệm vụ, Hành động, Kết quả).\n"
+            "- Chỉ gợi ý STAR khi câu hỏi yêu cầu kể trải nghiệm đã xảy ra; câu kỹ thuật hoặc giả định cần lập luận đúng trọng tâm.\n"
             "- Nếu ứng viên bế tắc hoặc xin gợi ý, hãy khơi mở tư duy bằng các từ khóa kỹ thuật gợi ý mà không làm bài hộ."
         )
 
@@ -76,7 +76,7 @@ BẠN BẮT BUỘC PHẢI TUÂN THỦ NGHIÊM NGẶT CÁC QUY TẮC SAU ĐÂY:
         if is_strict
         else
         "3. GUIDED COACHING MODE:\n"
-        "- Supportive and constructive. Guide candidates using STAR methodology when needed."
+        "- Supportive and constructive. Use STAR only for questions about past experiences; for technical or hypothetical questions guide reasoning instead."
     )
 
     return f"""You are {persona_display}, a Senior Tech Lead and Hiring Manager{company_phrase_en} conducting a direct, 1-on-1 real-time voice interview with a candidate for the {role} ({level}) position.
@@ -124,9 +124,9 @@ def build_dynamic_warmup_opening_text(
             "Trước khi đi vào phần chuyên môn, hôm nay thời tiết chỗ bạn thế nào? Bạn đã cảm thấy thoải mái và sẵn sàng cho buổi trò chuyện hôm nay chưa?",
             "Hôm nay mọi thứ có thuận lợi với bạn không? Bạn đã kịp nạp một chút cà phê hay trà để chuẩn bị năng lượng tốt nhất chưa?",
             "Rất vui được gặp bạn hôm nay! Bạn cứ thả lỏng và xem đây như một buổi trò chuyện cởi mở giữa hai đồng nghiệp nhé. Tâm trạng bạn lúc này thế nào?",
-            "Tuần này công việc và nhịp sống của bạn thế nào? Hãy chia sẻ đôi chút cảm nhận và giới thiệu ngắn gọn về bản thân nhé!",
+            "Tuần này nhịp sống của bạn thế nào, bạn đã có thời gian thư giãn trước buổi trò chuyện chưa?",
             "Không khí ở chỗ bạn thế nào, bạn đã chuẩn bị cho mình một không gian thật yên tĩnh và thoải mái cho buổi phỏng vấn này chưa?",
-            "Chào bạn! Hôm nay tâm trạng của bạn thế nào rồi, có điều gì đặc biệt khiến bạn hào hứng khi ứng tuyển vào vị trí này không?",
+            "Hôm nay tâm trạng của bạn thế nào rồi, bạn đã cảm thấy thoải mái để trò chuyện chưa?",
             "Rất vui được đón tiếp bạn. Một ngày mới của bạn bắt đầu thế nào, mọi thứ đều suôn sẻ và tràn đầy năng lượng chứ?",
             "Trước khi chúng ta trao đổi về công việc, bạn có thể chia sẻ nhanh một điều thú vị gần đây mà bạn yêu thích hoặc quan tâm không?",
             "Đường truyền âm thanh của bạn rất rõ ràng. Bạn đã cảm thấy hoàn toàn tự tin và thoải mái để chúng ta bắt đầu chưa?",
@@ -140,7 +140,7 @@ def build_dynamic_warmup_opening_text(
     icebreakers_en = [
         "Before diving into technical topics, how is your day going so far? Are you feeling relaxed and ready for our conversation today?",
         "How was your morning getting set up today? Did you manage to grab a cup of coffee to kick things off?",
-        "How has your week been treating you? Feel free to share a quick icebreaker and briefly introduce yourself!",
+        "How has your week been treating you? Have you had a moment to relax before our chat?",
         "Glad to meet you today! How is the weather where you are, and how are you feeling ahead of our chat?",
         "Hope you're having a smooth day so far! Got everything set up comfortably to dive in?",
         "Everything connecting well on your end? Just take a breath and treat this as a collaborative conversation between two engineers.",
@@ -209,19 +209,23 @@ def build_hint_prompt(
     role: str = "Software Engineer",
     level: str = "Senior",
     language: str = "vi",
+    framework: str = "generic",
 ) -> str:
+    from ...domain.answer_framework import hint_fallback
+
+    approach = hint_fallback(framework, language)
     if language == "vi":
         return (
             f"Vị trí: {role} ({level}). Câu hỏi phỏng vấn: '{question}'.\n"
             "Ứng viên đang gặp khó khăn và cần một gợi ý hướng tiếp cận. "
-            "Hãy đưa ra DUY NHẤT một gợi ý ngắn gọn (2-3 câu, tối đa 50 từ) theo phương pháp STAR hoặc các từ khóa kỹ thuật gợi mở. "
+            f"Hướng gợi ý phù hợp: {approach} Hãy đưa ra DUY NHẤT một gợi ý ngắn gọn (2-3 câu, tối đa 50 từ). "
             "TUYỆT ĐỐI KHÔNG trả lời thay hoặc đưa ra đáp án hoàn chỉnh, chỉ gợi mở tư duy. "
             "TUYỆT ĐỐI KHÔNG dùng markdown."
         )
     return (
         f"Role: {role} ({level}). Interview question: '{question}'.\n"
         "The candidate requested a hint. Provide EXACTLY ONE concise hint (2-3 sentences, max 50 words) "
-        "highlighting key concepts or STAR structure without revealing the full solution. NO markdown."
+        f"following this approach: {approach} Do not reveal the full solution. NO markdown."
     )
 
 
@@ -298,29 +302,23 @@ def build_follow_up_user_prompt(
     return prompt
 
 
-def build_rubric_evaluator_system_prompt(language: str = "vi") -> str:
-    return """Bạn là một Giám khảo Phỏng vấn AI chuyên gia, đánh giá câu trả lời của ứng viên theo chuẩn Rubric và phương pháp STAR.
+def build_rubric_evaluator_system_prompt(language: str = "vi", question_type: str | None = None) -> str:
+    from ...domain.answer_framework import answer_framework
 
-Bạn BẮT BUỘC phải phản hồi DUY NHẤT một chuỗi JSON hợp lệ theo đúng cấu trúc sau (không kèm markdown ```json bọc ngoài):
-{
-  "clarity_score": 85,
-  "structure_score": 75,
-  "evidence_score": 80,
-  "star_analysis": {
-    "situation": true,
-    "task": true,
-    "action": true,
-    "result": false
-  },
-  "feedback": "Nhận xét chi tiết về điểm mạnh và điểm cần cải thiện...",
-  "sample_better_answer": "Gợi ý câu trả lời mẫu xuất sắc hơn theo chuẩn STAR..."
-}
-
-Tiêu chí chấm điểm (thang điểm 0 - 100):
-- clarity_score: Độ rõ ràng, mạch lạc, dùng từ ngữ chuyên ngành chính xác, không lan man.
-- structure_score: Cấu trúc câu trả lời có logic, theo trình tự hợp lý (đặc biệt theo mô hình STAR: Bối cảnh, Nhiệm vụ, Hành động, Kết quả).
-- evidence_score: Bằng chứng cụ thể, số liệu thực tế, công nghệ cụ thể đã dùng, không nói chung chung.
-"""
+    framework = answer_framework(question_type)
+    criteria = {
+        "star": "Assess the real experience through Situation, Task, Action and Result. Analyze STAR components.",
+        "technical": "Assess technical correctness, reasoning, trade-offs and verification. Do not require STAR.",
+        "situational": "Assess constraints, options, decision and risks. Do not require a past experience or STAR.",
+        "generic": "Assess relevance and sound reasoning. Do not require STAR.",
+    }[framework]
+    return (
+        "You are an interview evaluator. Score the answer itself, not its length or format alone. "
+        f"Question framework: {framework}. {criteria} "
+        "Return only JSON with clarity_score, structure_score, evidence_score (each 0-100), "
+        "star_analysis (four booleans situation/task/action/result only for STAR; otherwise {}), "
+        "feedback and sample_better_answer. Do not award credit for unsupported claims."
+    )
 
 
 def build_rubric_evaluator_user_prompt(
@@ -328,9 +326,10 @@ def build_rubric_evaluator_user_prompt(
     answer: str,
     role: str = "Software Engineer",
     level: str = "fresher",
+    question_type: str | None = None,
 ) -> str:
-    return f"""Vị trí ứng tuyển: {role} (Level: {level})
-Câu hỏi phỏng vấn: {question}
-Câu trả lời của ứng viên: {answer}
-
-Hãy chấm điểm Rubric và phân tích STAR cho câu trả lời này. Trả về đúng định dạng JSON yêu cầu."""
+    return (
+        f"Role: {role} (level: {level}); question type: {question_type or 'unknown'}\n"
+        f"Interview question: {question}\nCandidate answer: {answer}\n"
+        "Evaluate against the question and return the requested JSON only."
+    )

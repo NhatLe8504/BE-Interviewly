@@ -63,6 +63,8 @@ class TurnEvaluation:
     rubric: RubricScores
     star: StarAnalysis | None = None
     feedback: ActionableFeedback | None = None
+    question_type: str | None = None
+    rubric_version: int = 1
     evaluated_at: datetime | None = None
 
     def __post_init__(self) -> None:

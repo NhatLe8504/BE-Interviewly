@@ -155,3 +155,54 @@ def test_start_session_from_jd_job_ownership(client) -> None:
         json={"mode": "text"},
         headers=headers_b,
     ).status_code == 403
+
+
+def test_jd_pipeline_rolls_back_incomplete_job(client) -> None:
+    import asyncio
+    from app.domain.jd_interview import JDJobStatus
+    from app.infrastructure.persistence.models.jd_interview import JDGenerationJob
+    from app.presentation.api.routers.jd_interview import _get_or_create_orchestrator
+
+    headers, user_id = auth_headers(client)
+    job_id = f"jd_{uuid.uuid4().hex[:12]}"
+    session_factory = client.app.state.services.session_factory
+    with session_factory() as session:
+        session.add(JDGenerationJob(
+            job_id=job_id, user_id=user_id, source_type="text", checksum="invalid",
+            status=JDJobStatus.PENDING.value, stage="INITIALIZED", progress_pct=5,
+            request_payload={"input_data": {"text": "too short"}, "options": {}},
+        ))
+        session.commit()
+
+    orchestrator = _get_or_create_orchestrator(client.app.state.services)
+    result = asyncio.run(orchestrator.execute_pipeline(job_id, user_id, "text", {"text": "too short"}))
+    assert result == {}
+    with session_factory() as session:
+        assert session.get(JDGenerationJob, job_id) is None
+    assert orchestrator.queue_manager.get_job_state(job_id) is None
+    assert client.get(f"/api/v1/interviews/from-jd/jobs/{job_id}/status", headers=headers).status_code == 404
+
+
+def test_jd_completion_notification_is_owned_and_acknowledged(client) -> None:
+    from app.domain.jd_interview import JDJobStatus
+    from app.infrastructure.persistence.models.jd_interview import JDGenerationJob
+
+    owner_headers, owner_id = auth_headers(client)
+    other_headers, _ = auth_headers(client)
+    job_id = f"jd_{uuid.uuid4().hex[:12]}"
+    with client.app.state.services.session_factory() as session:
+        session.add(JDGenerationJob(
+            job_id=job_id, user_id=owner_id, source_type="text", checksum="ready",
+            status=JDJobStatus.COMPLETED.value, stage="COMPLETED", progress_pct=100,
+            notification_pending=True,
+        ))
+        session.commit()
+
+    notifications_url = "/api/v1/interviews/from-jd/notifications"
+    acknowledge_url = f"/api/v1/interviews/from-jd/jobs/{job_id}/notification-read"
+    assert client.get(notifications_url).status_code == 401
+    assert job_id not in [item["job_id"] for item in client.get(notifications_url, headers=other_headers).json()]
+    assert client.post(acknowledge_url, headers=other_headers).status_code == 404
+    assert job_id in [item["job_id"] for item in client.get(notifications_url, headers=owner_headers).json()]
+    assert client.post(acknowledge_url, headers=owner_headers).status_code == 204
+    assert job_id not in [item["job_id"] for item in client.get(notifications_url, headers=owner_headers).json()]

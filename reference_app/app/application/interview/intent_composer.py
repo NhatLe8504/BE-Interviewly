@@ -10,7 +10,7 @@ class QuestionIntentContext:
     intent: str
     stage_key: str
     difficulty: int = 3
-    question_type: str = "technical"
+    question_type: str = "generic"
     raw_question_text: str = ""
     topic_label: str = ""
 

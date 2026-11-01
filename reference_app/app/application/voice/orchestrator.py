@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import asyncio
+import json
 import logging
 import time
 from typing import Any
@@ -18,7 +19,7 @@ from ...domain.voice import (
 )
 from ...domain.errors import DomainValidationError
 from .languages import INTERVIEW_LANGUAGE_SETTINGS
-from .ports import LLMVoiceStreamPort, TTSPort, VoiceConnectionPort
+from .ports import LLMVoiceStreamPort, TTSFallbackNotice, TTSPort, VoiceConnectionPort
 from .sentence_splitter import StreamingSentenceSplitter
 from ...infrastructure.llm.prompt_templates import (
     build_interviewer_system_prompt,
@@ -28,6 +29,8 @@ from ...infrastructure.llm.prompt_templates import (
     build_follow_up_user_prompt,
 )
 from .text_sanitizer import sanitize_spoken_text
+from .adaptive_flow import create_snapshot, current_item, stage_progress, apply_judgment, advance_stage, skip_remaining, pause, resume, active_elapsed, is_candidate_cannot_answer, warmup_topic
+from .turn_judge import InterviewTurnJudge, TurnJudgment
 from ..interview.intent_composer import QuestionIntentComposer, QuestionIntentContext
 from ..interview.question_selection import QuestionSelectionService
 
@@ -61,8 +64,14 @@ class VoiceInterviewOrchestrator:
         session_factory: Any = None,
         evaluation_service: Any = None,
         user_id: int | None = None,
+        turn_judge: InterviewTurnJudge | None = None,
     ) -> None:
         self.user_id = user_id
+        self.turn_judge = turn_judge
+        self.flow: dict[str, Any] | None = None
+        self._judgment_task: asyncio.Task | None = None
+        self._adaptive_probe_target: str | None = None
+        self._awaiting_playback_id: str | None = None
         self.session_factory = session_factory
         self.evaluation_service = evaluation_service
         self.current_intent_ctx: QuestionIntentContext | None = None
@@ -74,6 +83,18 @@ class VoiceInterviewOrchestrator:
         self.level = level
         self.language = language
         self.voice = voice
+        self.response_mode = "voice"
+        self.browser_tts_fallback = False
+        self._tts_user_browser_preference = False
+        self._tts_browser_forced = False
+        self._tts_backup_active = False
+        self._tts_generation_id: str | None = None
+        self._tts_fallback_notice_sent = False
+        self._tts_attempted_synthesis = False
+        self._tts_failed_this_turn = False
+        self._tts_consecutive_failed_turns = 0
+        self._tts_locked_fallback: str | None = None
+        self._tts_consent_offer: tuple[str, str] | None = None
         self.persona_name = persona_name or "Alex Vance"
         self.company_name = company_name
         self.mock_mode = mock_mode or "guided"
@@ -112,7 +133,7 @@ class VoiceInterviewOrchestrator:
                 from ...infrastructure.persistence.models.session import InterviewSession as DbInterviewSession
                 from ...infrastructure.persistence.models.enums import SessionStatus
                 s_row = db_chk.get(DbInterviewSession, self.session_id)
-                if s_row and (s_row.status == SessionStatus.COMPLETED or str(s_row.status).lower() == "completed"):
+                if s_row and (s_row.status == SessionStatus.completed or str(s_row.status).lower() == "completed"):
                     self.state = VoiceSessionState.COMPLETED
             except Exception:
                 pass
@@ -124,11 +145,113 @@ class VoiceInterviewOrchestrator:
         self._generation_counter: int = 0
         self._cancelled_generation_ids: set[str] = set()
         self.conversation_history: list[dict[str, str]] = []
+        self.stage_history: dict[str, list[dict[str, str]]] = {
+            StageId.WARMUP.value: [],
+            StageId.TECHNICAL.value: [],
+            StageId.CLOSING.value: [],
+        }
+        self.stage_summaries: dict[str, str] = {}
         self._initial_opening_text: str | None = None
         self._has_unvoiced_opening: bool = False
         self._background_tasks: set[asyncio.Task] = set()
 
+        self._load_flow()
         self._load_existing_turns_from_db()
+
+    def _load_flow(self) -> None:
+        if not self.session_factory:
+            return
+        db = self.session_factory()
+        try:
+            from ...infrastructure.persistence.models.session_plan import InterviewFlowState
+            if hasattr(db, "get"):
+                row = db.get(InterviewFlowState, self.session_id)
+            else:
+                row = db.query(InterviewFlowState).filter_by(session_id=self.session_id).first()
+            if row and hasattr(row, "snapshot"):
+                self.flow = row.snapshot
+                pause(self.flow)
+                self.current_stage_index = self.flow["stage_index"]
+                self.active_stages = self._resolve_stages(self.flow["stages"])
+                self.total_duration_minutes = self.flow["duration_minutes"]
+                self.stage_time_limits = self.flow["budgets"]
+        finally:
+            db.close()
+
+    def _save_flow(self) -> None:
+        if not self.flow or not self.session_factory:
+            return
+        db = self.session_factory()
+        try:
+            from ...infrastructure.persistence.models.session_plan import InterviewFlowState
+            if hasattr(db, "get"):
+                row = db.get(InterviewFlowState, self.session_id)
+            else:
+                row = db.query(InterviewFlowState).filter_by(session_id=self.session_id).first()
+            if row is None:
+                db.add(InterviewFlowState(session_id=self.session_id, snapshot=self.flow))
+            else:
+                row.snapshot = self.flow
+            db.commit()
+        except Exception:
+            db.rollback()
+            logging.getLogger("VoiceOrchestrator").exception("Could not save interview flow")
+            raise
+        finally:
+            db.close()
+
+    def _initialize_flow(self) -> None:
+        if self.flow:
+            return
+        script_items = []
+        if self.session_factory:
+            db = self.session_factory()
+            try:
+                from ...infrastructure.persistence.models.jd_interview import JDGenerationJob
+                job = db.query(JDGenerationJob).filter_by(session_id=self.session_id).first()
+                script_items = job.script.items if job and hasattr(job, "script") and job.script and hasattr(job.script, "items") and job.script.items else []
+            finally:
+                db.close()
+        self.flow = create_snapshot(
+            script_items, [stage.id for stage in self.active_stages],
+            self.total_duration_minutes, self.language,
+        )
+        self.current_stage_index = 0
+        self.stage_time_limits = self.flow["budgets"]
+        if self.session_factory:
+            self._save_flow()
+
+    async def _emit_flow_progress(self) -> None:
+        if self.flow and self.connection.is_open():
+            await self.connection.send_event({"type": "interview_progress", **stage_progress(self.flow)})
+
+    def _record_stage_turn(self, role: str, content: str) -> None:
+        stage_id = self.get_current_stage().id
+        self.stage_history.setdefault(stage_id, []).append({"role": role, "content": content})
+
+    def get_scoped_conversation_history(self) -> list[dict[str, str]]:
+        stage_id = self.get_current_stage().id
+        scoped = self.stage_history.get(stage_id, [])
+        if scoped:
+            return scoped[-6:]
+        return []
+
+    def _summarize_warmup_stage(self) -> str:
+        warmup_turns = self.stage_history.get(StageId.WARMUP.value, [])
+        user_texts = [t["content"] for t in warmup_turns if t["role"] == "user"]
+        combined = " ".join(user_texts)[:300]
+        if combined:
+            return f"Ứng viên ứng tuyển vị trí {self.role_name} ({self.level}). Tinh thần cởi mở, phong thái giao tiếp sẵn sàng."
+        return f"Ứng viên sẵn sàng bước vào phần phỏng vấn chuyên môn vị trí {self.role_name}."
+
+    def _summarize_technical_stage(self) -> str:
+        return f"Ứng viên đã hoàn thành trao đổi các chủ đề phỏng vấn chuyên môn {self.role_name}."
+
+    def _summarize_stage(self, stage_id: str) -> None:
+        if stage_id == StageId.WARMUP.value:
+            self.stage_summaries[StageId.WARMUP.value] = self._summarize_warmup_stage()
+        elif stage_id == StageId.TECHNICAL.value:
+            self.stage_summaries[StageId.TECHNICAL.value] = self._summarize_technical_stage()
 
     def _calculate_stage_time_limits(self, total_minutes: int) -> dict[str, int]:
         total_sec = max(300, int(total_minutes * 60))
@@ -139,6 +262,8 @@ class VoiceInterviewOrchestrator:
         }
 
     def get_stage_elapsed_seconds(self, stage_id: str) -> float:
+        if self.flow and self.flow["stages"][self.flow["stage_index"]] == stage_id:
+            return active_elapsed(self.flow)
         start = self.stage_start_times.get(stage_id)
         if start is None:
             return 0.0
@@ -186,6 +311,9 @@ class VoiceInterviewOrchestrator:
                 if r.transcribed_text:
                     self.conversation_history.append({"role": "user", "content": r.transcribed_text})
 
+            cur_stage_id = self.get_current_stage().id
+            self.stage_history[cur_stage_id] = list(self.conversation_history[-8:])
+
             last_row = rows[-1]
             if last_row.transcribed_text and last_row.transcribed_text.strip():
                 self.current_turn_id = last_row.turn_number + 1
@@ -196,17 +324,6 @@ class VoiceInterviewOrchestrator:
                 if last_row.message_text:
                     self._initial_opening_text = last_row.message_text
 
-            # If starting at warmup stage and no candidate response has occurred yet,
-            # ensure a stale pre-seeded technical question is discarded so small talk is used instead.
-            cur_stg = self.get_current_stage()
-            if cur_stg.id == StageId.WARMUP.value and not any(m.get("role") == "user" for m in self.conversation_history):
-                msg = (last_row.message_text or "").lower()
-                is_small_talk = any(k in msg for k in ("thời tiết", "đường đi", "cà phê", "năng lượng", "tâm trạng", "weather", "traffic", "coffee", "đồng hành"))
-                if not is_small_talk:
-                    self.conversation_history = []
-                    self._initial_opening_text = None
-                    self._has_unvoiced_opening = False
-                    self.current_turn_id = 1
         except Exception as exc:
             logging.getLogger("VoiceOrchestrator").warning("Failed to load existing turns: %s", exc)
         finally:
@@ -263,6 +380,7 @@ class VoiceInterviewOrchestrator:
                 "topic_label": self.current_intent_ctx.topic_label,
                 "stage_key": self.current_intent_ctx.stage_key,
                 "difficulty": self.current_intent_ctx.difficulty,
+                "question_type": self.current_intent_ctx.question_type,
             })
 
     def _persist_ai_turn(
@@ -364,6 +482,8 @@ class VoiceInterviewOrchestrator:
         return self.active_stages[idx]
 
     def get_target_turns_for_current_stage(self) -> int:
+        if self.flow:
+            return stage_progress(self.flow)["total"]
         cur = self.get_current_stage()
         if cur.id in self.questions_per_stage:
             return self.questions_per_stage[cur.id]
@@ -436,12 +556,89 @@ class VoiceInterviewOrchestrator:
                 "generation_id": self.current_generation_id or "",
                 "current_stage": self.get_current_stage_data(),
                 "stages": self.get_all_stages_data(),
-                "turn_in_stage": self.turns_in_current_stage + 1,
+                "turn_in_stage": stage_progress(self.flow)["completed"] + 1 if self.flow else self.turns_in_current_stage + 1,
                 "target_turns_in_stage": self.get_target_turns_for_current_stage(),
             })
 
     def set_barge_in_enabled(self, enabled: bool) -> None:
         self.barge_in_enabled = enabled
+
+    def set_browser_tts_preference(self, enabled: bool) -> None:
+        if enabled != self._tts_user_browser_preference:
+            self._clear_tts_fallback_choice()
+        self._tts_user_browser_preference = enabled
+        self.browser_tts_fallback = self._tts_browser_forced or enabled
+
+    def _clear_tts_fallback_choice(self) -> None:
+        self._tts_locked_fallback = None
+        self._tts_consent_offer = None
+        self._tts_consecutive_failed_turns = 0
+
+    def set_voice(self, voice: str) -> None:
+        if voice != self.voice:
+            self._clear_tts_fallback_choice()
+        self.voice = voice
+
+    def restore_tts_fallback_choice(self, phase: str | None) -> None:
+        if not self._tts_user_browser_preference and (
+            phase == "browser" or (phase == "backup" and self.voice.startswith("vieneu:"))
+        ):
+            self._tts_locked_fallback = phase
+
+    async def handle_tts_fallback_consent(self, generation_id: str | None, accepted: bool) -> None:
+        if not self._tts_consent_offer or self._tts_consent_offer[0] != generation_id:
+            return
+        _, phase = self._tts_consent_offer
+        self._tts_consent_offer = None
+        self._tts_consecutive_failed_turns = 0
+        if accepted:
+            self._tts_locked_fallback = phase
+        if self.connection.is_open():
+            await self.connection.send_event({
+                "type": VoiceEventType.TTS_FALLBACK_CONSENT_RESULT.value,
+                "generation_id": generation_id,
+                "accepted": accepted,
+                "phase": phase,
+            })
+
+    def _start_tts_generation(self, generation_id: str) -> None:
+        self._tts_generation_id = generation_id
+        self._tts_backup_active = self._tts_locked_fallback == "backup" and self.voice.startswith("vieneu:")
+        self._tts_browser_forced = self._tts_locked_fallback == "browser"
+        self.browser_tts_fallback = self._tts_user_browser_preference or self._tts_browser_forced
+        self._tts_fallback_notice_sent = False
+        self._tts_attempted_synthesis = False
+        self._tts_failed_this_turn = False
+
+    async def _finish_tts_generation(self, generation_id: str, *, finishing_session: bool = False) -> None:
+        if generation_id != self._tts_generation_id or self.response_mode != "voice":
+            return
+        if not self._tts_attempted_synthesis or not self._tts_failed_this_turn:
+            self._tts_consecutive_failed_turns = 0
+            if self._tts_consent_offer:
+                offered_generation, _ = self._tts_consent_offer
+                self._tts_consent_offer = None
+                if self.connection.is_open():
+                    await self.connection.send_event({
+                        "type": VoiceEventType.TTS_FALLBACK_CONSENT_RESULT.value,
+                        "generation_id": offered_generation,
+                        "accepted": False,
+                        "recovered": True,
+                    })
+            return
+        self._tts_consecutive_failed_turns += 1
+        if (self._tts_consecutive_failed_turns < 2 or self._tts_consent_offer
+                or self._tts_locked_fallback == "browser" or finishing_session):
+            return
+        phase = "browser" if self._tts_browser_forced else "backup"
+        self._tts_consent_offer = (generation_id, phase)
+        if self.connection.is_open():
+            await self.connection.send_event({
+                "type": VoiceEventType.TTS_FALLBACK_CONSENT.value,
+                "generation_id": generation_id,
+                "turn_id": self.current_turn_id,
+                "phase": phase,
+            })
 
     def set_interview_language(self, language: str) -> None:
         if not isinstance(language, str) or language not in INTERVIEW_LANGUAGE_SETTINGS:
@@ -451,7 +648,7 @@ class VoiceInterviewOrchestrator:
         if self.state not in (VoiceSessionState.IDLE, VoiceSessionState.LISTEN):
             raise DomainValidationError("Change language while the interviewer is waiting for your answer")
         self.language = language
-        self.voice = INTERVIEW_LANGUAGE_SETTINGS[language][1]
+        self.set_voice(INTERVIEW_LANGUAGE_SETTINGS[language][1])
         if not self._custom_system_prompt:
             self.system_prompt = build_interviewer_system_prompt(
                 role=self.role_name,
@@ -471,6 +668,22 @@ class VoiceInterviewOrchestrator:
         is_vi = self.language == "vi"
 
         if cur_stage.id == StageId.WARMUP.value:
+            # Chặng Khởi Động (Warm-up) LUÔN LUÔN là small talk, trò chuyện phá băng.
+            # Tuyệt đối không gắn câu hỏi chuyên môn vào câu mở đầu này.
+            seed = int(time.time() * 1000) ^ (self.session_id * 31)
+            return build_dynamic_warmup_opening_text(
+                role=self.role_name,
+                level=self.level,
+                persona_name=self.persona_name,
+                company_name=self.company_name,
+                language=self.language,
+                variant_seed=seed,
+            )
+
+        if self.flow:
+            item = current_item(self.flow)
+            if item:
+                return item["question"]
             # Chặng Khởi Động (Warm-up) LUÔN LUÔN là small talk, trò chuyện phá băng.
             # Tuyệt đối không gắn câu hỏi chuyên môn vào câu mở đầu này.
             seed = int(time.time() * 1000) ^ (self.session_id * 31)
@@ -527,7 +740,10 @@ class VoiceInterviewOrchestrator:
         persona_name: str | None = None,
         company_name: str | None = None,
         mock_mode: str | None = None,
+        response_mode: str | None = None,
         total_duration_minutes: int | None = None,
+        browser_tts_fallback: bool = False,
+        tts_fallback_lock: str | None = None,
     ) -> None:
         if self.state == VoiceSessionState.COMPLETED:
             if self.connection.is_open():
@@ -552,7 +768,10 @@ class VoiceInterviewOrchestrator:
             self.company_name = company_name
         if mock_mode:
             self.mock_mode = mock_mode
-        if total_duration_minutes:
+        if response_mode in ("voice", "text"):
+            self.response_mode = response_mode
+        self.set_browser_tts_preference(browser_tts_fallback)
+        if total_duration_minutes and not self.flow:
             self.total_duration_minutes = max(5, int(total_duration_minutes))
             self.stage_time_limits = self._calculate_stage_time_limits(self.total_duration_minutes)
 
@@ -569,17 +788,28 @@ class VoiceInterviewOrchestrator:
         if language:
             self.set_interview_language(language)
         if voice:
-            self.voice = voice
+            self.set_voice(voice)
+        self.restore_tts_fallback_choice(tts_fallback_lock)
         if pitch is not None:
             self.set_pitch(pitch)
         if barge_in_enabled is not None:
             self.barge_in_enabled = barge_in_enabled
         if questions_per_stage:
             self.questions_per_stage.update(questions_per_stage)
-        if selected_stages:
+        if selected_stages and not self.flow:
             self.active_stages = self._resolve_stages(selected_stages)
             self.current_stage_index = 0
             self.turns_in_current_stage = 0
+        self._initialize_flow()
+        if self.flow:
+            self.current_stage_index = self.flow["stage_index"]
+            resume(self.flow)
+            self._save_flow()
+            if (not any(message["role"] == "user" for message in self.conversation_history)
+                    and self.conversation_history and self.get_current_stage().id == StageId.WARMUP.value
+                    and self._has_unvoiced_opening
+                    and self.conversation_history[-1]["content"] != self._build_opening_question()):
+                self.conversation_history.clear()
 
         cur_stg = self.get_current_stage()
         self._ensure_stage_timer_started(cur_stg.id)
@@ -590,15 +820,17 @@ class VoiceInterviewOrchestrator:
                 "type": VoiceEventType.STAGE_INFO.value,
                 "current_stage": self.get_current_stage_data(),
                 "stages": self.get_all_stages_data(),
-                "turn_in_stage": self.turns_in_current_stage + 1,
+                "turn_in_stage": stage_progress(self.flow)["completed"] + 1 if self.flow else self.turns_in_current_stage + 1,
                 "target_turns_in_stage": self.get_target_turns_for_current_stage(),
                 "stage_elapsed_seconds": int(self.get_stage_elapsed_seconds(cur_stg.id)),
-                "stage_max_seconds": self.stage_time_limits.get(cur_stg.id, 600),
+                "stage_max_seconds": self.flow["budgets"][cur_stg.id] if self.flow else self.stage_time_limits.get(cur_stg.id, 600),
                 "total_duration_minutes": self.total_duration_minutes,
                 "mock_mode": self.mock_mode,
                 "persona_name": self.persona_name,
                 "company_name": self.company_name,
             })
+
+        await self._emit_flow_progress()
 
         # Resolve intent for current stage if DB session is available
         self._resolve_next_intent()
@@ -607,6 +839,36 @@ class VoiceInterviewOrchestrator:
         # Broadcast conversation history if available
         if self.conversation_history and self.connection.is_open():
             await self._broadcast_conversation_history()
+
+        if self.flow and self.flow.get("pending"):
+            await self._emit_pending_proposal()
+            await self.set_state(VoiceSessionState.LISTEN)
+            return
+
+        if (self.flow and self.flow.get("last_received_turn", 0) > self.flow["last_turn"]
+                and self.conversation_history and self.conversation_history[-1]["role"] == "user"):
+            self.current_turn_id = self.flow["last_received_turn"]
+            await self.set_state(VoiceSessionState.THINK)
+            self._judgment_task = asyncio.create_task(self._process_adaptive_answer(
+                self.current_turn_id, self.conversation_history[-1]["content"], self.flow["stage_version"],
+            ))
+            return
+
+        if (self.flow and self.conversation_history and self.conversation_history[-1]["role"] == "user"):
+            item = current_item(self.flow)
+            if item:
+                await self.set_state(VoiceSessionState.THINK)
+                if item["status"] == "probing":
+                    threshold = 1.0 if self.get_current_stage().id == StageId.WARMUP.value else 1.8
+                    self._adaptive_probe_target = next(
+                        (signal for signal in item["signals"]
+                         if item["evidence"].get(signal, {}).get("score", 0) < threshold), item["signals"][0],
+                    )
+                    self.current_turn_id -= 1
+                    self._active_task = asyncio.create_task(self._run_llm_and_tts_pipeline())
+                else:
+                    self._active_task = asyncio.create_task(self._run_llm_and_tts_pipeline(next_question_item=item))
+                return
 
         # If voice session has no history yet, or has an unvoiced initial opening
         should_speak_opening = False
@@ -621,14 +883,19 @@ class VoiceInterviewOrchestrator:
 
         if should_speak_opening:
             await self.set_state(VoiceSessionState.THINK)
-            prompt = self._build_opening_question()
-            self._active_task = asyncio.create_task(
-                self._stream_predefined_text(prompt),
-            )
+            item = current_item(self.flow) if self.flow else None
+            if item and self.get_current_stage().id != StageId.WARMUP.value:
+                self._active_task = asyncio.create_task(
+                    self._run_llm_and_tts_pipeline(next_question_item=item, is_stage_opening=True),
+                )
+            else:
+                self._active_task = asyncio.create_task(self._stream_predefined_text(self._build_opening_question()))
         else:
             await self.set_state(VoiceSessionState.LISTEN)
 
     async def handle_user_speech_start(self, *, force: bool = False) -> None:
+        if self._judgment_task and not self._judgment_task.done():
+            return
         if not force and not self.barge_in_enabled:
             return
 
@@ -639,9 +906,10 @@ class VoiceInterviewOrchestrator:
             await self.set_state(VoiceSessionState.LISTEN)
 
     async def handle_interim_transcript(self, text: str) -> None:
-        if self.barge_in_enabled and len(text.strip()) >= 2 and self.state in (
+        if (not (self._judgment_task and not self._judgment_task.done()) and
+                self.barge_in_enabled and len(text.strip()) >= 2 and self.state in (
             VoiceSessionState.SPEAK, VoiceSessionState.THINK,
-        ):
+        )):
             await self.cancel_current_generation()
             await self.set_state(VoiceSessionState.LISTEN)
 
@@ -654,29 +922,38 @@ class VoiceInterviewOrchestrator:
                 "turn_id": self.current_turn_id,
             })
 
+    async def handle_playback_completed(self, generation_id: str | None) -> None:
+        if (generation_id and generation_id == self._awaiting_playback_id and
+                generation_id == self.current_generation_id and self.state == VoiceSessionState.SPEAK):
+            self._awaiting_playback_id = None
+            await self.set_state(VoiceSessionState.LISTEN)
+
+    @staticmethod
+    def _is_greeting_only(text: str) -> bool:
+        return text.lower().strip(" .,!?:;\n\t") in {
+            "xin chào", "chào", "chào bạn", "chào anh", "chào chị", "hello", "hi", "hey",
+        }
+
     @staticmethod
     def _is_transition_agreement(text: str, language: str = "vi") -> bool:
-        clean = text.lower().strip()
-        agree_keywords_vi = [
-            "đồng ý", "sẵn sàng", "tiếp tục", "chuyển chặng", "chuyển tiếp", "qua chặng",
-            "bước tiếp", "tiếp theo", "vâng", "dạ vâng", "dạ được", "dạ ok", "ok anh", "ok chị",
-            "ok em", "ok", "okay", "được ạ", "qua phần mới", "qua phần chuyên môn",
-            "qua phần chào kết", "chuyển phần", "next", "chuyển đi ạ", "qua đi ạ",
-            "bắt đầu phần mới", "bắt đầu chuyên môn", "bước sang", "chuyển sang", "bước vào",
-        ]
-        agree_keywords_en = [
-            "yes", "agree", "ready", "next stage", "move on", "let's go", "sure", "proceed",
-            "continue", "sounds good", "let's do it", "go ahead", "next topic", "move forward",
-        ]
-        keywords = agree_keywords_vi if language == "vi" else agree_keywords_en
-        if len(clean) < 80 and any(k in clean for k in keywords):
-            return True
-        if any(clean.startswith(prefix) for prefix in ("vâng", "dạ vâng", "ok", "okay", "yes", "sure")) and len(clean) < 120:
-            return True
-        return False
+        clean = text.lower().strip(" .,!?:;\n\t")
+        if any(word in clean for word in ("không", "chưa", "not yet", "no ", "but", "nhưng")):
+            return False
+        for filler in ("dạ ", "vâng ", "em ", "tôi ", "mình ", "ạ", " rồi", " nhé"):
+            if clean.startswith(filler) or clean.endswith(filler):
+                clean = clean.removeprefix(filler).removesuffix(filler).strip(" ,.!?")
+        phrases = (
+            {"đồng ý", "tôi đồng ý", "sẵn sàng", "tôi sẵn sàng", "dạ vâng", "vâng",
+             "dạ được", "dạ ok", "ok", "okay", "chuyển chặng", "qua phần tiếp theo",
+             "chuyển sang phần tiếp theo", "kết thúc phỏng vấn"}
+            if language == "vi" else
+            {"yes", "i agree", "ready", "i am ready", "next stage", "move on",
+             "let's go", "sure", "proceed", "finish the interview"}
+        )
+        return clean in phrases
 
     async def handle_final_transcript(
-        self, text: str, duration_seconds: float = 0.0,
+        self, text: str, duration_seconds: float = 0.0, turn_id: int | None = None,
     ) -> None:
         if self.state == VoiceSessionState.COMPLETED:
             if self.connection.is_open():
@@ -686,12 +963,21 @@ class VoiceInterviewOrchestrator:
                     "is_completed": True,
                 })
             return
+        if not self.flow:
+            self._initialize_flow()
+        if self.flow and (self.state != VoiceSessionState.LISTEN or
+                          (self._judgment_task and not self._judgment_task.done())):
+            return
         clean_text = text.strip()
         if not clean_text:
             return
 
+        if self.flow and (self.flow.get("last_received_turn", 0) >= self.current_turn_id or
+                          (turn_id is not None and turn_id != self.current_turn_id)):
+            return
+
         # Ensure any leftover generation is stopped
-        await self.cancel_current_generation()
+        await self.cancel_current_generation(emit_event=False)
 
         # Broadcast final user transcript
         if self.connection.is_open():
@@ -705,90 +991,282 @@ class VoiceInterviewOrchestrator:
             })
 
         self.conversation_history.append({"role": "user", "content": clean_text})
+        self._record_stage_turn("user", clean_text)
         self._persist_user_transcript(self.current_turn_id, clean_text)
 
-        # Check if user speech is responding to a stage transition proposal:
-        if self.is_waiting_stage_confirmation and self.pending_transition_next_stage:
-            if self._is_transition_agreement(clean_text, self.language):
-                # Candidate agreed verbally/textually to move to next stage
+        if self.flow:
+            self.flow["last_received_turn"] = self.current_turn_id
+            self._save_flow()
+            pending = self.flow.get("pending")
+            if pending:
+                agrees = self._is_transition_agreement(clean_text, self.language)
+                explicitly_skips = any(phrase in clean_text.lower() for phrase in (
+                    "bỏ qua", "skip", "kết thúc phỏng vấn", "end the interview",
+                )) and not any(phrase in clean_text.lower() for phrase in (
+                    "không bỏ qua", "đừng bỏ qua", "don't skip", "do not skip",
+                ))
+                if (agrees and pending["reason"] != "overtime") or (explicitly_skips and len(clean_text) < 80):
+                    await self.handle_stage_transition_confirm(pending["id"], pending["stage_version"])
+                    return
+                self.flow["pending"] = None
+                self.flow["deferred"] = pending["reason"] == "ready"
                 self.is_waiting_stage_confirmation = False
                 self.pending_transition_next_stage = None
-                await self.handle_stage_transition_confirm()
+                self._save_flow()
+                if self.connection.is_open():
+                    await self.connection.send_event({"type": "stage_transition_deferred"})
+            elif stage_progress(self.flow)["ready"] and self._is_transition_agreement(clean_text, self.language):
+                await self._offer_adaptive_transition()
                 return
-            else:
-                # Candidate is answering the question / continuing in the current stage
-                self.is_waiting_stage_confirmation = False
-                self.pending_transition_next_stage = None
-                if self.connection.is_open():
-                    await self.connection.send_event({
-                        "type": "stage_transition_deferred",
-                    })
+            await self.set_state(VoiceSessionState.THINK)
+            if self.get_current_stage().id == StageId.TECHNICAL.value:
+                self._schedule_answer_evaluation(self.current_turn_id, clean_text)
+            self._judgment_task = asyncio.create_task(
+                self._process_adaptive_answer(self.current_turn_id, clean_text, self.flow["stage_version"])
+            )
+            return
 
-        self.turns_in_current_stage += 1
+    def pause_flow(self) -> None:
+        if self.flow:
+            pause(self.flow)
+            self._save_flow()
 
-        # Transition state to THINK first
+    async def request_stage_transition(self) -> None:
+        if not self.flow or self.flow.get("pending"):
+            return
+        if self.state not in (VoiceSessionState.LISTEN, VoiceSessionState.IDLE):
+            return
+        progress = stage_progress(self.flow)
+        if not progress["ready"] and progress["elapsed_seconds"] < progress["target_seconds"]:
+            await self._emit_flow_progress()
+            return
+        await self._offer_adaptive_transition()
+
+    async def _emit_pending_proposal(self) -> None:
+        if not self.flow or not self.flow.get("pending") or not self.connection.is_open():
+            return
+        pending = self.flow["pending"]
+        progress = stage_progress(self.flow)
+        common = {
+            "proposal_id": pending["id"], "stage_version": pending["stage_version"],
+            "reason": pending["reason"], "remaining_required": progress["remaining_required"],
+            "turn_id": pending.get("turn_id", self.current_turn_id),
+            "summary_message": pending.get("summary_message", ""),
+        }
+        if pending["kind"] == "end":
+            await self.connection.send_event({"type": "session_end_proposed", **common})
+            return
+        next_stage = self.active_stages[self.current_stage_index + 1]
+        current_stage = self.get_current_stage()
+        await self.connection.send_event({
+            "type": VoiceEventType.STAGE_TRANSITION_PROPOSED.value,
+            **common, "current_stage": current_stage.id, "next_stage": next_stage.id,
+            "stage_index": self.current_stage_index + 2,
+            "total_stages": len(self.active_stages),
+            "stage_name": next_stage.name_vi if self.language == "vi" else next_stage.name_en,
+            "elapsed_seconds": progress["elapsed_seconds"], "stage_max_seconds": progress["target_seconds"],
+        })
+
+    async def _offer_adaptive_transition(self, closing_no_more: bool = False) -> None:
+        if not self.flow or self.flow.get("pending"):
+            return
+        progress = stage_progress(self.flow)
+        if not progress["ready"] and progress["elapsed_seconds"] < progress["target_seconds"]:
+            return
+        is_last = self.flow["stage_index"] == len(self.flow["stages"]) - 1
+        reason = "ready" if progress["ready"] else "overtime"
+        self.flow["pending"] = {
+            "id": uuid.uuid4().hex, "stage_version": self.flow["stage_version"],
+            "kind": "end" if is_last else "stage",
+            "reason": reason, "turn_id": self.current_turn_id + 1,
+        }
+        self._save_flow()
+        await self._emit_flow_progress()
         await self.set_state(VoiceSessionState.THINK)
-
-        cur_stage = self.get_current_stage()
-        self._ensure_stage_timer_started(cur_stage.id)
-        elapsed_sec = self.get_stage_elapsed_seconds(cur_stage.id)
-        stage_limit_sec = self.stage_time_limits.get(cur_stage.id, 600)
-        is_time_limit_reached = elapsed_sec >= stage_limit_sec
-        is_last_stage = self.current_stage_index >= len(self.active_stages) - 1
-
-        target_turns = self.get_target_turns_for_current_stage()
-        is_stage_completed = self.turns_in_current_stage >= target_turns
-        is_session_finishing = False
-        is_transitioning = False
-
-        if is_last_stage:
-            if is_time_limit_reached or is_stage_completed or self.turns_in_current_stage >= 3:
-                is_session_finishing = True
+        if reason == "overtime":
+            text = (
+                f"Mình còn {progress['remaining_required']} nội dung cần trao đổi. "
+                "Bạn muốn tiếp tục để hoàn thành, hay bỏ qua các mục còn lại và chuyển phần?"
+                if self.language == "vi" else
+                f"We have {progress['remaining_required']} topics left. Would you like to continue, "
+                "or skip them and move on?"
+            )
+            self.current_turn_id += 1
+            self._active_task = asyncio.create_task(self._stream_predefined_text(text))
+        elif is_last:
+            self.current_turn_id += 1
+            text = (
+                ("Cảm ơn bạn. Nếu đã sẵn sàng, bạn có thể xác nhận kết thúc buổi phỏng vấn."
+                 if closing_no_more else
+                 "Cảm ơn bạn đã chia sẻ. Bạn còn thắc mắc nào về công việc hoặc phần trao đổi "
+                 "vừa rồi không? Nếu đã đủ, bạn có thể xác nhận kết thúc buổi phỏng vấn.")
+                if self.language == "vi" else
+                ("Thank you. You can confirm the end of the interview whenever you're ready."
+                 if closing_no_more else
+                 "Thank you for sharing. Do you have questions about the role or our discussion? "
+                 "If not, you can confirm the end of the interview.")
+            )
+            self._active_task = asyncio.create_task(self._stream_predefined_text(text))
         else:
-            if is_stage_completed:
-                # Target turns completed for current stage -> smoothly advance to next stage
-                self.current_stage_index += 1
-                self.turns_in_current_stage = 0
-                is_transitioning = True
-                next_stage = self.get_current_stage()
-                self.stage_start_times[next_stage.id] = time.time()
-                if self.connection.is_open():
-                    await self.connection.send_event({
-                        "type": VoiceEventType.STAGE_CHANGE.value,
-                        "stage_id": next_stage.id,
-                        "stage_index": self.current_stage_index + 1,
-                        "total_stages": len(self.active_stages),
-                        "stage_name": next_stage.name_vi if self.language == "vi" else next_stage.name_en,
-                        "turn_id": self.current_turn_id,
-                        "current_stage": self.get_current_stage_data(),
-                        "stages": self.get_all_stages_data(),
-                        "stage_max_seconds": self.stage_time_limits.get(next_stage.id, 600),
-                    })
-            elif is_time_limit_reached:
-                # Time limit reached before turns completed -> propose transition to candidate
-                is_transitioning = True
-                self.is_waiting_stage_confirmation = True
-                self.pending_transition_next_stage = self.active_stages[self.current_stage_index + 1]
+            self.is_waiting_stage_confirmation = True
+            self.pending_transition_next_stage = self.active_stages[self.current_stage_index + 1]
+            self._active_task = asyncio.create_task(self._run_llm_and_tts_pipeline(is_transitioning=True))
 
-        # Resolve câu hỏi ngân hàng kế tiếp TRƯỚC khi sinh câu hỏi mới để lượt
-        # được liên kết thật với question_bank (hoặc None nếu không có).
-        # TUYỆT ĐỐI không resolve câu hỏi mới khi đang chuyển chặng hoặc kết thúc.
-        if not is_session_finishing and not is_transitioning:
-            self._resolve_next_intent(exclude_used=True)
+    async def _process_adaptive_answer(self, turn_id: int, answer: str, version: int) -> None:
+        if not self.flow or self.flow["stage_version"] != version:
+            return
+        item = current_item(self.flow)
+        if item:
+            if (self.get_current_stage().id == StageId.WARMUP.value and
+                    (self._is_greeting_only(answer) or not item.get("last_asked_question"))):
+                self.flow["last_turn"] = turn_id
+                self._save_flow()
+                await self._emit_flow_progress()
+                self.current_turn_id += 1
+                self._active_task = asyncio.create_task(
+                    self._run_llm_and_tts_pipeline(next_question_item=item, disposition="greeting"),
+                )
+                return
+            judgment = TurnJudgment()
+            if self.turn_judge:
+                judgment = await asyncio.to_thread(
+                    self.turn_judge.judge, item.get("last_asked_question") or item["question"],
+                    item["signals"],
+                    item["evidence"], answer,
+                    [{"role": "candidate", "content": previous["text"]} for previous in item.get("answers", [])[-4:]],
+                )
+            if (self.state == VoiceSessionState.COMPLETED or not self.flow or
+                    self.flow["stage_version"] != version or self.flow.get("current_item") != item["id"]):
+                return
+            if self.get_current_stage().id == StageId.CLOSING.value:
+                self.flow["last_turn"] = turn_id
+                item.setdefault("answers", []).append({"turn_id": turn_id, "text": answer[:2000]})
+                no_questions = any(phrase in answer.lower() for phrase in (
+                    "không còn câu hỏi", "không có câu hỏi", "không còn thắc mắc",
+                    "không còn gì", "no more questions", "no questions", "nothing else to ask", "that's all",
+                ))
+                if judgment.explicitly_no_more or no_questions:
+                    skip_remaining(self.flow, "candidate_has_no_more_questions")
+                    self._save_flow()
+                    await self._emit_flow_progress()
+                    await self._offer_adaptive_transition(closing_no_more=True)
+                else:
+                    self._save_flow()
+                    await self._emit_flow_progress()
+                    self._adaptive_probe_target = (
+                        "Answer the candidate's latest question naturally and accurately. "
+                        "Then ask whether they have any other questions. Do not end the interview."
+                    )
+                    self.current_turn_id += 1
+                    self._active_task = asyncio.create_task(self._run_llm_and_tts_pipeline())
+                return
+            action, target = apply_judgment(self.flow, judgment, turn_id, answer)
+            self._save_flow()
+            await self._emit_flow_progress()
+            if action in ("probe", "probe_warmup"):
+                self._adaptive_probe_target = target
+                self.current_turn_id += 1
+                self._active_task = asyncio.create_task(self._run_llm_and_tts_pipeline())
+                return
+            if action == "ignore":
+                return
+        if self.flow.pop("deferred", False) and stage_progress(self.flow)["ready"]:
+            self._save_flow()
+            self._adaptive_probe_target = "Respond to the candidate's latest point and remain in this stage; do not propose a transition yet."
+            self.current_turn_id += 1
+            self._active_task = asyncio.create_task(self._run_llm_and_tts_pipeline())
+            return
+        progress = stage_progress(self.flow)
+        if progress["elapsed_seconds"] >= progress["target_seconds"]:
+            await self._offer_adaptive_transition()
+            return
+        if progress["ready"]:
+            await self.set_state(VoiceSessionState.THINK)
+            if item is None:
+                self._adaptive_probe_target = "Answer the candidate's latest point naturally; do not begin a new topic or change stages."
+                self.current_turn_id += 1
+                self._active_task = asyncio.create_task(self._run_llm_and_tts_pipeline())
+            else:
+                self.current_turn_id += 1
+                text = (
+                    "Cảm ơn bạn. Các nội dung của phần này đã được trao đổi. Nếu muốn chia sẻ thêm, "
+                    "mình vẫn đang lắng nghe; khi sẵn sàng, bạn có thể đề nghị chuyển phần."
+                    if self.language == "vi" else
+                    "Thank you. We have covered the planned topics. You can add anything else, "
+                    "or ask to move on when you are ready."
+                )
+                self._active_task = asyncio.create_task(self._stream_predefined_text(text))
+            return
+        self._resolve_next_intent(exclude_used=True)
+        await self._emit_question_context()
+        next_item = current_item(self.flow)
+        if next_item:
+            self.current_turn_id += 1
+            await self.set_state(VoiceSessionState.THINK)
+            is_cannot = (
+                judgment.disposition == "cannot_answer"
+                or (item and item.get("reason") in ("candidate_cannot_answer", "probe_limit_or_candidate_cannot_answer"))
+                or is_candidate_cannot_answer(answer)
+            )
+            disposition_val = "cannot_answer" if is_cannot else judgment.disposition
+            self._active_task = asyncio.create_task(
+                self._run_llm_and_tts_pipeline(
+                    next_question_item=next_item,
+                    previous_item=item,
+                    disposition=disposition_val,
+                )
+            )
+
+    async def handle_stage_transition_confirm(self, proposal_id: str | None = None, stage_version: int | None = None) -> None:
+        if self.flow:
+            pending = self.flow.get("pending")
+            if (not pending or not proposal_id or stage_version is None or
+                    self.state != VoiceSessionState.LISTEN or
+                    pending["stage_version"] != self.flow["stage_version"] or
+                    pending["id"] != proposal_id or stage_version != self.flow["stage_version"]):
+                return
+            if pending["kind"] == "end":
+                if pending["reason"] == "overtime":
+                    skip_remaining(self.flow, "candidate_confirmed_overtime_skip")
+                await self.handle_stop_session()
+                return
+            await self.cancel_current_generation()
+            if pending["reason"] == "overtime":
+                skip_remaining(self.flow, "candidate_confirmed_overtime_skip")
+            prev_stage = self.get_current_stage()
+            self._summarize_stage(prev_stage.id)
+            advance_stage(self.flow)
+            self._save_flow()
+            self.current_stage_index = self.flow["stage_index"]
+            self.turns_in_current_stage = 0
+            self.current_turn_id += 1
+            self.is_waiting_stage_confirmation = False
+            self.pending_transition_next_stage = None
+            next_stage = self.get_current_stage()
+            if self.connection.is_open():
+                await self.connection.send_event({
+                    "type": VoiceEventType.STAGE_CHANGE.value, "stage_id": next_stage.id,
+                    "stage_index": self.current_stage_index + 1,
+                    "current_stage": self.get_current_stage_data(),
+                    "stages": self.get_all_stages_data(), "turn_id": self.current_turn_id,
+                    "stage_max_seconds": self.flow["budgets"][next_stage.id],
+                    "stage_elapsed_seconds": 0,
+                })
+            await self._emit_flow_progress()
+            await self.set_state(VoiceSessionState.THINK)
+            self._resolve_next_intent()
             await self._emit_question_context()
-
-        # Chấm điểm + tracking câu trả lời vừa gửi, chạy nền để không chặn hội thoại.
-        self._schedule_answer_evaluation(self.current_turn_id, clean_text)
-
-        # Spawn background LLM streaming + sentence TTS pipeline
-        self._active_task = asyncio.create_task(
-            self._run_llm_and_tts_pipeline(
-                is_transitioning=is_transitioning,
-                is_session_finishing=is_session_finishing,
-            ),
-        )
-
-    async def handle_stage_transition_confirm(self) -> None:
+            first_item = current_item(self.flow)
+            if first_item:
+                self._active_task = asyncio.create_task(
+                    self._run_llm_and_tts_pipeline(
+                        next_question_item=first_item,
+                        is_stage_opening=True,
+                    )
+                )
+            else:
+                self._active_task = asyncio.create_task(self._stream_predefined_text(self._build_opening_question()))
+            return
         if not self.is_waiting_stage_confirmation or not self.pending_transition_next_stage:
             await self.handle_next_stage()
             return
@@ -823,10 +1301,24 @@ class VoiceInterviewOrchestrator:
             self._stream_predefined_text(prompt),
         )
 
-    async def handle_stage_transition_defer(self, continue_message: str | None = None) -> None:
+    async def handle_stage_transition_defer(
+        self, continue_message: str | None = None,
+        proposal_id: str | None = None, stage_version: int | None = None,
+    ) -> None:
+        if self.flow:
+            pending = self.flow.get("pending")
+            if (not pending or pending["id"] != proposal_id or
+                    pending["stage_version"] != stage_version or self.state != VoiceSessionState.LISTEN):
+                return
+            self.flow["pending"] = None
+            self.flow["deferred"] = pending["reason"] == "ready"
+            self._save_flow()
+            await self._emit_flow_progress()
         self.is_waiting_stage_confirmation = False
         self.pending_transition_next_stage = None
         await self.set_state(VoiceSessionState.LISTEN)
+        if self.connection.is_open():
+            await self.connection.send_event({"type": "stage_transition_deferred"})
 
     async def handle_request_hint(self, question_id: int | None = None) -> None:
         if self.mock_mode == "strict":
@@ -835,6 +1327,8 @@ class VoiceInterviewOrchestrator:
                     "type": VoiceEventType.HINT_RESPONSE.value,
                     "hint_text": "Chế độ phỏng vấn thực chiến (Strict Mock) yêu cầu ứng viên tự lực giải quyết, không hỗ trợ gợi ý.",
                     "is_supported": False,
+                    "hint_kind": "none",
+                    "turn_id": self.current_turn_id,
                 })
             return
 
@@ -847,13 +1341,17 @@ class VoiceInterviewOrchestrator:
                     question = m.get("content", "")
                     break
 
+        from ...domain.answer_framework import answer_framework, hint_fallback
+
+        framework = answer_framework(self.current_intent_ctx.question_type if self.current_intent_ctx else None)
         hint_prompt = build_hint_prompt(
             question=question or "Câu hỏi phỏng vấn kỹ thuật",
             role=self.role_name,
             level=self.level,
             language=self.language,
+            framework=framework,
         )
-        hint_text = "Hãy áp dụng mô hình STAR: Nêu bối cảnh (S), nhiệm vụ cần giải quyết (T), giải pháp kỹ thuật bạn chọn (A) và kết quả đo lường được (R)."
+        hint_text = hint_fallback(framework, self.language)
         try:
             messages = [
                 {"role": "system", "content": self.system_prompt},
@@ -872,11 +1370,15 @@ class VoiceInterviewOrchestrator:
             await self.connection.send_event({
                 "type": VoiceEventType.HINT_RESPONSE.value,
                 "hint_text": hint_text,
+                "hint_kind": framework,
                 "is_supported": True,
                 "turn_id": self.current_turn_id,
             })
 
     async def handle_next_stage(self) -> None:
+        if self.flow:
+            await self.request_stage_transition()
+            return
         if self.current_stage_index < len(self.active_stages) - 1:
             await self.cancel_current_generation()
             self.current_stage_index += 1
@@ -908,12 +1410,15 @@ class VoiceInterviewOrchestrator:
                 self._stream_predefined_text(prompt),
             )
 
-    async def cancel_current_generation(self) -> None:
+    async def cancel_current_generation(self, emit_event: bool = True) -> None:
         if self.current_generation_id:
             old_gen_id = self.current_generation_id
             self._cancelled_generation_ids.add(old_gen_id)
             self.current_generation_id = None
+            was_playing = self._awaiting_playback_id == old_gen_id
+            self._awaiting_playback_id = None
 
+            had_task = self._active_task is not None
             if self._active_task and not self._active_task.done():
                 self._active_task.cancel()
                 try:
@@ -922,7 +1427,7 @@ class VoiceInterviewOrchestrator:
                     pass
                 self._active_task = None
 
-            if self.connection.is_open():
+            if emit_event and self.connection.is_open() and (was_playing or had_task):
                 await self.connection.send_event({
                     "type": VoiceEventType.INTERRUPTED.value,
                     "generation_id": old_gen_id,
@@ -992,9 +1497,12 @@ class VoiceInterviewOrchestrator:
             strict_note = (
                 " Ở chế độ Thực chiến, hãy đào sâu bắt bẻ các lỗ hổng kỹ thuật và hỏi xoáy trade-offs."
                 if self.mock_mode == "strict"
-                else " Ở chế độ Hướng dẫn, hãy gợi mở cấu trúc STAR khi ứng viên bối rối."
+                else " Ở chế độ Hướng dẫn, chỉ gợi mở theo loại câu hỏi hiện tại khi ứng viên xin gợi ý."
             )
             follow_up_note = (
+                (" Chỉ phản hồi tự nhiên; không tự chuyển câu hoặc chặng." if not current_item(self.flow) else
+                 " Chỉ phản hồi ngắn và hỏi sâu đúng điểm còn thiếu; không tự chuyển câu hoặc chặng.")
+                if self.flow else
                 f" ĐÂY LÀ LƯỢT PHẢN BIỆN: Phân tích ngắn gọn câu trả lời vừa rồi của ứng viên (1 câu) và đặt một câu hỏi đào sâu hóc búa, thử thách phản biện về trade-offs, edge cases hoặc đánh đố giải pháp phù hợp với level {self.level}."
                 if is_follow_up
                 else " ĐÂY LÀ CÂU HỎI KỸ THUẬT MỚI: Dẫn dắt ngắn gọn và đặt câu hỏi chuyên môn tiếp theo."
@@ -1002,11 +1510,11 @@ class VoiceInterviewOrchestrator:
             stage_desc = (
                 f"Bạn đang ở chặng: Phỏng vấn chuyên môn (Technical Interview).{strict_note}{follow_up_note} "
                 f"Vị trí: {self.role_name} ({self.level}). "
-                "Mục tiêu: Đào sâu vào kinh nghiệm thực tế, kiến trúc hệ thống, trade-offs kỹ thuật hoặc phương pháp STAR. "
+                "Mục tiêu: Đào sâu vào kinh nghiệm thực tế, kiến trúc hệ thống, trade-offs kỹ thuật hoặc cách kiểm chứng giải pháp. "
                 "Phản hồi súc tích, chuyên nghiệp (2-3 câu)."
                 if is_vi
                 else f"You are in the Technical Interview stage for {self.role_name} ({self.level}). "
-                "Focus on engineering challenges, architecture decisions, trade-offs, and STAR methodology."
+                "Focus on engineering challenges, architecture decisions, trade-offs, and verification."
             )
         else:
             stage_desc = (
@@ -1026,72 +1534,162 @@ class VoiceInterviewOrchestrator:
         is_transitioning: bool = False,
         is_session_finishing: bool = False,
         question_text: str | None = None,
+        next_question_item: dict[str, Any] | None = None,
+        previous_item: dict[str, Any] | None = None,
+        disposition: str | None = None,
+        is_stage_opening: bool = False,
     ) -> None:
         self._generation_counter += 1
         turn_id = self.current_turn_id if question_text is not None else self.current_turn_id + 1
         self.current_turn_id = turn_id
         gen_id = f"gen_{self.session_id}_{turn_id}_{self._generation_counter}"
         self.current_generation_id = gen_id
+        self._start_tts_generation(gen_id)
         turn_intent = self.current_intent_ctx
 
         splitter = StreamingSentenceSplitter(min_sentence_chars=12)
         full_ai_response: list[str] = []
 
         try:
-            stage_instruction = self._build_stage_instructions(
-                is_transitioning=is_transitioning,
-                is_session_finishing=is_session_finishing,
-            )
-
+            cur_stage = self.get_current_stage()
             messages: list[dict[str, str]] = []
-            if self.system_prompt:
+            if cur_stage.id == StageId.WARMUP.value and not self._custom_system_prompt:
+                messages.append({"role": "system", "content": (
+                    f"Bạn là {self.persona_name}, người phỏng vấn vị trí {self.role_name} ({self.level}). "
+                    "Ở chặng khởi động, chỉ trò chuyện thân thiện về kinh nghiệm và định hướng tổng quan. "
+                    "Mỗi lượt chỉ hỏi một ý nhẹ nhàng, không kiểm tra kiến thức kỹ thuật, "
+                    "không yêu cầu chi tiết kiến trúc, số liệu hay giải pháp. Chỉ nói văn bản thuần túy."
+                )})
+            elif self.system_prompt:
                 messages.append({"role": "system", "content": self.system_prompt})
-            messages.append({"role": "system", "content": stage_instruction})
+
+            cur_stage_name = cur_stage.name_vi if self.language == "vi" else cur_stage.name_en
+            stage_ctx = f"Giai đoạn hiện tại: {cur_stage_name}."
+            if cur_stage.id != StageId.WARMUP.value and self.stage_summaries.get(StageId.WARMUP.value):
+                stage_ctx += f"\nThông tin ứng viên từ vòng Khởi động: {self.stage_summaries[StageId.WARMUP.value]}"
+            if cur_stage.id == StageId.CLOSING.value and self.stage_summaries.get(StageId.TECHNICAL.value):
+                stage_ctx += f"\nTóm tắt vòng Kỹ thuật: {self.stage_summaries[StageId.TECHNICAL.value]}"
+            messages.append({"role": "system", "content": stage_ctx})
+
             language_name = INTERVIEW_LANGUAGE_SETTINGS[self.language][0]
+            terminology_note = (
+                "Chỉ dùng thuật ngữ công việc khi ứng viên tự đề cập; không đặt câu hỏi chuyên môn. "
+                if cur_stage.id == StageId.WARMUP.value else
+                "Giữ nguyên các thuật ngữ kỹ thuật chuyên ngành phù hợp (ví dụ: Collections, Thread, Stream API, OOP, interface, v.v.). "
+            )
             messages.append({
                 "role": "system",
                 "content": (
-                    f"Conduct this interview and respond exclusively in {language_name}. "
-                    "This choice is independent of the job description, interface, and prior messages. "
-                    "Keep the same interview topic and progression; do not restart the interview "
-                    "or translate the entire job description. Preserve technical terms when appropriate."
+                    f"Thực hiện phỏng vấn và trao đổi tự nhiên bằng {language_name}. "
+                    f"{terminology_note}"
+                    "Nói năng tự nhiên, hòa nhã, có ngữ điệu đàm thoại thực tế như một người phỏng vấn công nghệ cao cấp."
                 ),
             })
-            if question_text is not None:
+
+            scoped_history = self.get_scoped_conversation_history()
+            if cur_stage.id == StageId.WARMUP.value:
+                messages.extend([turn for turn in scoped_history if turn["role"] == "user"][-1:])
+            else:
+                messages.extend(scoped_history[-6:])
+
+            if next_question_item:
+                bridge = (
+                    "Mở đầu chặng mới thật ngắn rồi hỏi một ý." if is_stage_opening else
+                    "Ứng viên chưa trả lời được ý vừa rồi; ghi nhận nhẹ nhàng rồi chuyển chủ đề." if disposition == "cannot_answer" else
+                    "Đáp lời ứng viên thân thiện, rồi hỏi tiếp." if disposition == "greeting" else
+                    "Ghi nhận ngắn câu trả lời trước rồi chuyển chủ đề tự nhiên." if previous_item else
+                    "Bắt đầu trao đổi tự nhiên."
+                )
+                if cur_stage.id == StageId.WARMUP.value:
+                    messages.append({"role": "system", "content": (
+                        f"{bridge} Nội dung khởi động: {warmup_topic(next_question_item, self.language)} "
+                        "Chỉ hỏi một câu ngắn để hiểu sơ qua, không đòi dự án cụ thể, "
+                        "công nghệ chi tiết, kết quả đo lường hay cách triển khai. "
+                        "Nếu ứng viên nhắc tới kỹ thuật, chỉ ghi nhận và quay lại trò chuyện tổng quan."
+                    )})
+                elif cur_stage.id == StageId.CLOSING.value:
+                    messages.append({"role": "system", "content": (
+                        f"{bridge} Hỏi ứng viên một cách tự nhiên: {next_question_item['question']} "
+                        "Đây là phần hỏi đáp, không đặt thêm câu hỏi đánh giá kỹ thuật."
+                    )})
+                else:
+                    context = json.dumps({
+                        "reference_question": next_question_item["question"],
+                        "expected_signals": next_question_item["signals"],
+                    }, ensure_ascii=False)
+                    messages.append({"role": "system", "content": (
+                        f"{bridge} Đây là nội dung tham chiếu từ kịch bản JD, không đọc nguyên văn "
+                        "một câu dài gồm nhiều vế. Đặt MỘT câu hỏi mở đầu ngắn về trọng tâm phù hợp nhất; "
+                        "expected_signals chỉ để định hướng đánh giá, không hỏi hết các ý cùng lúc. "
+                        "Chờ ứng viên trả lời; lượt đào sâu tiếp theo do bộ đánh giá quyết định.\n" + context
+                    )})
+            elif question_text is not None:
                 messages.append({
                     "role": "system",
                     "content": (
-                        "For this turn, only present the supplied interview question in the chosen language. "
-                        "Preserve its meaning, do not answer it, and do not introduce additional questions."
+                        f"Hãy trình bày câu hỏi sau một cách tự nhiên, rõ ràng, giữ trọn vẹn yêu cầu chuyên môn:\n"
+                        f"\"{question_text}\""
                     ),
                 })
-            messages.extend(self.conversation_history[-8:])
-            if question_text is not None:
-                messages.append({"role": "user", "content": question_text})
-
-            if is_transitioning:
+            elif self.flow and self._adaptive_probe_target and not is_transitioning:
+                instruction = self._adaptive_probe_target
+                self._adaptive_probe_target = None
+                if cur_stage.id == StageId.WARMUP.value:
+                    messages.append({"role": "system", "content": (
+                        "Ứng viên vừa trả lời, nhưng nội dung sau vẫn chưa rõ: "
+                        f"{instruction}. Chỉ ghi nhận chi tiết họ thực sự đã nói, rồi hỏi MỘT câu ngắn "
+                        "để họ giải thích thêm ở mức tổng quan. Nếu họ chỉ nói 'không', hỏi lại nhẹ nhàng, "
+                        "đừng cảm ơn như thể đã trả lời. Không đòi ví dụ dự án, cách triển khai, số liệu "
+                        "hay kiến thức kỹ thuật; không tự chuyển sang nội dung hoặc chặng khác."
+                    )})
+                else:
+                    messages.append({
+                        "role": "system",
+                        "content": (
+                            "Ứng viên vừa trả lời ý hiện tại của câu hỏi.\n"
+                            f"Khía cạnh kỹ thuật cần đào sâu/làm rõ: {instruction}.\n"
+                            f"Chỉ dẫn:\n"
+                            f"1. Ghi nhận nhanh ý đúng hoặc điểm đáng chú ý trong câu trả lời của ứng viên (1 mệnh đề ngắn).\n"
+                            f"2. Đặt đúng một câu hỏi đào sâu tự nhiên, xoáy thẳng vào khía cạnh còn thiếu ({instruction}) để kiểm tra chiều sâu hiểu biết của ứng viên. Không hỏi sang các ý khác.\n"
+                            "3. Giữ phong thái thân thiện, không lặp lại nguyên văn câu hỏi gốc."
+                        ),
+                    })
+            elif is_transitioning:
                 messages.append({
                     "role": "system",
                     "content": (
-                        "LỆNH BẮT BUỘC (CRITICAL OVERRIDE):\n"
-                        + stage_instruction
-                        + "\nBẠN CẤM TUYỆT ĐỐI ĐẶT THÊM CÂU HỎI KỸ THUẬT/CHUYÊN MÔN NÀO! "
-                        "BẠN CẤM TUYỆT ĐỐI NÓI 'HẾT GIỜ' HOẶC ĐỀ CẬP THỜI LƯỢNG! "
-                        "CHỈ ĐÁNH GIÁ TÍCH CỰC NGẮN GỌN (1 CÂU) VÀ DẪN DẮT CHUYỂN CHẶNG."
+                        f"Phần {cur_stage_name} đã trao đổi đầy đủ các nội dung.\n"
+                        f"Đánh giá tích cực ngắn gọn (1 câu) và hỏi ứng viên xem họ đã sẵn sàng chuyển sang phần tiếp theo chưa."
                     ),
                 })
             elif is_session_finishing:
                 messages.append({
                     "role": "system",
                     "content": (
-                        "LỆNH BẮT BUỘC (CRITICAL OVERRIDE):\n"
-                        "Buổi phỏng vấn đã hoàn tất tất cả các phần. Cảm ơn ứng viên chân thành, chúc may mắn và thông báo kết thúc. "
-                        "CẤM TUYỆT ĐỐI nói 'hết giờ' hay hỏi thêm bất kỳ câu hỏi nào."
+                        "Buổi phỏng vấn đã hoàn tất tất cả các phần. Cảm ơn ứng viên chân thành, chúc may mắn và thông báo kết thúc một cách ấm áp, chuyên nghiệp."
+                    ),
+                })
+            elif cur_stage.id == StageId.WARMUP.value:
+                messages.append({
+                    "role": "system",
+                    "content": (
+                        "Bạn đang trò chuyện khởi động (small talk) với ứng viên. "
+                        "Hãy lắng nghe và phản hồi câu trả lời của ứng viên một cách vui vẻ, ấm áp, tự nhiên như hai người bạn đồng nghiệp (1-2 câu). "
+                        "Tiếp tục cuộc trò chuyện phá băng nhẹ nhàng. Tuyệt đối không hỏi câu hỏi kỹ thuật hay chuyên môn ở vòng này."
+                    ),
+                })
+            elif cur_stage.id == StageId.CLOSING.value:
+                messages.append({
+                    "role": "system",
+                    "content": (
+                        "Ứng viên đang đặt câu hỏi trong phần Chào kết & Hỏi đáp. "
+                        "Hãy giải đáp câu hỏi của ứng viên một cách tự nhiên, chân thành, cởi mở về văn hóa, dự án hoặc quy trình làm việc (2-3 câu). "
+                        "Sau đó hỏi ứng viên xem họ còn câu hỏi hay thắc mắc nào khác nữa không."
                     ),
                 })
 
             turn_audio_collector: dict[int, bytes] = {}
-            synth_sem = asyncio.Semaphore(2)
+            missing_audio_sentences: list[str] = []
 
             async def synthesize_one(idx: int, s_text: str):
                 if self.is_generation_cancelled(gen_id):
@@ -1111,29 +1709,28 @@ class VoiceInterviewOrchestrator:
                         "turn_id": turn_id,
                     })
 
-                chunks: list[bytes] = []
-                async for audio_chunk in self.tts.synthesize_stream(clean_s, voice=self.voice, pitch=self.pitch):
-                    if self.is_generation_cancelled(gen_id):
-                        break
-                    if audio_chunk:
-                        chunks.append(audio_chunk)
+                full_audio = await self._synthesize_sentence_audio(clean_s, idx, gen_id, turn_id)
+                if self.is_generation_cancelled(gen_id):
+                    return
+                if full_audio is None:
+                    missing_audio_sentences.append(clean_s)
+                    return
 
-                if chunks and not self.is_generation_cancelled(gen_id):
-                    full_audio = b"".join(chunks)
-                    turn_audio_collector[idx] = full_audio
-                    if self.connection.is_open():
-                        await self.connection.send_event({
-                            "type": VoiceEventType.AUDIO.value,
-                            "audio_chunk": full_audio,
-                            "mime_type": "audio/mpeg",
-                            "sentence_index": idx,
-                            "generation_id": gen_id,
-                            "turn_id": turn_id,
-                        })
+                turn_audio_collector[idx] = full_audio
+                if self.connection.is_open():
+                    await self.connection.send_event({
+                        "type": VoiceEventType.AUDIO.value,
+                        "audio_chunk": full_audio,
+                        "mime_type": "audio/mpeg",
+                        "sentence_index": idx,
+                        "generation_id": gen_id,
+                        "turn_id": turn_id,
+                    })
 
-            async def worker_synth(idx: int, s_text: str):
-                async with synth_sem:
-                    await synthesize_one(idx, s_text)
+            async def worker_synth(idx: int, s_text: str, previous: asyncio.Task[None] | None):
+                if previous:
+                    await previous
+                await synthesize_one(idx, s_text)
 
             synth_tasks: list[asyncio.Task] = []
 
@@ -1151,22 +1748,27 @@ class VoiceInterviewOrchestrator:
                         })
                     for sentence in splitter.feed(token):
                         idx, s_text = sentence
-                        synth_tasks.append(asyncio.create_task(worker_synth(idx, s_text)))
+                        if self.response_mode == "voice":
+                            previous = synth_tasks[-1] if synth_tasks else None
+                            synth_tasks.append(asyncio.create_task(worker_synth(idx, s_text, previous)))
 
                 if not self.is_generation_cancelled(gen_id):
                     for sentence in splitter.flush():
                         idx, s_text = sentence
-                        synth_tasks.append(asyncio.create_task(worker_synth(idx, s_text)))
+                        if self.response_mode == "voice":
+                            previous = synth_tasks[-1] if synth_tasks else None
+                            synth_tasks.append(asyncio.create_task(worker_synth(idx, s_text, previous)))
 
             await produce_sentences()
             if synth_tasks and not self.is_generation_cancelled(gen_id):
-                await asyncio.gather(*synth_tasks, return_exceptions=True)
+                await asyncio.gather(*synth_tasks)
 
             # If not cancelled, record AI message in history and finalize turn
             if not self.is_generation_cancelled(gen_id):
+                await self._finish_tts_generation(gen_id, finishing_session=is_session_finishing)
                 final_text = sanitize_spoken_text("".join(full_ai_response))
                 ai_audio_url = None
-                if turn_audio_collector:
+                if turn_audio_collector and not missing_audio_sentences:
                     full_turn_audio = b"".join(
                         turn_audio_collector[k] for k in sorted(turn_audio_collector.keys())
                     )
@@ -1174,7 +1776,13 @@ class VoiceInterviewOrchestrator:
 
                 if final_text:
                     self.conversation_history.append({"role": "assistant", "content": final_text})
+                    self._record_stage_turn("assistant", final_text)
                     self._persist_ai_turn(turn_id, final_text, turn_intent, audio_url=ai_audio_url)
+                    if self.flow and not is_transitioning:
+                        spoken_item = current_item(self.flow)
+                        if spoken_item and spoken_item["stage"] == cur_stage.id:
+                            spoken_item["last_asked_question"] = final_text
+                            self._save_flow()
 
                 if is_session_finishing:
                     persisted = await asyncio.to_thread(self._persist_session_completion)
@@ -1189,6 +1797,7 @@ class VoiceInterviewOrchestrator:
                                 "generation_id": gen_id,
                                 "full_text": final_text,
                                 "audio_url": ai_audio_url,
+                                "missing_audio_sentences": missing_audio_sentences,
                                 "is_completed": True,
                             })
                     else:
@@ -1198,6 +1807,8 @@ class VoiceInterviewOrchestrator:
                                 "message": "Lỗi lưu trạng thái hoàn thành phiên phỏng vấn vào cơ sở dữ liệu.",
                             })
                 else:
+                    if self.response_mode == "voice" and (turn_audio_collector or missing_audio_sentences):
+                        self._awaiting_playback_id = gen_id
                     if self.connection.is_open():
                         await self.connection.send_event({
                             "type": VoiceEventType.DONE.value,
@@ -1205,27 +1816,17 @@ class VoiceInterviewOrchestrator:
                             "generation_id": gen_id,
                             "full_text": final_text,
                             "audio_url": ai_audio_url,
+                            "missing_audio_sentences": missing_audio_sentences,
                             "total_sentences": splitter.sentence_index,
                             "is_completed": False,
                         })
 
-                        if is_transitioning and self.pending_transition_next_stage:
-                            next_stg = self.pending_transition_next_stage
-                            cur_stg = self.get_current_stage()
-                            await self.connection.send_event({
-                                "type": VoiceEventType.STAGE_TRANSITION_PROPOSED.value,
-                                "current_stage": cur_stg.id,
-                                "next_stage": next_stg.id,
-                                "stage_index": self.current_stage_index + 2,
-                                "total_stages": len(self.active_stages),
-                                "stage_name": next_stg.name_vi if self.language == "vi" else next_stg.name_en,
-                                "turn_id": turn_id,
-                                "elapsed_seconds": int(self.get_stage_elapsed_seconds(cur_stg.id)),
-                                "stage_max_seconds": self.stage_time_limits.get(cur_stg.id, 600),
-                                "summary_message": final_text,
-                            })
-
-                    await self.set_state(VoiceSessionState.LISTEN)
+                    if is_transitioning and self.flow and self.flow.get("pending"):
+                        self.flow["pending"]["summary_message"] = final_text
+                        self._save_flow()
+                        await self._emit_pending_proposal()
+                    if not self._awaiting_playback_id:
+                        await self.set_state(VoiceSessionState.LISTEN)
 
         except asyncio.CancelledError:
             return
@@ -1237,6 +1838,71 @@ class VoiceInterviewOrchestrator:
                     "turn_id": turn_id,
                 })
             await self.set_state(VoiceSessionState.LISTEN)
+
+    async def _synthesize_sentence_audio(
+        self, text: str, sentence_idx: int, generation_id: str, turn_id: int,
+    ) -> bytes | None:
+        async def notify(phase: str) -> None:
+            if self.connection.is_open():
+                await self.connection.send_event({
+                    "type": VoiceEventType.TTS_FALLBACK.value,
+                    "phase": phase,
+                    "sentence": text,
+                    "sentence_index": sentence_idx,
+                    "generation_id": generation_id,
+                    "turn_id": turn_id,
+                })
+
+        if self.browser_tts_fallback:
+            if self._tts_browser_forced and not self._tts_fallback_notice_sent:
+                self._tts_fallback_notice_sent = True
+                await notify("browser")
+            return None
+
+        self._tts_attempted_synthesis = True
+        chunks: list[bytes] = []
+        try:
+            voice = "vi-VN-HoaiMyNeural" if self._tts_backup_active and self.voice.startswith("vieneu:") else self.voice
+            if self._tts_backup_active and not self._tts_fallback_notice_sent:
+                self._tts_fallback_notice_sent = True
+                await notify("backup")
+            async for chunk in self.tts.synthesize_stream(text, voice=voice, pitch=self.pitch):
+                if self.is_generation_cancelled(generation_id):
+                    return None
+                if isinstance(chunk, TTSFallbackNotice):
+                    self._tts_failed_this_turn = True
+                    if chunk.phase == "backup":
+                        self._tts_backup_active = True
+                        self._tts_fallback_notice_sent = True
+                    else:
+                        self._tts_browser_forced = True
+                        self.browser_tts_fallback = True
+                    await notify(chunk.phase)
+                    if chunk.phase == "browser":
+                        return None
+                elif chunk:
+                    chunks.append(chunk)
+        except Exception as exc:
+            logging.getLogger("VoiceOrchestrator").warning(
+                "TTS failed for session %s turn %s sentence %s: %s",
+                self.session_id, turn_id, sentence_idx, exc,
+            )
+            if self.is_generation_cancelled(generation_id):
+                return None
+            self._tts_failed_this_turn = True
+            self._tts_browser_forced = True
+            self.browser_tts_fallback = True
+            await notify("browser")
+            return None
+
+        if chunks:
+            return b"".join(chunks)
+        if not self.is_generation_cancelled(generation_id):
+            self._tts_failed_this_turn = True
+            self._tts_browser_forced = True
+            self.browser_tts_fallback = True
+            await notify("browser")
+        return None
 
     async def _stream_sentence_tts(
         self,
@@ -1266,15 +1932,10 @@ class VoiceInterviewOrchestrator:
             })
 
         # Synthesize complete, natural sentence audio to prevent micro-chunk audio stuttering
-        audio_chunks: list[bytes] = []
-        async for audio_chunk in self.tts.synthesize_stream(clean_text, voice=self.voice, pitch=self.pitch):
-            if self.is_generation_cancelled(generation_id):
-                break
-            if audio_chunk:
-                audio_chunks.append(audio_chunk)
-
-        if audio_chunks and not self.is_generation_cancelled(generation_id):
-            full_sentence_audio = b"".join(audio_chunks)
+        full_sentence_audio = await self._synthesize_sentence_audio(
+            clean_text, sentence_idx, generation_id, turn_id,
+        )
+        if full_sentence_audio and not self.is_generation_cancelled(generation_id):
             if self.connection.is_open():
                 await self.connection.send_event({
                     "type": VoiceEventType.AUDIO.value,
@@ -1287,12 +1948,10 @@ class VoiceInterviewOrchestrator:
 
     async def _stream_predefined_text(self, text: str) -> None:
         clean_text = sanitize_spoken_text(text)
-        if self.language != "vi":
-            await self._run_llm_and_tts_pipeline(question_text=clean_text)
-            return
         self._generation_counter += 1
         gen_id = f"gen_{self.session_id}_{self.current_turn_id}_{self._generation_counter}"
         self.current_generation_id = gen_id
+        self._start_tts_generation(gen_id)
         turn_id = self.current_turn_id
         turn_intent = self.current_intent_ctx
 
@@ -1311,7 +1970,8 @@ class VoiceInterviewOrchestrator:
                 sentences = [(0, clean_text)]
 
             turn_audio_collector: dict[int, bytes] = {}
-            for sentence_idx, sentence_text in sentences:
+            missing_audio_sentences: list[str] = []
+            for sentence_idx, sentence_text in (sentences if self.response_mode == "voice" else []):
                 if self.is_generation_cancelled(gen_id):
                     return
                 # Stream sentence TTS and collect audio chunks
@@ -1331,15 +1991,10 @@ class VoiceInterviewOrchestrator:
                         "turn_id": turn_id,
                     })
 
-                chunks: list[bytes] = []
-                async for audio_chunk in self.tts.synthesize_stream(clean_sentence, voice=self.voice, pitch=self.pitch):
-                    if self.is_generation_cancelled(gen_id):
-                        break
-                    if audio_chunk:
-                        chunks.append(audio_chunk)
-
-                if chunks and not self.is_generation_cancelled(gen_id):
-                    full_audio = b"".join(chunks)
+                full_audio = await self._synthesize_sentence_audio(clean_sentence, sentence_idx, gen_id, turn_id)
+                if self.is_generation_cancelled(gen_id):
+                    return
+                if full_audio:
                     turn_audio_collector[sentence_idx] = full_audio
                     if self.connection.is_open():
                         await self.connection.send_event({
@@ -1350,17 +2005,23 @@ class VoiceInterviewOrchestrator:
                             "generation_id": gen_id,
                             "turn_id": turn_id,
                         })
+                else:
+                    missing_audio_sentences.append(clean_sentence)
 
             if not self.is_generation_cancelled(gen_id):
+                await self._finish_tts_generation(gen_id)
                 ai_audio_url = None
-                if turn_audio_collector:
+                if turn_audio_collector and not missing_audio_sentences:
                     full_turn_audio = b"".join(
                         turn_audio_collector[k] for k in sorted(turn_audio_collector.keys())
                     )
                     ai_audio_url = self._save_audio_file(turn_id, "ai", full_turn_audio)
 
                 self.conversation_history.append({"role": "assistant", "content": clean_text})
+                self._record_stage_turn("assistant", clean_text)
                 self._persist_ai_turn(turn_id, clean_text, turn_intent, audio_url=ai_audio_url)
+                if self.response_mode == "voice" and (turn_audio_collector or missing_audio_sentences):
+                    self._awaiting_playback_id = gen_id
                 if self.connection.is_open():
                     await self.connection.send_event({
                         "type": VoiceEventType.DONE.value,
@@ -1368,10 +2029,16 @@ class VoiceInterviewOrchestrator:
                         "generation_id": gen_id,
                         "full_text": clean_text,
                         "audio_url": ai_audio_url,
+                        "missing_audio_sentences": missing_audio_sentences,
                         "total_sentences": len(sentences),
                         "is_completed": False,
                     })
-                await self.set_state(VoiceSessionState.LISTEN)
+                if self.flow and self.flow.get("pending"):
+                    self.flow["pending"]["summary_message"] = clean_text
+                    self._save_flow()
+                    await self._emit_pending_proposal()
+                if not self._awaiting_playback_id:
+                    await self.set_state(VoiceSessionState.LISTEN)
         except asyncio.CancelledError:
             return
         except Exception:
@@ -1387,6 +2054,18 @@ class VoiceInterviewOrchestrator:
             await self.set_state(VoiceSessionState.LISTEN)
 
     def _resolve_next_intent(self, *, exclude_used: bool = False) -> None:
+        if self.flow:
+            item = current_item(self.flow)
+            self.current_intent_ctx = QuestionIntentContext(
+                question_id=None,
+                intent=warmup_topic(item, self.language) if item["stage"] == StageId.WARMUP.value else item["question"],
+                stage_key=item["stage"],
+                difficulty=3, question_type=item["type"], topic_label=item["type"],
+            ) if item else None
+            if item and item["status"] == "not_asked":
+                item["status"] = "asked"
+                self._save_flow()
+            return
         if not self.session_factory:
             return
         cur_stage = self.get_current_stage()
@@ -1423,6 +2102,11 @@ class VoiceInterviewOrchestrator:
                             intent=chosen.get("question_text", ""),
                             stage_key=cur_stage.id,
                             difficulty=int(chosen.get("difficulty", 3)),
+                            question_type=chosen.get("question_type") or {
+                                "behavioral": "behavioral", "scenario": "situational",
+                                "technical": "technical", "system_design": "technical",
+                                "role_specific": "technical",
+                            }.get(chosen.get("section_type"), "generic"),
                             topic_label=chosen.get("competency_name") or chosen.get("section_type", "Chuyên môn"),
                         )
                         return
@@ -1457,6 +2141,40 @@ class VoiceInterviewOrchestrator:
         Re-rolls current question by sampling a new approved question from the bank
         and restarting AI generation.
         """
+        if self.flow:
+            if self.state != VoiceSessionState.LISTEN or self.flow.get("pending"):
+                return
+            item = current_item(self.flow)
+            if not item:
+                return
+            item["status"] = "skipped_with_reason"
+            item["reason"] = "candidate_requested_new_question"
+            self.flow["current_item"] = None
+            self._save_flow()
+            await self._emit_flow_progress()
+            next_item = current_item(self.flow)
+            if next_item:
+                self._resolve_next_intent()
+                await self._emit_question_context()
+                self.current_turn_id += 1
+                await self.set_state(VoiceSessionState.THINK)
+                self._active_task = asyncio.create_task(
+                    self._run_llm_and_tts_pipeline(
+                        next_question_item=next_item,
+                        disposition="cannot_answer",
+                    )
+                )
+            else:
+                if active_elapsed(self.flow) >= self.flow["budgets"][self.get_current_stage().id]:
+                    await self._offer_adaptive_transition()
+                else:
+                    self.current_turn_id += 1
+                    await self.set_state(VoiceSessionState.THINK)
+                    text = ("Mình đã hỏi hết các nội dung của phần này. Bạn có thể chia sẻ thêm "
+                            "hoặc đề nghị chuyển phần khi sẵn sàng.") if self.language == "vi" else (
+                            "We have covered the planned questions. Add anything else or ask to move on when ready.")
+                    self._active_task = asyncio.create_task(self._stream_predefined_text(text))
+            return
         await self.cancel_current_generation()
         if (
             not self.session_factory
@@ -1486,6 +2204,7 @@ class VoiceInterviewOrchestrator:
                         "topic_label": new_intent.topic_label,
                         "stage_key": new_intent.stage_key,
                         "difficulty": new_intent.difficulty,
+                        "question_type": new_intent.question_type,
                     })
 
                 await self.set_state(VoiceSessionState.THINK)
@@ -1534,6 +2253,8 @@ class VoiceInterviewOrchestrator:
             )
             if turn_rec is None or not (turn_rec.message_text or "").strip():
                 return
+            from ...infrastructure.persistence.models.catalog import QuestionBank
+            question_row = db.get(QuestionBank, turn_rec.question_id) if turn_rec.question_id else None
             self.evaluation_service.evaluate_turn(
                 db,
                 EvaluateTurnCommand(
@@ -1544,6 +2265,7 @@ class VoiceInterviewOrchestrator:
                     role_name=self.role_name,
                     level=self.level,
                     language=self.language,
+                    question_type=question_row.question_type if question_row else None,
                 ),
             )
             if turn_rec.question_id:
@@ -1611,8 +2333,8 @@ class VoiceInterviewOrchestrator:
         try:
             row = db.get(DbInterviewSession, self.session_id)
             if row is not None:
-                if row.status != SessionStatus.COMPLETED:
-                    row.status = SessionStatus.COMPLETED
+                if row.status != SessionStatus.completed:
+                    row.status = SessionStatus.completed
                     if not row.completed_at:
                         row.completed_at = datetime.now(timezone.utc)
                 elif not row.completed_at:
@@ -1630,6 +2352,12 @@ class VoiceInterviewOrchestrator:
             db.close()
 
     async def handle_stop_session(self) -> None:
+        if self._judgment_task and not self._judgment_task.done():
+            self._judgment_task.cancel()
+        if self.flow:
+            self.flow["pending"] = None
+            pause(self.flow)
+            self._save_flow()
         await self.cancel_current_generation()
         persisted = await asyncio.to_thread(self._persist_session_completion)
         if not persisted:

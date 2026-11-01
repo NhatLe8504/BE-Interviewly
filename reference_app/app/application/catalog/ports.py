@@ -85,7 +85,7 @@ class CatalogRepositoryPort(Protocol):
         ...
 
     def list_star_templates(
-        self, session: Any, *, language: str | None = None,
+        self, session: Any, *, language: str | None = None, is_active: bool | None = None,
     ) -> list[StarGuidanceTemplate]:
         ...
 

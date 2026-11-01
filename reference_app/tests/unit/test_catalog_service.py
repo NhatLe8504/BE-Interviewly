@@ -93,10 +93,10 @@ class FakeCatalogRepo:
     def delete_role(self, session, role_id: int):
         self.roles.pop(role_id, None)
 
-    def list_star_templates(self, session, *, language: str | None = None):
-        if language:
-            return [t for t in self.star_templates.values() if t.language == language]
-        return list(self.star_templates.values())
+    def list_star_templates(self, session, *, language: str | None = None, is_active: bool | None = True):
+        return [template for template in self.star_templates.values()
+                if (not language or template.language == language)
+                and (is_active is None or template.is_active == is_active)]
 
     def get_star_template_by_id(self, session, star_template_id: int):
         return self.star_templates.get(star_template_id)

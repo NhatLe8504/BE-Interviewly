@@ -95,49 +95,28 @@ class EdgeTTSAdapter(TTSPort):
             yield self._cache[cache_key]
             return
 
-        try:
-            if edge_tts is None:
-                yield SILENT_MP3_FRAME
-                return
+        if edge_tts is None:
+            raise RuntimeError("edge-tts is not installed")
 
-            communicate = edge_tts.Communicate(cleaned, target_voice, pitch=target_pitch)
-            chunks_collected: list[bytes] = []
-
-            async for chunk in communicate.stream():
-                if chunk["type"] == "audio":
-                    data = chunk.get("data")
-                    if data:
+        chunks_collected: list[bytes] = []
+        last_error: Exception | None = None
+        for attempt_pitch in dict.fromkeys((target_pitch, "+0Hz")):
+            if chunks_collected:
+                break
+            try:
+                communicate = edge_tts.Communicate(cleaned, target_voice, pitch=attempt_pitch)
+                async for chunk in communicate.stream():
+                    if chunk["type"] == "audio" and chunk.get("data"):
+                        data = chunk["data"]
                         chunks_collected.append(data)
                         yield data
+            except Exception as exc:
+                last_error = exc
+                if chunks_collected:
+                    raise
 
-            # If no audio was received and pitch was non-zero, retry with default +0Hz
-            if not chunks_collected and target_pitch != "+0Hz":
-                comm_fallback = edge_tts.Communicate(cleaned, target_voice, pitch="+0Hz")
-                async for chunk in comm_fallback.stream():
-                    if chunk["type"] == "audio":
-                        data = chunk.get("data")
-                        if data:
-                            chunks_collected.append(data)
-                            yield data
-
-            if not chunks_collected:
-                yield SILENT_MP3_FRAME
-            else:
-                if len(self._cache) > 200:
-                    self._cache.clear()
-                self._cache[cache_key] = b"".join(chunks_collected)
-
-        except Exception:
-            # Fallback for network timeouts or parameter mismatch
-            if target_pitch != "+0Hz":
-                try:
-                    comm_retry = edge_tts.Communicate(cleaned, target_voice, pitch="+0Hz")
-                    async for chunk in comm_retry.stream():
-                        if chunk["type"] == "audio":
-                            data = chunk.get("data")
-                            if data:
-                                yield data
-                    return
-                except Exception:
-                    pass
-            yield SILENT_MP3_FRAME
+        if not chunks_collected:
+            raise RuntimeError(f"Edge TTS returned no audio for {target_voice}") from last_error
+        if len(self._cache) > 200:
+            self._cache.clear()
+        self._cache[cache_key] = b"".join(chunks_collected)

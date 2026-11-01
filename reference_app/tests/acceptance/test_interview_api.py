@@ -67,7 +67,7 @@ def test_interview_session_and_turn_flow(client) -> None:
     assert eval_resp.status_code == 200, eval_resp.text
     eval_data = eval_resp.json()
     assert eval_data["clarity_score"] > 0
-    assert eval_data["star_analysis"] is not None
+    assert "star_analysis" in eval_data
     assert eval_data["speech_metrics"] is not None
     assert eval_data["speech_metrics"]["filler_count"] >= 1
 

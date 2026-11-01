@@ -24,6 +24,7 @@ class RubricEvaluatorPort(Protocol):
         role: str = "Software Engineer",
         level: str = "fresher",
         language: str = "vi",
+        question_type: str | None = None,
     ) -> RubricEvaluationData:
         ...
 

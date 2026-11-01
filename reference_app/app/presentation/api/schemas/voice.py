@@ -69,6 +69,9 @@ class VoiceDoneOut(BaseModel):
     turn_id: int
     generation_id: str
     full_text: str = ""
+    audio_url: str | None = None
+    total_sentences: int = 0
+    missing_audio_sentences: list[str] = Field(default_factory=list)
     is_completed: bool = False
 
 

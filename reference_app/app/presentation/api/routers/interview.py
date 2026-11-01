@@ -163,6 +163,8 @@ def submit_turn(
 
     # Trigger async rubric evaluation and save to db
     if container.evaluation_service is not None:
+        from ....infrastructure.persistence.models.catalog import QuestionBank
+        question_row = session.get(QuestionBank, saved_turn.question_id) if saved_turn.question_id else None
         eval_cmd = EvaluateTurnCommand(
             session_id=session_id,
             turn_id=saved_turn.turn_id,
@@ -171,6 +173,7 @@ def submit_turn(
             role_name=role_name,
             level=interview_session.level,
             language=interview_session.language,
+            question_type=question_row.question_type if question_row else None,
         )
         container.evaluation_service.evaluate_turn(session, eval_cmd)
 

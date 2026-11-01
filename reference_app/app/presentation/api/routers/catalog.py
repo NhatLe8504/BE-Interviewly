@@ -7,6 +7,7 @@ import logging
 import time
 
 from ....application.container import ServiceContainer
+from ....domain.answer_framework import answer_framework
 import json
 from decimal import Decimal
 from ..dependencies import get_container, get_session, get_optional_user_id, get_current_user_id
@@ -349,6 +350,8 @@ def evaluate_question_answer(
     user_id: int | None = Depends(get_optional_user_id),
 ) -> QuestionEvaluationResultOut:
     q = container.catalog_service.get_question(session, question_id)
+    framework = answer_framework(q.question_type)
+    text_criterion = "Tự luận khung STAR (35%)" if framework == "star" else "Nội dung trả lời (35%)"
     # quiz_data chỉ có trên ORM row; domain QuestionBankItem không mang field này.
     question_row = session.get(QuestionBankModel, question_id)
     quiz_data = getattr(question_row, "quiz_data", None)
@@ -367,35 +370,25 @@ def evaluate_question_answer(
     quiz_attempted = has_quiz_options and data.selected_option_id is not None
     quiz_score = verified_quiz_score(quiz_data, data.selected_option_id)
 
-    # 2. TEXT STAR SCORE (35% max)
+    # 2. TEXT CONTENT SCORE (35% max)
     text = (data.answer_text or "").strip()
     words = len(text.split())
     text_score = 0.0
-    if words >= 20:
-        base_pct = min(1.0, 0.5 + (words / 150.0) * 0.5)
-        text_score = round(base_pct * 35.0, 1)
-    elif words > 0:
-        text_score = round((words / 20.0) * 12.0, 1)
 
-    # 3. VOICE SCORE (50% max)
-    dur = float(data.audio_duration_seconds or 0.0)
+    # Client-supplied duration is not evidence of speech quality.
     voice_score = 0.0
-    if dur >= 5.0:
-        dur_pct = min(1.0, 0.6 + min(dur, 60.0) / 150.0)
-        voice_score = round(dur_pct * 50.0, 1)
-    elif dur > 0.0:
-        voice_score = round((dur / 5.0) * 15.0, 1)
 
     # Call LLM evaluator if configured
     eval_data = None
-    if text and container.evaluation_service and getattr(container.evaluation_service, "evaluator", None):
+    if text and container.evaluation_service and getattr(container.evaluation_service, "evaluator", None) and getattr(container.evaluation_service.evaluator, "api_key", None):
         try:
             eval_data = container.evaluation_service.evaluator.evaluate(
                 question=q.question_text,
                 answer=text,
                 role=role_name,
                 level=q.experience_level or "junior",
-                language=data.language or "vi",
+                language=q.language,
+                question_type=q.question_type,
             )
         except Exception:
             eval_data = None
@@ -433,7 +426,8 @@ def evaluate_question_answer(
                         exc_info=True,
                     )
 
-        total_score = min(100, int(round(quiz_score + text_score + voice_score)))
+        available_max = (15.0 if has_quiz_options and data.mode in ("quiz", "all") else 0.0) + (35.0 if data.mode in ("text", "all") else 0.0)
+        total_score = min(100, int(round((quiz_score + text_score) / available_max * 100))) if available_max else 0
         passed = total_score >= 70
         star_dict = eval_data.star_analysis or {}
 
@@ -441,6 +435,7 @@ def evaluate_question_answer(
             score=total_score,
             passed=passed,
             general_feedback=eval_data.feedback or "Câu trả lời có lập luận tốt.",
+            answer_framework=framework,
             star_breakdown=StarBreakdownOut(
                 situation_score=9 if star_dict.get("situation") else 6,
                 situation_feedback="Bối cảnh rõ ràng." if star_dict.get("situation") else "Nên nêu rõ hơn bối cảnh ban đầu.",
@@ -450,7 +445,7 @@ def evaluate_question_answer(
                 action_feedback="Hành động cụ thể, logic." if star_dict.get("action") else "Nên đi sâu vào giải pháp kỹ thuật.",
                 result_score=9 if star_dict.get("result") else 6,
                 result_feedback="Có số liệu đo lường cụ thể." if star_dict.get("result") else "Nên bổ sung số liệu kết quả.",
-            ),
+            ) if framework == "star" else None,
             rubric_scores=[
                 RubricScoreItemOut(
                     criterion_id="quiz",
@@ -461,17 +456,17 @@ def evaluate_question_answer(
                 ),
                 RubricScoreItemOut(
                     criterion_id="text",
-                    criterion_name="Tự luận khung STAR (35%)",
+                    criterion_name=text_criterion,
                     score=min(10, int(round((text_score / 35.0) * 10))),
                     level_label=f"{text_score}/35đ",
                     feedback="Lập luận chặt chẽ, đầy đủ thành tố." if text_score >= 25 else "Cần viết chi tiết hơn.",
                 ),
                 RubricScoreItemOut(
                     criterion_id="voice",
-                    criterion_name="Nói & Ghi âm trực tiếp (50%)",
+                    criterion_name="Giọng nói chưa được chấm (thiếu audio xác minh)",
                     score=min(10, int(round((voice_score / 50.0) * 10))),
                     level_label=f"{voice_score}/50đ",
-                    feedback="Phát âm rõ ràng, thời lượng tốt." if voice_score >= 35 else "Cần luyện nói dài và lưu loát hơn.",
+                    feedback="Thời lượng do client gửi không đủ để đánh giá giọng nói.",
                 ),
             ],
             strengths=[
@@ -495,13 +490,15 @@ def evaluate_question_answer(
         )
 
     # Heuristic score
-    total_score = min(100, int(round(quiz_score + text_score + voice_score)))
+    available_max = (15.0 if has_quiz_options and data.mode in ("quiz", "all") else 0.0) + (35.0 if data.mode in ("text", "all") else 0.0)
+    total_score = min(100, int(round((quiz_score + text_score) / available_max * 100))) if available_max else 0
     passed = total_score >= 70
     return QuestionEvaluationResultOut(
         score=total_score,
         passed=passed,
-        general_feedback="Bài làm thể hiện sự cố gắng hoàn thiện các phần thi.",
-        star_breakdown=StarBreakdownOut(),
+        general_feedback="Điểm quiz đã xác minh; phần tự luận/giọng nói chưa được chấm do dịch vụ đánh giá không khả dụng.",
+        star_breakdown=StarBreakdownOut() if framework == "star" else None,
+        answer_framework=framework,
         rubric_scores=[
             RubricScoreItemOut(
                 criterion_id="quiz",
@@ -512,21 +509,21 @@ def evaluate_question_answer(
             ),
             RubricScoreItemOut(
                 criterion_id="text",
-                criterion_name="Tự luận khung STAR (35%)",
+                criterion_name=text_criterion,
                 score=min(10, int(round((text_score / 35.0) * 10))),
                 level_label=f"{text_score}/35đ",
-                feedback="Hoàn thành phần tự luận.",
+                feedback="Chưa có đánh giá nội dung từ máy chủ.",
             ),
             RubricScoreItemOut(
                 criterion_id="voice",
-                criterion_name="Nói & Ghi âm trực tiếp (50%)",
+                criterion_name="Giọng nói chưa được chấm (thiếu audio xác minh)",
                 score=min(10, int(round((voice_score / 50.0) * 10))),
                 level_label=f"{voice_score}/50đ",
-                feedback="Hoàn thành phần ghi âm nói.",
+                feedback="Thời lượng do client gửi không đủ để đánh giá giọng nói.",
             ),
         ],
-        strengths=["Đã tham gia hoàn thiện các phần thi."],
-        improvements=["Luyện tập thêm phần nói để cải thiện điểm số."],
+        strengths=[],
+        improvements=["Thử chấm lại khi dịch vụ đánh giá khả dụng."],
         modal_breakdown=MultiModalBreakdownOut(
             quiz_score=quiz_score,
             quiz_max=15.0,
@@ -828,6 +825,7 @@ async def enqueue_question_evaluation(
     background_tasks: BackgroundTasks,
     user_id: int = Depends(get_current_user_id),
     container: ServiceContainer = Depends(get_container),
+    session: Any = Depends(get_session),
 ) -> EvaluationQueueOut:
     """
     Pipeline B: Asynchronous Background Enqueue for Question Evaluation.
@@ -841,11 +839,20 @@ async def enqueue_question_evaluation(
     if data.audio_duration_seconds and data.audio_duration_seconds > 600:
         raise HTTPException(status_code=400, detail="Thời lượng audio vượt quá giới hạn 600 giây")
 
-    quiz_score = 15.0 if data.is_quiz_correct is True else 0.0
+    question_row = session.get(QuestionBankModel, data.question_id)
+    if question_row is None or not question_row.is_active:
+        raise HTTPException(status_code=404, detail="Câu hỏi không tồn tại")
+    quiz_score = verified_quiz_score(question_row.quiz_data, data.quiz_answer)
 
-    # Enqueue task in Pull MQ (kèm user để worker lưu đánh giá đã xác minh)
     payload = data.model_dump()
-    payload["user_id"] = user_id
+    payload.update({
+        "user_id": user_id,
+        "is_quiz_correct": quiz_score == 15.0,
+        "question_type": question_row.question_type.value,
+        "question_text": question_row.question_text,
+        "sample_answer": question_row.sample_answer,
+        "language": question_row.language.value,
+    })
     task_id = eval_pull_queue.enqueue(payload)
 
     # Trigger background worker evaluation with LLM & Delivery telemetry
@@ -1017,6 +1024,7 @@ async def enqueue_text_evaluation(
     background_tasks: BackgroundTasks,
     user_id: int = Depends(get_current_user_id),
     container: ServiceContainer = Depends(get_container),
+    session: Any = Depends(get_session),
 ) -> EvaluationQueueOut:
     """
     Decoupled Endpoint: Enqueues Written Essay (35% STAR) to Background Pull MQ.
@@ -1024,8 +1032,17 @@ async def enqueue_text_evaluation(
     if data.answer_text and len(data.answer_text) > 25000:
         raise HTTPException(status_code=400, detail="Nội dung câu trả lời vượt quá giới hạn 25,000 ký tự")
 
+    question_row = session.get(QuestionBankModel, data.question_id)
+    if question_row is None or not question_row.is_active:
+        raise HTTPException(status_code=404, detail="Câu hỏi không tồn tại")
     payload = data.model_dump()
-    payload["user_id"] = user_id
+    payload.update({
+        "user_id": user_id,
+        "question_type": question_row.question_type.value,
+        "question_text": question_row.question_text,
+        "sample_answer": question_row.sample_answer,
+        "language": question_row.language.value,
+    })
     task_id = eval_pull_queue.enqueue(payload)
     background_tasks.add_task(eval_pull_queue.process_text_task_async, task_id, container)
 
@@ -1043,6 +1060,7 @@ async def enqueue_voice_evaluation(
     background_tasks: BackgroundTasks,
     user_id: int = Depends(get_current_user_id),
     container: ServiceContainer = Depends(get_container),
+    session: Any = Depends(get_session),
 ) -> EvaluationQueueOut:
     """
     Decoupled Endpoint: Enqueues Spoken STT Transcript + Telemetry (50%) to Background Pull MQ.
@@ -1050,8 +1068,17 @@ async def enqueue_voice_evaluation(
     if data.transcript and len(data.transcript) > 25000:
         raise HTTPException(status_code=400, detail="Nội dung bóc băng giọng nói vượt quá giới hạn 25,000 ký tự")
 
+    question_row = session.get(QuestionBankModel, data.question_id)
+    if question_row is None or not question_row.is_active:
+        raise HTTPException(status_code=404, detail="Câu hỏi không tồn tại")
     payload = data.model_dump()
-    payload["user_id"] = user_id
+    payload.update({
+        "user_id": user_id,
+        "question_type": question_row.question_type.value,
+        "question_text": question_row.question_text,
+        "sample_answer": question_row.sample_answer,
+        "language": question_row.language.value,
+    })
     task_id = eval_pull_queue.enqueue(payload)
     background_tasks.add_task(eval_pull_queue.process_voice_task_async, task_id, container)
 

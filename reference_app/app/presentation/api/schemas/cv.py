@@ -72,6 +72,51 @@ class CvCreateIn(BaseModel):
     load_from_user_skills: bool = False
 
 
+CvTemplateChoice = Literal[
+    "modern_tech", "minimalist_ats", "executive_leader", "creative_product", "compact_swiss"
+]
+CvColorChoice = Literal["navy", "emerald", "crimson", "indigo", "amber", "slate"]
+
+
+class CvJobStartIn(BaseModel):
+    target_job_id: str
+
+
+class CvJobAnswerIn(BaseModel):
+    answers: dict[str, str]
+    template_id: CvTemplateChoice
+    color_theme: CvColorChoice = "navy"
+
+
+class CvJobQuestionOut(BaseModel):
+    id: str
+    question: str
+    hint: str = ""
+    required: bool = True
+
+
+class CvGenerationJobOut(BaseModel):
+    job_id: str
+    target_job_id: str | None
+    job_title: str
+    company_name: str
+    status: Literal["PREPARING", "QUESTIONS_READY", "GENERATING", "COMPLETED", "FAILED"]
+    retry_stage: str | None = None
+    questions: list[CvJobQuestionOut] = Field(default_factory=list)
+    answers: dict[str, str] = Field(default_factory=dict)
+    template_id: str | None = None
+    color_theme: str | None = None
+    cv_id: int | None = None
+    error_message: str | None = None
+
+
+class CvJobNotificationOut(BaseModel):
+    job_id: str
+    job_title: str
+    status: Literal["QUESTIONS_READY", "COMPLETED", "FAILED"]
+    cv_id: int | None = None
+
+
 class CvUpdateIn(BaseModel):
     title: str | None = None
     template_id: str | None = None

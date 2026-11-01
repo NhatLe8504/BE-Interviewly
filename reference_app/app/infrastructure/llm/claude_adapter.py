@@ -44,5 +44,6 @@ class ClaudeLLMAdapter(LLMInterviewerPort, RubricEvaluatorPort):
         role: str = "Software Engineer",
         level: str = "fresher",
         language: str = "vi",
+        question_type: str | None = None,
     ) -> RubricEvaluationData:
-        return self._fallback.evaluate(question, answer, role, level, language)
+        return self._fallback.evaluate(question, answer, role, level, language, question_type)

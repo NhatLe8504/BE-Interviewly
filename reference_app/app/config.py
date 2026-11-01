@@ -236,6 +236,7 @@ class Settings:
     jev_api_url: str = "https://api.typesafe.ai/v1/systemone"
     jev_model: str = "jev-latest"
     elevenlabs_api_key: str = ""
+    vieneu_api_key: str = ""
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -297,4 +298,5 @@ class Settings:
             jev_api_url=os.environ.get("JEV_API_URL", "https://api.typesafe.ai/v1/systemone"),
             jev_model=os.environ.get("JEV_MODEL", "jev-latest"),
             elevenlabs_api_key=os.environ.get("ELEVENLABS_API_KEY", ""),
+            vieneu_api_key=os.environ.get("VIENEU_API_KEY", ""),
         )

@@ -138,6 +138,8 @@ class AnswerEvaluation(Base):
     example_score: Mapped[Decimal | None] = mapped_column(Numeric(4, 2))
     overall_score: Mapped[Decimal | None] = mapped_column(Numeric(4, 2))
     feedback_text: Mapped[str | None] = mapped_column(Text)
+    question_type: Mapped[str | None] = mapped_column(String(20))
+    rubric_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(),
     )

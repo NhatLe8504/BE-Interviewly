@@ -93,6 +93,8 @@ class StarTemplateOut(BaseModel):
     result_guide: str | None = None
     language: str = "vi"
     created_at: datetime | None = None
+    usage_count: int = 0
+    is_active: bool = True
 
 
 class StarTemplateCreateIn(BaseModel):
@@ -105,6 +107,7 @@ class StarTemplateCreateIn(BaseModel):
 
 
 class StarTemplateUpdateIn(BaseModel):
+    is_active: bool | None = None
     title: str | None = Field(None, min_length=1, max_length=150)
     situation_guide: str | None = None
     task_guide: str | None = None
@@ -315,7 +318,8 @@ class QuestionEvaluationResultOut(BaseModel):
     score: int
     passed: bool
     general_feedback: str
-    star_breakdown: StarBreakdownOut
+    star_breakdown: StarBreakdownOut | None = None
+    answer_framework: str = "generic"
     rubric_scores: list[RubricScoreItemOut]
     strengths: list[str]
     improvements: list[str]

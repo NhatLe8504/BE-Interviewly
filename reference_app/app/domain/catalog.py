@@ -77,6 +77,7 @@ class StarGuidanceTemplate:
     action_guide: str | None = None
     result_guide: str | None = None
     language: str = "vi"
+    is_active: bool = True
     created_at: datetime | None = None
 
     def __post_init__(self) -> None:

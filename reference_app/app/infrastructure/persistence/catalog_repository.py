@@ -66,6 +66,7 @@ def _to_star_template(row: StarGuidanceTemplateModel) -> StarGuidanceTemplate:
         action_guide=row.action_guide,
         result_guide=row.result_guide,
         language=_enum_value(row.language) or "vi",
+        is_active=row.is_active,
         created_at=row.created_at,
     )
 
@@ -309,9 +310,11 @@ class SqlAlchemyCatalogRepository:
             session.commit()
 
     def list_star_templates(
-        self, session: Any, *, language: str | None = None,
+        self, session: Any, *, language: str | None = None, is_active: bool | None = None,
     ) -> list[StarGuidanceTemplate]:
         stmt = select(StarGuidanceTemplateModel)
+        if is_active is not None:
+            stmt = stmt.where(StarGuidanceTemplateModel.is_active == is_active)
         if language is not None:
             stmt = stmt.where(StarGuidanceTemplateModel.language == Language(language))
         stmt = stmt.order_by(StarGuidanceTemplateModel.star_template_id)

@@ -253,6 +253,7 @@ def get_voice_catalog_options(
     is_premium_user: bool,
     language: str | None = None,
     api_key: str = "",
+    vieneu_available: bool = False,
 ) -> dict[str, Any]:
     """
     Returns full voice and STT catalog decorated with lock status.
@@ -271,6 +272,21 @@ def get_voice_catalog_options(
         item["is_locked"] = not is_premium_user
         item["lock_reason"] = "Yêu cầu tài khoản Pro để mở khóa giọng đọc ElevenLabs chuẩn phòng thu." if not is_premium_user else None
         voices.append(item)
+
+    if vieneu_available:
+        for voice_name in ("Ngọc Lan", "Kim Chi"):
+            voices.append({
+                "id": f"vieneu:{voice_name}",
+                "name": voice_name,
+                "provider": "vieneu",
+                "language": "vi",
+                "gender": "female",
+                "description": "VieNeu Cloud v4 - giọng tiếng Việt",
+                "is_default": voice_name == "Ngọc Lan",
+                "is_premium": False,
+                "is_locked": False,
+                "lock_reason": None,
+            })
 
     # Lọc nghiêm ngặt: chỉ giữ giọng của ngôn ngữ được chọn HOẶC giọng đa ngôn ngữ (multi)
     if language:
