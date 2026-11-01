@@ -145,6 +145,7 @@ jobs:
           JEV_MODEL: ${{ secrets.JEV_MODEL || 'jev-latest' }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
           SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
+          VIENEU_API_KEY: ${{ secrets.VIENEU_API_KEY }}
         run: |
           if [ -z "$SSH_PRIVATE_KEY" ]; then
             echo "::error ::SSH_PRIVATE_KEY secret is not configured in GitHub Secrets!"
@@ -209,6 +210,7 @@ jobs:
               echo "JEV_MODEL=$JEV_MODEL"
               echo "ELEVENLABS_API_KEY=$ELEVENLABS_API_KEY"
               echo "SERPER_API_KEY=$SERPER_API_KEY"
+              echo "VIENEU_API_KEY=$VIENEU_API_KEY"
             } > .env
 
             cp .env reference_app/.env 2>/dev/null || true
