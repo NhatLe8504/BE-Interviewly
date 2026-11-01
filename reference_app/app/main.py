@@ -60,7 +60,49 @@ async def lifespan(app: FastAPI):
         cleanup_stale_audio_files(max_age_seconds=86400, session_factory=container.session_factory)
     except Exception:
         pass
-    export_openapi(app)
+    try:
+        export_openapi(app)
+    except Exception:
+        pass
+    from .domain.jd_interview import JDJobStatus
+    from .infrastructure.persistence.models.jd_interview import JDGenerationJob
+    from .presentation.api.routers.jd_interview import schedule_jd_job
+    async def recover_jd_jobs():
+        while True:
+            try:
+                with container.session_factory() as session:
+                    pending_jd_ids = list(session.query(JDGenerationJob.job_id).filter(
+                        JDGenerationJob.request_payload.is_not(None),
+                        JDGenerationJob.status != JDJobStatus.COMPLETED.value,
+                    ).all())
+                for (job_id,) in pending_jd_ids:
+                    schedule_jd_job(container, job_id)
+                await asyncio.sleep(30)
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                await asyncio.sleep(30)
+
+    jd_recovery_task = asyncio.create_task(recover_jd_jobs())
+    from .infrastructure.persistence.models.cv import CvGenerationJob
+    from .presentation.api.routers.cv import schedule_cv_job
+
+    async def recover_cv_jobs():
+        while True:
+            try:
+                with container.session_factory() as session:
+                    pending_ids = session.query(CvGenerationJob.job_id).filter(
+                        CvGenerationJob.status.in_(("PREPARING", "GENERATING"))
+                    ).all()
+                for (job_id,) in pending_ids:
+                    schedule_cv_job(container, job_id)
+                await asyncio.sleep(30)
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                await asyncio.sleep(30)
+
+    cv_recovery_task = asyncio.create_task(recover_cv_jobs())
     if getattr(container, "job_worker", None):
         container.job_worker.start_background_scheduler()
 
@@ -80,6 +122,8 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         cleanup_task.cancel()
+        jd_recovery_task.cancel()
+        cv_recovery_task.cancel()
         if getattr(container, "job_worker", None):
             container.job_worker.stop()
 

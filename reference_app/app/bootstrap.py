@@ -318,7 +318,10 @@ def build_services(
     effective_clock = clock or SystemClock()
     engine = create_engine_from_url(settings.database_url)
     Base.metadata.create_all(engine)
-    _auto_migrate_columns(engine)
+    try:
+        _auto_migrate_columns(engine)
+    except Exception:
+        pass
     session_factory = create_session_factory(engine)
     _seed_subscription_plans(session_factory)
     hasher = Pbkdf2PasswordHasher()

@@ -221,6 +221,8 @@ jobs:
             echo '⏳ Checking container status...'
             sleep 5
             docker compose ps
+            echo '📋 Container logs (api):'
+            docker compose logs --tail=100 api
 
             echo '✅ Deployment completed successfully!'
           "
