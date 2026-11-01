@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import asyncio
+import json
+import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, WebSocket, WebSocketDisconnect
 
 from ....application.billing.commands import (
     CheckQuotaCommand,
@@ -32,8 +35,67 @@ from ..schemas.billing import (
     WebhookResponseOut,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/v1/billing", tags=["billing"])
 compat_router = APIRouter(prefix="/api/v1", tags=["billing"])
+
+
+class PaymentWsManager:
+    """Thread-safe WebSocket connection manager for instant payment confirmation events."""
+
+    def __init__(self) -> None:
+        # Map uppercase transaction_ref -> set of WebSockets
+        self._connections: dict[str, set[WebSocket]] = {}
+        self._lock = asyncio.Lock()
+
+    async def connect(self, txn_ref: str, ws: WebSocket) -> None:
+        await ws.accept()
+        key = txn_ref.strip().upper()
+        async with self._lock:
+            if key not in self._connections:
+                self._connections[key] = set()
+            self._connections[key].add(ws)
+        logger.info(f"[PaymentWS] Client connected for {key} (active sockets: {len(self._connections[key])})")
+
+    async def disconnect(self, txn_ref: str, ws: WebSocket) -> None:
+        key = txn_ref.strip().upper()
+        async with self._lock:
+            if key in self._connections:
+                self._connections[key].discard(ws)
+                if not self._connections[key]:
+                    del self._connections[key]
+        logger.info(f"[PaymentWS] Client disconnected for {key}")
+
+    async def broadcast_success(self, txn_ref: str, payload: dict[str, Any]) -> int:
+        key = txn_ref.strip().upper()
+        targets: list[WebSocket] = []
+        async with self._lock:
+            if key in self._connections:
+                targets = list(self._connections[key])
+
+        if not targets:
+            logger.info(f"[PaymentWS] No active WebSocket listeners for {key}")
+            return 0
+
+        logger.info(f"[PaymentWS] Broadcasting payment success to {len(targets)} client(s) for {key}")
+        dead_sockets: list[WebSocket] = []
+        sent_count = 0
+        for ws in targets:
+            try:
+                await ws.send_json(payload)
+                sent_count += 1
+            except Exception as e:
+                logger.warning(f"[PaymentWS] Failed sending to socket: {e}")
+                dead_sockets.append(ws)
+
+        for ws in dead_sockets:
+            await self.disconnect(key, ws)
+
+        return sent_count
+
+
+payment_ws_manager = PaymentWsManager()
 
 
 def _to_plan_out(plan: StoredSubscriptionPlan) -> PlanOut:
@@ -123,7 +185,7 @@ def checkout(
 
 @router.post("/verify-payment", response_model=VerifyPaymentOut)
 @compat_router.post("/verify-payment", response_model=VerifyPaymentOut)
-def verify_payment(
+async def verify_payment(
     data: VerifyPaymentIn,
     current_user: Any = Depends(get_current_user),
     session: Any = Depends(get_session),
@@ -136,6 +198,16 @@ def verify_payment(
             transaction_ref=data.transaction_ref,
         ),
     )
+    if res.get("status") == "success":
+        await payment_ws_manager.broadcast_success(
+            data.transaction_ref,
+            {
+                "type": "payment_success",
+                "status": "success",
+                "transaction_ref": data.transaction_ref,
+                "message": res.get("message", "Thanh toán thành công!"),
+            },
+        )
     sub_out = _to_sub_out(res.get("subscription"))
     return VerifyPaymentOut(
         status=res["status"],
@@ -159,10 +231,65 @@ async def xgate_webhook(
     except Exception:
         body = {}
     result = container.payment_service.process_xgate_webhook(session, body)
+    if result.get("success") and result.get("transaction_ref"):
+        txn_ref = result["transaction_ref"]
+        await payment_ws_manager.broadcast_success(
+            txn_ref,
+            {
+                "type": "payment_success",
+                "status": "success",
+                "transaction_ref": txn_ref,
+                "message": "Thanh toán thành công! Gói cước đã được kích hoạt.",
+            },
+        )
     return WebhookResponseOut(
         success=result.get("success", False),
         message=result.get("message", ""),
     )
+
+
+@router.websocket("/ws/{transaction_ref}")
+@compat_router.websocket("/billing/ws/{transaction_ref}")
+async def payment_websocket_endpoint(
+    websocket: WebSocket,
+    transaction_ref: str,
+):
+    clean_ref = transaction_ref.strip().upper()
+    await payment_ws_manager.connect(clean_ref, websocket)
+
+    # Immediately check DB: if transaction is already marked 'success', inform client right away
+    container: ServiceContainer = getattr(websocket.app.state, "services", None)
+    if container and getattr(container, "session_factory", None):
+        try:
+            with container.session_factory() as db_session:
+                tx = container.payment_service.transaction_repo.get_by_gateway_ref(
+                    db_session, "xgate", clean_ref
+                )
+                if tx and tx.status == "success":
+                    await websocket.send_json({
+                        "type": "payment_success",
+                        "status": "success",
+                        "transaction_ref": clean_ref,
+                        "message": "Thanh toán thành công! Gói cước đã được kích hoạt.",
+                    })
+        except Exception as e:
+            logger.warning(f"[PaymentWS] Error checking initial transaction state: {e}")
+
+    try:
+        while True:
+            text = await websocket.receive_text()
+            try:
+                msg = json.loads(text)
+                if msg.get("type") == "ping":
+                    await websocket.send_json({"type": "pong"})
+            except Exception:
+                pass
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        logger.debug(f"[PaymentWS] Socket loop exception: {e}")
+    finally:
+        await payment_ws_manager.disconnect(clean_ref, websocket)
 
 
 @router.get("/subscriptions/me", response_model=SubscriptionOut | None)
@@ -202,7 +329,6 @@ def get_quota(
         session, CheckQuotaCommand(user_id=current_user.user_id, feature_name=feature),
     )
     return QuotaOut(**info)
-
 
 
 @router.post("/deduct-voice-minutes", response_model=DeductResultOut)

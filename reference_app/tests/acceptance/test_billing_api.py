@@ -195,3 +195,49 @@ def test_billing_ownership_boundaries(client) -> None:
         json={"transaction_ref": txn_ref_a},
     )
     assert verify_b.status_code == 403
+
+
+def test_billing_websocket_realtime_activation(client) -> None:
+    headers = auth_headers(client)
+    plans = client.get("/api/v1/billing/plans").json()
+    pro_plan = next(p for p in plans if p["plan_name"] == "Pro Monthly")
+
+    checkout_resp = client.post(
+        "/api/v1/billing/checkout",
+        headers=headers,
+        json={"plan_id": pro_plan["plan_id"], "payment_gateway": "xgate"},
+    )
+    txn_ref = checkout_resp.json()["transaction_ref"]
+
+    # 1. Connect WebSocket for this transaction reference
+    with client.websocket_connect(f"/api/v1/billing/ws/{txn_ref}") as ws:
+        # Test ping-pong heartbeat
+        ws.send_text('{"type": "ping"}')
+        pong_data = ws.receive_json()
+        assert pong_data["type"] == "pong"
+
+        # 2. Simulate incoming xGate webhook
+        webhook_resp = client.post(
+            "/api/v1/billing/webhook",
+            json={
+                "id": "event_realtime_456",
+                "amount": 99000,
+                "content": f"VietQR Transfer {txn_ref}",
+            },
+        )
+        assert webhook_resp.status_code == 200
+        assert webhook_resp.json()["success"] is True
+
+        # 3. WebSocket immediately receives real-time payment success push!
+        ws_msg = ws.receive_json()
+        assert ws_msg["type"] == "payment_success"
+        assert ws_msg["status"] == "success"
+        assert ws_msg["transaction_ref"] == txn_ref
+        assert "thành công" in ws_msg["message"].lower()
+
+    # 4. Immediate delivery if client connects AFTER transaction was already paid
+    with client.websocket_connect(f"/api/v1/billing/ws/{txn_ref}") as ws_after:
+        immediate_msg = ws_after.receive_json()
+        assert immediate_msg["type"] == "payment_success"
+        assert immediate_msg["status"] == "success"
+        assert immediate_msg["transaction_ref"] == txn_ref

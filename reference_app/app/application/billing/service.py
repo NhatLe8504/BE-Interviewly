@@ -361,7 +361,7 @@ class PaymentService:
             return {"success": False, "message": f"Transaction {txn_ref} not found"}
 
         if tx.status == "success":
-            return {"success": True, "message": "Already processed"}
+            return {"success": True, "message": "Already processed", "transaction_ref": txn_ref}
 
         if amount < tx.amount:
             return {"success": False, "message": "Amount smaller than order amount"}
@@ -414,7 +414,7 @@ class PaymentService:
                 new_value={"status": "success", "paid_at": now.isoformat(), "source": "webhook"},
             )
 
-        return {"success": True, "message": "Payment confirmed via webhook"}
+        return {"success": True, "message": "Payment confirmed via webhook", "transaction_ref": txn_ref}
 
 
     def sync_xgate_transactions(
