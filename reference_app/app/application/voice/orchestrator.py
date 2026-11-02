@@ -1559,8 +1559,8 @@ class VoiceInterviewOrchestrator:
                     "Ở chặng khởi động, chỉ trò chuyện thân thiện về kinh nghiệm và định hướng tổng quan. "
                     "Mỗi lượt chỉ hỏi một ý nhẹ nhàng, không kiểm tra kiến thức kỹ thuật, "
                     "không yêu cầu chi tiết kiến trúc, số liệu hay giải pháp. "
-                    "Đáp lại ý ứng viên vừa chia sẻ, tránh lặp cùng một lời cảm ơn hoặc câu đệm ở mọi lượt. "
-                    "Có thể cảm ơn khi phù hợp; nếu chưa rõ ý thì hỏi nhẹ nhàng để làm rõ. "
+                    "Đáp lại ý ứng viên vừa chia sẻ một cách tự nhiên. TUYỆT ĐỐI KHÔNG mở đầu bằng câu sáo rỗng như 'Cảm ơn bạn đã chia sẻ'. "
+                    "Hãy gật đầu ghi nhận ngắn gọn hoặc trực tiếp tiếp nối câu chuyện. Nếu chưa rõ ý thì hỏi nhẹ nhàng để làm rõ. "
                     "Chỉ nói văn bản thuần túy."
                 )})
             elif self.system_prompt:
@@ -1582,11 +1582,11 @@ class VoiceInterviewOrchestrator:
             )
             convo_rules = (
                 "Nói năng tự nhiên, hòa nhã, có ngữ điệu đàm thoại thực tế như một người phỏng vấn công nghệ cao cấp. "
-                "Đáp lời theo nội dung vừa nghe, tránh lặp một câu mở đầu ở nhiều lượt. "
-                "Có thể cảm ơn chân thành khi thích hợp; nếu cần làm rõ thì hỏi thẳng vào ý còn thiếu."
+                "Đáp lời tự nhiên theo nội dung vừa nghe, tuyệt đối không lặp lại câu sáo rỗng 'Cảm ơn bạn đã chia sẻ'. "
+                "Ghi nhận ngắn gọn hoặc đi thẳng vào ý tiếp theo; nếu cần làm rõ thì hỏi thẳng vào ý còn thiếu."
                 if self.language == "vi" else
-                "Converse naturally and professionally, varying transitions according to what the candidate actually said. "
-                "Thank them when appropriate; clarify vague answers rather than using a stock acknowledgment."
+                "Converse naturally and professionally, avoiding repetitive stock openers like 'Thank you for sharing'. "
+                "Acknowledge briefly or transition directly to the next question; clarify vague answers directly."
             )
             messages.append({
                 "role": "system",
