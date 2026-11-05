@@ -288,12 +288,7 @@ def _seed_subscription_plans(session_factory: Any) -> None:
                     select(OrmSubscriptionPlan).where(OrmSubscriptionPlan.plan_name == plan_spec["plan_name"])
                 ).scalar_one_or_none()
 
-            if existing:
-                existing.price = plan_spec["price"]
-                existing.billing_cycle = plan_spec["billing_cycle"]
-                existing.feature_limits = plan_spec["feature_limits"]
-                existing.is_active = plan_spec["is_active"]
-            else:
+            if not existing:
                 new_plan = OrmSubscriptionPlan(
                     plan_id=plan_spec["plan_id"],
                     plan_name=plan_spec["plan_name"],
