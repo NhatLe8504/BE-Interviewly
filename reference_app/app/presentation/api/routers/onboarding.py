@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import desc, func, select
 
 from ....application.container import ServiceContainer
-from ..dependencies import get_container, get_session, bearer_scheme, require_admin
+from ..dependencies import get_container, get_session, get_current_user_id, bearer_scheme, require_admin
 from ..schemas.admin import AuditLogOut
 from ....infrastructure.persistence.models.onboarding import OnboardingResponse
 from ....infrastructure.persistence.models.user import User, CandidateProfile
@@ -48,22 +48,13 @@ class OnboardingResponseOut(BaseModel):
 @router.post("", response_model=OnboardingResponseOut, status_code=status.HTTP_201_CREATED)
 def submit_onboarding_survey(
     data: OnboardingSubmitIn,
-    credentials: Any = Depends(bearer_scheme),
+    user_id: int = Depends(get_current_user_id),
     session: Any = Depends(get_session),
     container: ServiceContainer = Depends(get_container),
 ) -> Any:
     """Submit candidate onboarding survey preferences and persist real record in database."""
-    user_id: int | None = None
-    if credentials and credentials.credentials:
-        try:
-            user_id = container.auth_service.tokens.parse(credentials.credentials)
-        except Exception:
-            user_id = None
-
-    existing = None
-    if user_id is not None:
-        stmt = select(OnboardingResponse).where(OnboardingResponse.user_id == user_id)
-        existing = session.execute(stmt).scalar_one_or_none()
+    stmt = select(OnboardingResponse).where(OnboardingResponse.user_id == user_id)
+    existing = session.execute(stmt).scalar_one_or_none()
 
     if existing:
         existing.preferred_language = data.preferred_language
